@@ -13,6 +13,7 @@ go-core-kit is a production-grade Go backend template that serves the same wire 
   - `docs/adr/README.md`
 - Execution plans
   - `docs/exec-plans/README.md`
+  - `docs/exec-plans/roadmap.md` — high-level phases and task tracking
 - Contract
   - `contracts/` — pinned OpenAPI snapshot + provenance + generated types (lands in the contract phase)
 - Proposals (historical, not source of truth)

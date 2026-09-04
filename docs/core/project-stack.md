@@ -18,7 +18,7 @@ Decided 2026-10-10 and recorded per-topic in `docs/adr/`. Changing a decision re
 - **Contract types**: `oapi-codegen` (types only) from the pinned snapshot. See ADR-0002.
 - **Contract tests**: `kin-openapi` response validation + parity assertions.
 - **Spec lint**: `vacuum` (Go-native).
-- **Boundaries**: `golangci-lint` + `depguard`, pinned v2.14.0. See ADR-0008.
+- **Quality baseline**: `golangci-lint` strict profile (`gofumpt` + `gci` + curated linters) with `depguard`/`forbidigo` boundaries, pinned v2.14.0. See ADR-0008, ADR-0011.
 - **CLI**: `tools/gokit` (scaffold / remove / db generate / verify / doctor). See ADR-0010.
 - **Containers**: multi-stage build → distroless, static binary, `CGO_ENABLED=0`.
 
