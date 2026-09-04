@@ -1,0 +1,40 @@
+version: "2"
+
+run:
+  timeout: 5m
+
+linters:
+  default: standard
+  enable:
+    - depguard
+    - misspell
+  settings:
+    depguard:
+      rules:
+        platform-no-features:
+          files:
+            - "**/internal/platform/**"
+          deny:
+            - pkg: "github.com/fikrilal/go-core-kit/internal/features"
+              desc: platform must not depend on features
+        features-no-cmd:
+          files:
+            - "**/internal/features/**"
+          deny:
+            - pkg: "github.com/fikrilal/go-core-kit/cmd"
+              desc: features must not depend on binaries
+        features-no-drivers:
+          files:
+            - "**/internal/features/**"
+          deny:
+            - pkg: "modernc.org/sqlite"
+              desc: features must not import database drivers
+            - pkg: "github.com/jackc/pgx"
+              desc: features must not import database drivers
+            - pkg: "database/sql"
+              desc: features must not import database/sql directly
+
+formatters:
+  enable:
+    - gofmt
+    - goimports

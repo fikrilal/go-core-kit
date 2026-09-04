@@ -1,0 +1,25 @@
+# Build output
+/bin/
+/dist/
+*.exe
+
+# Local runtime data
+.data/
+*.db
+*.db-wal
+*.db-shm
+
+# Test / coverage artifacts
+coverage.out
+*.test
+
+# Environment
+.env
+.env.*
+!.env.example
+
+# Editors / OS
+.DS_Store
+.idea/
+.vscode/
+*.swp
