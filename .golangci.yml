@@ -6,8 +6,27 @@ run:
 linters:
   default: standard
   enable:
+    - bodyclose
     - depguard
+    - dupl
+    - errorlint
+    - exhaustive
+    - forbidigo
+    - funlen
+    - gocognit
+    - gocritic
+    - gosec
     - misspell
+    - nilerr
+    - noctx
+    - nolintlint
+    - revive
+    - rowserrcheck
+    - sqlclosecheck
+    - unconvert
+    - unparam
+    - whitespace
+    - wrapcheck
   settings:
     depguard:
       rules:
@@ -33,8 +52,54 @@ linters:
               desc: features must not import database drivers
             - pkg: "database/sql"
               desc: features must not import database/sql directly
+        features-no-raw-json:
+          files:
+            - "**/internal/features/**"
+          deny:
+            - pkg: "encoding/json"
+              desc: use httpx decode/respond helpers instead of raw JSON in features
+    dupl:
+      threshold: 100
+    exhaustive:
+      default-signifies-exhaustive: true
+    forbidigo:
+      forbid:
+        - pattern: "^fmt\\.Print.*$"
+          msg: use log/slog instead of fmt printing
+        - pattern: "^print(ln)?$"
+          msg: use log/slog instead of print
+        - pattern: "^time\\.Now$"
+          msg: inject a clock; time.Now is allowed only in cmd/* and platform adapters
+    funlen:
+      lines: 80
+      statements: 60
+      ignore-comments: true
+    gocognit:
+      min-complexity: 20
+    nolintlint:
+      require-explanation: true
+      require-specific: true
+      allow-unused: false
+  exclusions:
+    generated: lax
+    rules:
+      - linters:
+          - forbidigo
+        path: (^|/)cmd/
+      - linters:
+          - forbidigo
+        path: (^|/)internal/platform/
+      - linters:
+          - forbidigo
+        path: _test\.go$
 
 formatters:
   enable:
-    - gofmt
-    - goimports
+    - gci
+    - gofumpt
+  settings:
+    gci:
+      sections:
+        - standard
+        - default
+        - prefix(github.com/fikrilal/go-core-kit)
