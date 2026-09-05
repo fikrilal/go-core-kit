@@ -4,6 +4,7 @@
 
 - Keep changes small, focused, and reversible.
 - Simplicity first: the minimum code that solves the problem. No speculative abstractions or flexibility that was not requested. If 200 lines could be 50, rewrite it.
+- Comments explain non-obvious decisions only. Exported API keeps a one-line doc comment (lint-enforced); nothing else restates the code.
 - Prefer the existing architecture, helpers, scripts, and standards over new patterns.
 - If behavior, architecture, standards, or public contracts change, update the relevant docs and add an ADR when a decision changes a baseline.
 - Do not commit or push unless the user explicitly asks. Use Conventional Commits when committing.

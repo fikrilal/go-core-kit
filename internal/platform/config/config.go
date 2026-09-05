@@ -10,7 +10,7 @@ import (
 // Env identifies the deployment environment.
 type Env string
 
-// Supported deployment environments.
+// Deployment environments.
 const (
 	EnvDev     Env = "dev"
 	EnvStaging Env = "staging"
@@ -21,7 +21,7 @@ const (
 // LogLevel controls the minimum severity emitted by the logger.
 type LogLevel string
 
-// Supported log levels.
+// Log levels.
 const (
 	LogLevelDebug LogLevel = "debug"
 	LogLevelInfo  LogLevel = "info"
@@ -32,7 +32,7 @@ const (
 // LogFormat selects the log output encoding.
 type LogFormat string
 
-// Supported log formats.
+// Log formats.
 const (
 	LogFormatJSON LogFormat = "json"
 	LogFormatText LogFormat = "text"
@@ -40,18 +40,12 @@ const (
 
 // Config is the validated platform configuration.
 type Config struct {
-	// AppEnv is the deployment environment.
-	AppEnv Env `env:"APP_ENV" envDefault:"dev"`
-	// HTTPPort is the API process listen port.
-	HTTPPort int `env:"HTTP_PORT" envDefault:"8080"`
-	// DatabasePath is the SQLite database file path.
-	DatabasePath string `env:"DATABASE_PATH,required"`
-	// RedisURL is the Redis connection URL.
-	RedisURL string `env:"REDIS_URL,required"`
-	// LogLevel is the minimum log severity.
-	LogLevel LogLevel `env:"LOG_LEVEL" envDefault:"info"`
-	// LogFormat selects structured JSON or human-readable text output.
-	LogFormat LogFormat `env:"LOG_FORMAT" envDefault:"json"`
+	AppEnv       Env       `env:"APP_ENV" envDefault:"dev"`
+	HTTPPort     int       `env:"HTTP_PORT" envDefault:"8080"`
+	DatabasePath string    `env:"DATABASE_PATH,required"`
+	RedisURL     string    `env:"REDIS_URL,required"`
+	LogLevel     LogLevel  `env:"LOG_LEVEL" envDefault:"info"`
+	LogFormat    LogFormat `env:"LOG_FORMAT" envDefault:"json"`
 }
 
 // Load reads the environment, applies defaults, and validates the result.
