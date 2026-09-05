@@ -27,7 +27,7 @@ Rules: findings gate on **new vs baseline**, and updating a baseline requires ex
 
 ## Current Focus
 
-**Phase 1 — Platform core**: strict quality baseline landed (1.0); starting 1.1 (config) + 1.2 (logging), with harness v0 (1.11–1.12) alongside.
+**Phase 1 — Platform core**: 1.0 (strict baseline) and 1.1 (config) landed; next up 1.2 (logging), with harness v0 (1.11–1.12) alongside.
 
 ## Phase 0 — Foundation (complete, 2026-10-10)
 
@@ -43,7 +43,7 @@ Evidence: commits `558f875` (docs) and `6b068e6` (scaffold); `make verify` green
 Objective: the platform layer every feature consumes — config, logging, HTTP behavior, validation, list query, idempotency, Redis, the DB seam (SQLite engine), health, and a booting `cmd/api`.
 
 - [x] 1.0 Strict quality baseline: `gofumpt` + `gci` formatters, curated strict linters, `depguard` + `forbidigo` posture, Makefile/`make tools` integration (landed 2026-10-10; violation probes confirmed gates fail)
-- [ ] 1.1 Config: env schema, typed structs, defaults, invariant validation, `env.example` (`internal/platform/config`)
+- [x] 1.1 Config: env schema, typed structs, defaults, invariant validation, `env.example` (`internal/platform/config`) — landed 2026-10-10; 7 tests green
 - [ ] 1.2 Logging: `slog` JSON handler, redaction list, request-bound fields (`internal/platform/logging`)
 - [ ] 1.3 HTTP foundation: router + middleware (request id, logging, recover), envelope helpers, central problem mapper, typed error codes (`internal/platform/httpx`)
 - [ ] 1.4 Input validation: decode + validate helper → `errors[] {field, message}` (`httpx` + validator/v10)
