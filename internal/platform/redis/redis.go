@@ -3,8 +3,10 @@ package redis
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"strings"
+	"time"
 
 	goredis "github.com/redis/go-redis/v9"
 )
@@ -36,6 +38,43 @@ func MustOpen(url string) *Client {
 func (c *Client) Ping(ctx context.Context) error {
 	if err := c.rdb.Ping(ctx).Err(); err != nil {
 		return fmt.Errorf("ping redis: %w", err)
+	}
+	return nil
+}
+
+// Get returns the value stored under key and whether it exists.
+func (c *Client) Get(ctx context.Context, key string) (string, bool, error) {
+	value, err := c.rdb.Get(ctx, key).Result()
+	if errors.Is(err, goredis.Nil) {
+		return "", false, nil
+	}
+	if err != nil {
+		return "", false, fmt.Errorf("get redis key: %w", err)
+	}
+	return value, true, nil
+}
+
+// Set stores value under key with a TTL.
+func (c *Client) Set(ctx context.Context, key, value string, ttl time.Duration) error {
+	if err := c.rdb.Set(ctx, key, value, ttl).Err(); err != nil {
+		return fmt.Errorf("set redis key: %w", err)
+	}
+	return nil
+}
+
+// SetNX stores value under key only when the key does not exist.
+func (c *Client) SetNX(ctx context.Context, key, value string, ttl time.Duration) (bool, error) {
+	stored, err := c.rdb.SetNX(ctx, key, value, ttl).Result()
+	if err != nil {
+		return false, fmt.Errorf("setnx redis key: %w", err)
+	}
+	return stored, nil
+}
+
+// Del deletes the given keys.
+func (c *Client) Del(ctx context.Context, keys ...string) error {
+	if err := c.rdb.Del(ctx, keys...).Err(); err != nil {
+		return fmt.Errorf("del redis key: %w", err)
 	}
 	return nil
 }

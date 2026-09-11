@@ -8,18 +8,26 @@ import (
 
 // Router serves the platform middleware chain over pattern routes.
 type Router struct {
-	mux     *http.ServeMux
-	handler http.Handler
+	mux         *http.ServeMux
+	handler     http.Handler
+	idempotency *idempotencyStore
 }
 
+// RouterOption configures optional router behavior.
+type RouterOption func(*Router)
+
 // NewRouter builds the router with request id, access logging, and panic recovery.
-func NewRouter(logger *slog.Logger) *Router {
+func NewRouter(logger *slog.Logger, opts ...RouterOption) *Router {
 	mux := http.NewServeMux()
 	mux.HandleFunc("/", notFound)
-	return &Router{
+	router := &Router{
 		mux:     mux,
 		handler: requestID(accessLog(logger, recoverPanics(mux))),
 	}
+	for _, opt := range opts {
+		opt(router)
+	}
+	return router
 }
 
 // Handle registers a handler for a method and pattern route.
