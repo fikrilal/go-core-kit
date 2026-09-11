@@ -27,7 +27,7 @@ Rules: findings gate on **new vs baseline**, and updating a baseline requires ex
 
 ## Current Focus
 
-**Phase 1 — Platform core**: 1.0–1.5 landed (strict baseline, config, logging, httpx, validation, probes); next up 1.6 (Redis platform), with harness v0 (1.11–1.12) alongside.
+**Phase 1 — Platform core**: 1.0–1.6 landed (strict baseline, config, logging, httpx, validation, probes, Redis); next up 1.7 (list query), with harness v0 (1.11–1.12) alongside.
 
 ## Phase 0 — Foundation (complete, 2026-10-10)
 
@@ -48,7 +48,7 @@ Objective: the platform layer every feature consumes — config, logging, HTTP b
 - [x] 1.3 HTTP foundation: router + middleware (request id, logging, recover), envelope helpers, central problem mapper, typed error codes (`internal/platform/httpx`) — landed 2026-10-10; 13 tests green
 - [x] 1.4 Input validation: decode + validate helper → `errors[] {field, message}` (`httpx` + validator/v10) — landed 2026-10-10; 8 new tests green
 - [x] 1.5 Health/ready handlers (`internal/platform/health`; envelope-skipped) — landed 2026-10-10; 4 tests green; access-log exclusion via `httpx.SkipAccessLog`
-- [ ] 1.6 Redis platform: client, key conventions, readiness wiring (`internal/platform/redis`)
+- [x] 1.6 Redis platform: client, key conventions, readiness wiring (`internal/platform/redis`) — landed 2026-10-10; 3 tests green (miniredis, no Docker); driver confined by depguard
 - [ ] 1.7 List query: cursor/limit/sort/filter parser with per-endpoint allowlists (`httpx`)
 - [ ] 1.8 Idempotency middleware: Redis lock + cached replay + `Idempotency-Replayed`
 - [ ] 1.9 DB seam: sqlc dual-engine config, portable subset rules, goose runner, SQLite engine (`internal/platform/db`), minimal `gokit db generate`, drift gate

@@ -52,6 +52,8 @@ linters:
               desc: features must not import database drivers
             - pkg: "database/sql"
               desc: features must not import database/sql directly
+            - pkg: "github.com/redis/go-redis"
+              desc: features must not import the redis driver
         features-no-raw-json:
           files:
             - "**/internal/features/**"
