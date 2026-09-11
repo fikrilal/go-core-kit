@@ -27,7 +27,7 @@ Rules: findings gate on **new vs baseline**, and updating a baseline requires ex
 
 ## Current Focus
 
-**Phase 1 — Platform core**: 1.0–1.4 landed (strict baseline, config, logging, httpx, validation); next up 1.5 (health/ready), with harness v0 (1.11–1.12) alongside.
+**Phase 1 — Platform core**: 1.0–1.5 landed (strict baseline, config, logging, httpx, validation, probes); next up 1.6 (Redis platform), with harness v0 (1.11–1.12) alongside.
 
 ## Phase 0 — Foundation (complete, 2026-10-10)
 
@@ -47,7 +47,7 @@ Objective: the platform layer every feature consumes — config, logging, HTTP b
 - [x] 1.2 Logging: `slog` JSON handler, redaction list, request-bound fields (`internal/platform/logging`) — landed 2026-10-10; 5 tests green
 - [x] 1.3 HTTP foundation: router + middleware (request id, logging, recover), envelope helpers, central problem mapper, typed error codes (`internal/platform/httpx`) — landed 2026-10-10; 13 tests green
 - [x] 1.4 Input validation: decode + validate helper → `errors[] {field, message}` (`httpx` + validator/v10) — landed 2026-10-10; 8 new tests green
-- [ ] 1.5 Health/ready handlers (`internal/platform/health`; envelope-skipped)
+- [x] 1.5 Health/ready handlers (`internal/platform/health`; envelope-skipped) — landed 2026-10-10; 4 tests green; access-log exclusion via `httpx.SkipAccessLog`
 - [ ] 1.6 Redis platform: client, key conventions, readiness wiring (`internal/platform/redis`)
 - [ ] 1.7 List query: cursor/limit/sort/filter parser with per-endpoint allowlists (`httpx`)
 - [ ] 1.8 Idempotency middleware: Redis lock + cached replay + `Idempotency-Replayed`

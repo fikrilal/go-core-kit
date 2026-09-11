@@ -123,3 +123,18 @@ func TestNotFoundUsesProblemDetails(t *testing.T) {
 		t.Error("X-Request-Id missing on 404")
 	}
 }
+
+func TestSkipAccessLogMarksRequest(t *testing.T) {
+	router, logs := testRouter()
+	router.HandleFunc("GET /quiet", func(w http.ResponseWriter, _ *http.Request) {
+		httpx.SkipAccessLog(w)
+		httpx.NoContent(w)
+	})
+
+	rec := httptest.NewRecorder()
+	router.ServeHTTP(rec, httptest.NewRequestWithContext(t.Context(), http.MethodGet, "/quiet", nil))
+
+	if logs.Len() != 0 {
+		t.Errorf("logs = %q, want empty", logs.String())
+	}
+}

@@ -33,6 +33,13 @@ func Logger(r *http.Request) *slog.Logger {
 	return slog.Default()
 }
 
+// SkipAccessLog marks the response so it is not written to the request log.
+func SkipAccessLog(w http.ResponseWriter) {
+	if sw, ok := w.(*statusWriter); ok {
+		sw.quiet = true
+	}
+}
+
 func requestID(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		id := r.Header.Get("X-Request-Id")
@@ -53,6 +60,9 @@ func accessLog(base *slog.Logger, next http.Handler) http.Handler {
 		sw := &statusWriter{ResponseWriter: w, status: http.StatusOK}
 		next.ServeHTTP(sw, r)
 
+		if sw.quiet {
+			return
+		}
 		level := slog.LevelInfo
 		if sw.status >= http.StatusInternalServerError {
 			level = slog.LevelError
@@ -85,6 +95,7 @@ type statusWriter struct {
 	http.ResponseWriter
 	status int
 	wrote  bool
+	quiet  bool
 }
 
 func (w *statusWriter) WriteHeader(status int) {
