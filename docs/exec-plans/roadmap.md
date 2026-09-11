@@ -27,7 +27,7 @@ Rules: findings gate on **new vs baseline**, and updating a baseline requires ex
 
 ## Current Focus
 
-**Phase 1 — Platform core**: 1.0–1.6 landed (strict baseline, config, logging, httpx, validation, probes, Redis); next up 1.7 (list query), with harness v0 (1.11–1.12) alongside.
+**Phase 1 — Platform core**: 1.0–1.7 landed (strict baseline, config, logging, httpx, validation, probes, Redis, list query); next up 1.8 (idempotency), with harness v0 (1.11–1.12) alongside.
 
 ## Phase 0 — Foundation (complete, 2026-10-10)
 
@@ -49,7 +49,7 @@ Objective: the platform layer every feature consumes — config, logging, HTTP b
 - [x] 1.4 Input validation: decode + validate helper → `errors[] {field, message}` (`httpx` + validator/v10) — landed 2026-10-10; 8 new tests green
 - [x] 1.5 Health/ready handlers (`internal/platform/health`; envelope-skipped) — landed 2026-10-10; 4 tests green; access-log exclusion via `httpx.SkipAccessLog`
 - [x] 1.6 Redis platform: client, key conventions, readiness wiring (`internal/platform/redis`) — landed 2026-10-10; 3 tests green (miniredis, no Docker); driver confined by depguard
-- [ ] 1.7 List query: cursor/limit/sort/filter parser with per-endpoint allowlists (`httpx`)
+- [x] 1.7 List query: cursor/limit/sort/filter parser with per-endpoint allowlists (`httpx`) — landed 2026-10-10; 12 tests green
 - [ ] 1.8 Idempotency middleware: Redis lock + cached replay + `Idempotency-Replayed`
 - [ ] 1.9 DB seam: sqlc dual-engine config, portable subset rules, goose runner, SQLite engine (`internal/platform/db`), minimal `gokit db generate`, drift gate
 - [ ] 1.10 API bootstrap: `cmd/api` composition root with graceful shutdown serving `/health` + `/ready`
