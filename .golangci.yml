@@ -93,6 +93,9 @@ linters:
         path: (^|/)internal/platform/
       - linters:
           - forbidigo
+        path: (^|/)tools/
+      - linters:
+          - forbidigo
         path: _test\.go$
 
 formatters:

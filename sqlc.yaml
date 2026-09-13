@@ -1,0 +1,34 @@
+version: "2"
+sql:
+  - engine: "sqlite"
+    schema: "db/migrations/sqlite"
+    queries: "db/queries/common"
+    gen:
+      go:
+        package: "gen"
+        out: ".gen/sqlite"
+        overrides:
+          - column: "users.created_at"
+            go_type:
+              import: "github.com/fikrilal/go-core-kit/internal/platform/db/utctime"
+              package: "utctime"
+              type: "Time"
+          - column: "users.updated_at"
+            go_type:
+              import: "github.com/fikrilal/go-core-kit/internal/platform/db/utctime"
+              package: "utctime"
+              type: "Time"
+  - engine: "postgresql"
+    schema: "db/migrations/pg"
+    queries: "db/queries/common"
+    gen:
+      go:
+        package: "gen"
+        out: ".gen/pg"
+        sql_package: "database/sql"
+        overrides:
+          - db_type: "timestamptz"
+            go_type:
+              import: "github.com/fikrilal/go-core-kit/internal/platform/db/utctime"
+              package: "utctime"
+              type: "Time"

@@ -27,7 +27,7 @@ Rules: findings gate on **new vs baseline**, and updating a baseline requires ex
 
 ## Current Focus
 
-**Phase 1 — Platform core**: 1.0–1.8 landed; 1.9 in progress — 1.9a (DB engine + migrations) landed, next is 1.9b (sqlc pipeline + `gokit db generate` + drift gate).
+**Phase 1 — Platform core**: 1.0–1.9 landed (strict baseline, config, logging, httpx, validation, probes, Redis, list query, idempotency, DB seam + sqlc pipeline); next up 1.10 (API bootstrap), with harness v0 (1.11–1.12) alongside.
 
 ## Phase 0 — Foundation (complete, 2026-10-10)
 
@@ -51,7 +51,7 @@ Objective: the platform layer every feature consumes — config, logging, HTTP b
 - [x] 1.6 Redis platform: client, key conventions, readiness wiring (`internal/platform/redis`) — landed 2026-10-10; 3 tests green (miniredis, no Docker); driver confined by depguard
 - [x] 1.7 List query: cursor/limit/sort/filter parser with per-endpoint allowlists (`httpx`) — landed 2026-10-10; 12 tests green
 - [x] 1.8 Idempotency middleware: Redis lock + cached replay + `Idempotency-Replayed` — landed 2026-10-10; 7 tests green; missing key passes through, only 2xx cached, Redis failures fail closed
-- [ ] 1.9 DB seam: sqlc dual-engine config, portable subset rules, goose runner, SQLite engine (`internal/platform/db`), minimal `gokit db generate`, drift gate — **1.9a (engine + migrations + review fixes) landed 2026-10-10, 11 tests; 1.9b (sqlc pipeline) pending**
+- [x] 1.9 DB seam: sqlc dual-engine config, portable subset rules, goose runner, SQLite engine (`internal/platform/db`), minimal `gokit db generate`, drift gate — landed 2026-10-10; 1.9a engine + migrations + review fixes (11 tests), 1.9b sqlc pipeline (build-tag generated package, gokit tool, drift gate in CI)
 - [ ] 1.10 API bootstrap: `cmd/api` composition root with graceful shutdown serving `/health` + `/ready`
 - [ ] 1.11 Harness skeleton (`gokit` v0): typed command layer + `verify --profile fast|full|ci` + `doctor` + tool pinning; `make verify` delegates to the full profile
 - [ ] 1.12 Drift & docs checks: `env.example` ↔ config schema, project map (AGENTS.md tree ↔ dirs), markdown link integrity, ADR index completeness

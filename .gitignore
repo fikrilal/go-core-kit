@@ -3,6 +3,9 @@
 /dist/
 *.exe
 
+# Generated scratch (sqlc intermediate output)
+.gen/
+
 # Local runtime data
 .data/
 *.db

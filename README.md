@@ -12,12 +12,13 @@ Status: foundation complete; platform core in progress. Roadmap: `docs/exec-plan
 
 - Go — pinned by `go.mod` (`go 1.27.2`)
 - GNU Make
-- `golangci-lint` v2.14.0 — run `make tools` (installs the pinned version), or:
-  `curl -sSfL https://raw.githubusercontent.com/golangci/golangci-lint/HEAD/install.sh | sh -s -- -b ~/.local/bin v2.14.0`
+- `golangci-lint` v2.14.0 and `sqlc` v1.31.1 — run `make tools` (installs the pinned versions)
 
 ## Commands
 
 - `make verify` — format check, vet, lint (includes boundary rules), tests, build
+- `make generate` — regenerate sqlc output into `internal/db/gen`
+- `make drift` — regenerate and fail when committed generated code is stale
 - `make fmt` — format the tree
 - `make test` / `make build`
 

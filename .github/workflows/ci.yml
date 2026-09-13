@@ -17,5 +17,11 @@ jobs:
         run: |
           curl -sSfL https://raw.githubusercontent.com/golangci/golangci-lint/HEAD/install.sh \
             | sh -s -- -b "$(go env GOPATH)/bin" v2.14.0
+      - name: Install sqlc
+        run: |
+          curl -sSfL "https://github.com/sqlc-dev/sqlc/releases/download/v1.31.1/sqlc_1.31.1_linux_amd64.tar.gz" \
+            | tar -xz -C "$(go env GOPATH)/bin" sqlc
       - name: Verify
         run: make verify
+      - name: Drift
+        run: make drift
