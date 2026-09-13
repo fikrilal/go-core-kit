@@ -22,8 +22,15 @@ func Open(url string) (*Client, error) {
 	if err != nil {
 		return nil, fmt.Errorf("parse redis url: %w", err)
 	}
+	goredis.SetLogger(quietLogger{})
 	return &Client{rdb: goredis.NewClient(opts)}, nil
 }
+
+// quietLogger discards go-redis internal logs; failures surface through wrapped
+// errors and readiness checks so structured logging stays one pipeline.
+type quietLogger struct{}
+
+func (quietLogger) Printf(_ context.Context, _ string, _ ...any) {}
 
 // MustOpen is Open for composition roots; it panics on invalid configuration.
 func MustOpen(url string) *Client {

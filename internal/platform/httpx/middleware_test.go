@@ -138,3 +138,26 @@ func TestSkipAccessLogMarksRequest(t *testing.T) {
 		t.Errorf("logs = %q, want empty", logs.String())
 	}
 }
+
+func TestRequestBodyLimit(t *testing.T) {
+	router, _ := testRouter()
+	router.HandleFunc("POST /v1/things", func(w http.ResponseWriter, r *http.Request) {
+		var in struct {
+			Name string `json:"name"`
+		}
+		if err := httpx.Decode(r, &in); err != nil {
+			httpx.WriteError(w, r, err)
+			return
+		}
+		httpx.Data(w, r, in.Name)
+	})
+
+	body := `{"name":"` + strings.Repeat("a", 1<<20) + `"}`
+	req := httptest.NewRequestWithContext(t.Context(), http.MethodPost, "/v1/things", strings.NewReader(body))
+	rec := httptest.NewRecorder()
+	router.ServeHTTP(rec, req)
+
+	if rec.Code != http.StatusBadRequest {
+		t.Fatalf("status = %d, want 400 for an oversized body", rec.Code)
+	}
+}

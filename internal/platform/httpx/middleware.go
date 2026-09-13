@@ -91,6 +91,15 @@ func recoverPanics(next http.Handler) http.Handler {
 	})
 }
 
+const maxBodyBytes = 1 << 20
+
+func bodyLimit(next http.Handler) http.Handler {
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		r.Body = http.MaxBytesReader(w, r.Body, maxBodyBytes)
+		next.ServeHTTP(w, r)
+	})
+}
+
 type statusWriter struct {
 	http.ResponseWriter
 	status int

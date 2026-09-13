@@ -22,7 +22,7 @@ func NewRouter(logger *slog.Logger, opts ...RouterOption) *Router {
 	mux.HandleFunc("/", notFound)
 	router := &Router{
 		mux:     mux,
-		handler: requestID(accessLog(logger, recoverPanics(mux))),
+		handler: requestID(accessLog(logger, recoverPanics(bodyLimit(mux)))),
 	}
 	for _, opt := range opts {
 		opt(router)

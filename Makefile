@@ -40,7 +40,7 @@ build:
 	$(GO) build ./...
 
 build-pg:
-	$(GO) build -tags pg ./internal/db/gen
+	$(GO) build -tags pg ./...
 
 tidy:
 	$(GO) mod tidy
