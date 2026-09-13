@@ -35,7 +35,7 @@ func idempotentRequest(t *testing.T, key string) *http.Request {
 func TestIdempotencyReplaysCachedResponse(t *testing.T) {
 	router, _ := testIdempotentRouter(t)
 	calls := 0
-	router.HandleIdempotent("POST /v1/things", func(w http.ResponseWriter, r *http.Request) {
+	router.HandleIdempotent(testOp("POST", "/v1/things"), func(w http.ResponseWriter, r *http.Request) {
 		calls++
 		httpx.Created(w, r, "/v1/things/1", "created")
 	})
@@ -72,7 +72,7 @@ func TestIdempotencyReplaysCachedResponse(t *testing.T) {
 func TestIdempotencyDifferentKeysRunSeparately(t *testing.T) {
 	router, _ := testIdempotentRouter(t)
 	calls := 0
-	router.HandleIdempotent("POST /v1/things", func(w http.ResponseWriter, r *http.Request) {
+	router.HandleIdempotent(testOp("POST", "/v1/things"), func(w http.ResponseWriter, r *http.Request) {
 		calls++
 		httpx.Data(w, r, calls)
 	})
@@ -88,7 +88,7 @@ func TestIdempotencyDifferentKeysRunSeparately(t *testing.T) {
 func TestIdempotencyWithoutKeyPassesThrough(t *testing.T) {
 	router, _ := testIdempotentRouter(t)
 	calls := 0
-	router.HandleIdempotent("POST /v1/things", func(w http.ResponseWriter, _ *http.Request) {
+	router.HandleIdempotent(testOp("POST", "/v1/things"), func(w http.ResponseWriter, _ *http.Request) {
 		calls++
 		httpx.NoContent(w)
 	})
@@ -110,7 +110,7 @@ func TestIdempotencyInProgressReturns409(t *testing.T) {
 	router, _ := testIdempotentRouter(t)
 	started := make(chan struct{})
 	release := make(chan struct{})
-	router.HandleIdempotent("POST /v1/things", func(w http.ResponseWriter, r *http.Request) {
+	router.HandleIdempotent(testOp("POST", "/v1/things"), func(w http.ResponseWriter, r *http.Request) {
 		close(started)
 		<-release
 		httpx.Data(w, r, "done")
@@ -145,7 +145,7 @@ func TestIdempotencyInProgressReturns409(t *testing.T) {
 func TestIdempotencyDoesNotCacheErrors(t *testing.T) {
 	router, _ := testIdempotentRouter(t)
 	calls := 0
-	router.HandleIdempotent("POST /v1/things", func(w http.ResponseWriter, r *http.Request) {
+	router.HandleIdempotent(testOp("POST", "/v1/things"), func(w http.ResponseWriter, r *http.Request) {
 		calls++
 		httpx.WriteError(w, r, &httpx.ProblemError{
 			Status: http.StatusBadRequest,
@@ -169,7 +169,7 @@ func TestIdempotencyDoesNotCacheErrors(t *testing.T) {
 
 func TestIdempotencyReleasesLock(t *testing.T) {
 	router, server := testIdempotentRouter(t)
-	router.HandleIdempotent("POST /v1/things", func(w http.ResponseWriter, _ *http.Request) {
+	router.HandleIdempotent(testOp("POST", "/v1/things"), func(w http.ResponseWriter, _ *http.Request) {
 		httpx.NoContent(w)
 	})
 
@@ -188,5 +188,5 @@ func TestHandleIdempotentRequiresConfiguration(t *testing.T) {
 			t.Fatal("expected panic without WithIdempotency")
 		}
 	}()
-	router.HandleIdempotent("POST /v1/x", func(http.ResponseWriter, *http.Request) {})
+	router.HandleIdempotent(testOp("POST", "/v1/x"), func(http.ResponseWriter, *http.Request) {})
 }

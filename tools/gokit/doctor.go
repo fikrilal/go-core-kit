@@ -10,11 +10,11 @@ import (
 )
 
 var (
-	makefilePinPattern = regexp.MustCompile(`(?m)^(GOLANGCI_LINT_VERSION|SQLC_VERSION) \?= (\S+)$`)
+	makefilePinPattern = regexp.MustCompile(`(?m)^(GOLANGCI_LINT_VERSION|SQLC_VERSION|OAPI_CODEGEN_VERSION|VACUUM_VERSION) \?= (\S+)$`)
 	goDirectivePattern = regexp.MustCompile(`(?m)^go (\S+)$`)
 	goVersionPattern   = regexp.MustCompile(`\bgo(\d+\.\d+(?:\.\d+)?)\b`)
 	golangciPattern    = regexp.MustCompile(`version (\S+) built`)
-	sqlcPattern        = regexp.MustCompile(`^v?(\d+\.\d+\.\d+)$`)
+	versionOnlyPattern = regexp.MustCompile(`(?m)^v?(\d+\.\d+\.\d+)$`)
 )
 
 type doctorReport struct {
@@ -57,7 +57,9 @@ func runDoctor(ctx context.Context) error {
 	pins := readPins(report)
 	checkGoVersion(ctx, report)
 	checkTool(ctx, report, "golangci-lint", []string{"version"}, golangciPattern, pins["GOLANGCI_LINT_VERSION"])
-	checkTool(ctx, report, "sqlc", []string{"version"}, sqlcPattern, pins["SQLC_VERSION"])
+	checkTool(ctx, report, "sqlc", []string{"version"}, versionOnlyPattern, pins["SQLC_VERSION"])
+	checkTool(ctx, report, "oapi-codegen", []string{"--version"}, versionOnlyPattern, pins["OAPI_CODEGEN_VERSION"])
+	checkTool(ctx, report, "vacuum", []string{"version"}, versionOnlyPattern, pins["VACUUM_VERSION"])
 
 	if _, err := commandOutput(ctx, "git", "rev-parse", "--show-toplevel"); err != nil {
 		report.warn("not a git work tree — the review loop and drift checks need one")
@@ -79,8 +81,8 @@ func readPins(report *doctorReport) map[string]string {
 		return nil
 	}
 	pins := parsePins(string(data))
-	if pins["GOLANGCI_LINT_VERSION"] == "" || pins["SQLC_VERSION"] == "" {
-		report.warn("Makefile pins not found (GOLANGCI_LINT_VERSION, SQLC_VERSION)")
+	if pins["GOLANGCI_LINT_VERSION"] == "" || pins["SQLC_VERSION"] == "" || pins["OAPI_CODEGEN_VERSION"] == "" || pins["VACUUM_VERSION"] == "" {
+		report.warn("Makefile pins not found (GOLANGCI_LINT_VERSION, SQLC_VERSION, OAPI_CODEGEN_VERSION, VACUUM_VERSION)")
 	}
 	return pins
 }

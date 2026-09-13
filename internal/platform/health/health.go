@@ -29,8 +29,8 @@ func New(logger *slog.Logger, checks ...Check) *Handler {
 
 // Register mounts the probes on the router.
 func (h *Handler) Register(r *httpx.Router) {
-	r.HandleFunc("GET /health", h.handleHealth)
-	r.HandleFunc("GET /ready", h.handleReady)
+	r.HandleFunc(httpx.Operation{Method: http.MethodGet, Path: "/health", ID: "health.get"}, h.handleHealth)
+	r.HandleFunc(httpx.Operation{Method: http.MethodGet, Path: "/ready", ID: "ready.get"}, h.handleReady)
 }
 
 func (h *Handler) handleHealth(w http.ResponseWriter, _ *http.Request) {

@@ -113,7 +113,7 @@ func TestDecodeRejectsTrailingData(t *testing.T) {
 
 func TestDecodeResponseShapeThroughHandler(t *testing.T) {
 	router, _ := testRouter()
-	router.HandleFunc("POST /signup", func(w http.ResponseWriter, r *http.Request) {
+	router.HandleFunc(testOp("POST", "/signup"), func(w http.ResponseWriter, r *http.Request) {
 		var in signupInput
 		if err := httpx.Decode(r, &in); err != nil {
 			httpx.WriteError(w, r, err)

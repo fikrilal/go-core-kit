@@ -16,11 +16,11 @@ Status: foundation complete; platform core in progress. Roadmap: `docs/exec-plan
 
 ## Commands
 
-- `make verify` — full gate: knowledge checks, format, vet, lint, tests, builds, generated-code drift (`gokit verify --profile full`)
-- `go run ./tools/gokit verify --profile fast` — quick loop (knowledge, format, vet, lint, tests)
+- `make verify` — full gate: knowledge + contract checks, format, vet, lint, tests, builds, generated-code drift, spec lint, gate honesty (`gokit verify --profile full`)
+- `go run ./tools/gokit verify --profile fast` — quick loop (knowledge, contract, format, vet, lint, tests)
 - `go run ./tools/gokit doctor` — inspect local prerequisites
 - `make generate` — regenerate sqlc output into `internal/db/gen`
-- `make drift` — regenerate and fail when committed generated code is stale
+- `make drift` — regenerate and fail when generated artifacts are uncommitted or stale
 - `make fmt` — format the tree
 - `make test` / `make build`
 

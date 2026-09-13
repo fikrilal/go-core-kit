@@ -162,7 +162,7 @@ func TestListQuerySearchDisabled(t *testing.T) {
 
 func TestListQueryErrorShapeThroughHandler(t *testing.T) {
 	router, _ := testRouter()
-	router.HandleFunc("GET /v1/things", func(w http.ResponseWriter, r *http.Request) {
+	router.HandleFunc(testOp("GET", "/v1/things"), func(w http.ResponseWriter, r *http.Request) {
 		query, err := httpx.ParseListQuery(r, testListConfig())
 		if err != nil {
 			httpx.WriteError(w, r, err)
@@ -188,7 +188,7 @@ func TestListQueryErrorShapeThroughHandler(t *testing.T) {
 
 func TestListQuerySuccessThroughHandler(t *testing.T) {
 	router, _ := testRouter()
-	router.HandleFunc("GET /v1/things", func(w http.ResponseWriter, r *http.Request) {
+	router.HandleFunc(testOp("GET", "/v1/things"), func(w http.ResponseWriter, r *http.Request) {
 		query, err := httpx.ParseListQuery(r, testListConfig())
 		if err != nil {
 			httpx.WriteError(w, r, err)

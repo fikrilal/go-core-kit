@@ -21,5 +21,11 @@ jobs:
         run: |
           curl -sSfL "https://github.com/sqlc-dev/sqlc/releases/download/v1.31.1/sqlc_1.31.1_linux_amd64.tar.gz" \
             | tar -xz -C "$(go env GOPATH)/bin" sqlc
+      - name: Install oapi-codegen
+        run: go install github.com/oapi-codegen/oapi-codegen/v2/cmd/oapi-codegen@v2.8.0
+      - name: Install vacuum
+        run: |
+          curl -sSfL "https://github.com/daveshanley/vacuum/releases/download/v0.33.0/vacuum_0.33.0_linux_x86_64.tar.gz" \
+            | tar -xz -C "$(go env GOPATH)/bin" vacuum
       - name: Verify
         run: make verify

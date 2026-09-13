@@ -23,10 +23,7 @@ var (
 )
 
 // plannedPaths are documented in the AGENTS.md map before their phase lands; shrink as phases ship.
-var plannedPaths = []string{"cmd/worker/", "internal/features/", "internal/shared/", "contracts/"}
-
-// allowedMissingPaths are documented references to directories that do not exist yet; shrink as phases ship.
-var allowedMissingPaths = []string{"contracts/"}
+var plannedPaths = []string{"cmd/worker/", "internal/features/", "internal/shared/"}
 
 var indexFilePrefixes = []string{"docs/", "_WIP/", "cmd/", "internal/", "db/", "tools/"}
 
@@ -217,16 +214,12 @@ func backtickPathIssues() []string {
 		}
 		for _, match := range backtickPattern.FindAllStringSubmatch(string(data), -1) {
 			target := match[1]
-			if !slices.ContainsFunc(indexFilePrefixes, func(prefix string) bool {
+			if slices.ContainsFunc(indexFilePrefixes, func(prefix string) bool {
 				return strings.HasPrefix(target, prefix)
 			}) {
-				continue
-			}
-			if slices.Contains(allowedMissingPaths, target) {
-				continue
-			}
-			if _, err := os.Stat(target); err != nil { //nolint:gosec // repo-relative documentation path; read-only check
-				issues = append(issues, fmt.Sprintf("%s: missing referenced path %q", file, target))
+				if _, err := os.Stat(target); err != nil { //nolint:gosec // repo-relative documentation path; read-only check
+					issues = append(issues, fmt.Sprintf("%s: missing referenced path %q", file, target))
+				}
 			}
 		}
 	}

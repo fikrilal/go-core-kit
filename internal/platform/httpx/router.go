@@ -4,12 +4,21 @@ package httpx
 import (
 	"log/slog"
 	"net/http"
+	"slices"
 )
 
-// Router serves the platform middleware chain over pattern routes.
+// Operation identifies the contract operation a route serves.
+type Operation struct {
+	Method string
+	Path   string
+	ID     string
+}
+
+// Router serves the platform middleware chain over contract operations.
 type Router struct {
 	mux         *http.ServeMux
 	handler     http.Handler
+	operations  []Operation
 	idempotency *idempotencyStore
 }
 
@@ -30,19 +39,34 @@ func NewRouter(logger *slog.Logger, opts ...RouterOption) *Router {
 	return router
 }
 
-// Handle registers a handler for a method and pattern route.
-func (r *Router) Handle(pattern string, h http.Handler) {
-	r.mux.Handle(pattern, h)
+// Handle registers a handler for a contract operation.
+func (r *Router) Handle(op Operation, h http.Handler) {
+	r.register(op)
+	r.mux.Handle(op.pattern(), h)
 }
 
-// HandleFunc registers a handler function for a method and pattern route.
-func (r *Router) HandleFunc(pattern string, h http.HandlerFunc) {
-	r.mux.HandleFunc(pattern, h)
+// HandleFunc registers a handler function for a contract operation.
+func (r *Router) HandleFunc(op Operation, h http.HandlerFunc) {
+	r.register(op)
+	r.mux.HandleFunc(op.pattern(), h)
+}
+
+// Operations returns the registered contract operations in registration order.
+func (r *Router) Operations() []Operation {
+	return slices.Clone(r.operations)
 }
 
 // ServeHTTP implements http.Handler.
 func (r *Router) ServeHTTP(w http.ResponseWriter, req *http.Request) {
 	r.handler.ServeHTTP(w, req)
+}
+
+func (r *Router) register(op Operation) {
+	r.operations = append(r.operations, op)
+}
+
+func (op Operation) pattern() string {
+	return op.Method + " " + op.Path
 }
 
 func notFound(w http.ResponseWriter, r *http.Request) {

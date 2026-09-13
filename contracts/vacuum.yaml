@@ -1,0 +1,13 @@
+# Mirrors backend-core-kit's .spectral.yaml so the pinned snapshot passes the same bar its origin enforces.
+extends: [[spectral:oas, recommended]]
+rules:
+  operation-operationId: error
+  operation-tags: error
+  x-error-codes-required:
+    description: Every operation must declare x-error-codes.
+    message: Missing x-error-codes on operation.
+    severity: error
+    given: "$.paths[*]['get','put','post','delete','options','head','patch','trace']"
+    then:
+      field: x-error-codes
+      function: truthy

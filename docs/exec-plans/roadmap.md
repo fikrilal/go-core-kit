@@ -27,7 +27,7 @@ Rules: findings gate on **new vs baseline**, and updating a baseline requires ex
 
 ## Current Focus
 
-**Phase 1 complete (1.0–1.12).** Next: **Phase 2 — Contract pinning** (2.1 snapshot + provenance → 2.5 gate honesty).
+**Phases 1–2 complete (1.0–2.5).** Next: **Phase 3 — Auth slice** (3.1 schema → 3.9 forbidigo rules).
 
 ## Phase 0 — Foundation (complete, 2026-10-10)
 
@@ -62,11 +62,11 @@ Exit gate: `make verify` green; `cmd/api` boots; `X-Request-Id` echoed on `/heal
 
 Objective: the pinned contract and the machinery that proves client parity.
 
-- [ ] 2.1 Pin backend snapshot: `contracts/backend.openapi.yaml` + `provenance.json` (source commit + SHA-256)
-- [ ] 2.2 Generate request/response types (`oapi-codegen`, types only) + `make generate` + drift gate
-- [ ] 2.3 Contract suite harness: live-response validation (`kin-openapi`) + header/status/error-code assertions
-- [ ] 2.4 Operation allowlist + coverage check inside `make verify`; `vacuum` spec lint
-- [ ] 2.5 Gate-honesty meta-test: inject a stale snapshot and a forbidden import; both gates must fail with their expected markers
+- [x] 2.1 Pin backend snapshot: `contracts/backend.openapi.yaml` + `provenance.json` (source commit + SHA-256) — landed 2026-10-10; pinned at backend `670d9bc62e6a` (sha256 `6ae079ad…`); `gokit contract sync|check`; digest marker covered by gate honesty
+- [x] 2.2 Generate request/response types (`oapi-codegen`, types only) + `make generate` + drift gate — landed 2026-10-10; oapi-codegen v2.8.0, 1262 generated lines, drift covers both generators
+- [x] 2.3 Contract suite harness: live-response validation (`kin-openapi`) + header/status/error-code assertions — landed 2026-10-10; live baseline for `health.get`/`ready.get`; testing-strategy standard in place
+- [x] 2.4 Operation allowlist + coverage check inside `make verify`; `vacuum` spec lint — landed 2026-10-10; 34 declared, allowlist-enforced coverage with method/path parity; vacuum v0.33.0 error-severity lint in the full profile
+- [x] 2.5 Gate-honesty meta-test: inject a stale snapshot and a forbidden import; both gates must fail with their expected markers — landed 2026-10-10; three scenarios run inside `make verify` (digest, coverage, depguard)
 
 Exit gate: harness runs against the booted API; implemented-vs-allowlisted operation inventory is enforced.
 

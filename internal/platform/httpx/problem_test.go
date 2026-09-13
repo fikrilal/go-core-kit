@@ -23,7 +23,7 @@ type problemResponse struct {
 
 func TestWriteErrorRendersProblemDetails(t *testing.T) {
 	router, _ := testRouter()
-	router.HandleFunc("GET /boom", func(w http.ResponseWriter, r *http.Request) {
+	router.HandleFunc(testOp("GET", "/boom"), func(w http.ResponseWriter, r *http.Request) {
 		httpx.WriteError(w, r, &httpx.ProblemError{
 			Status: http.StatusUnauthorized,
 			Code:   httpx.CodeUnauthorized,
@@ -60,7 +60,7 @@ func TestWriteErrorRendersProblemDetails(t *testing.T) {
 
 func TestWriteErrorSetsRetryAfter(t *testing.T) {
 	router, _ := testRouter()
-	router.HandleFunc("POST /limited", func(w http.ResponseWriter, r *http.Request) {
+	router.HandleFunc(testOp("POST", "/limited"), func(w http.ResponseWriter, r *http.Request) {
 		httpx.WriteError(w, r, &httpx.ProblemError{
 			Status:            http.StatusTooManyRequests,
 			Code:              httpx.CodeRateLimited,
@@ -78,7 +78,7 @@ func TestWriteErrorSetsRetryAfter(t *testing.T) {
 
 func TestWriteErrorUnknownIsInternalAndLogged(t *testing.T) {
 	router, logs := testRouter()
-	router.HandleFunc("GET /explode", func(w http.ResponseWriter, r *http.Request) {
+	router.HandleFunc(testOp("GET", "/explode"), func(w http.ResponseWriter, r *http.Request) {
 		httpx.WriteError(w, r, errors.New("db exploded"))
 	})
 

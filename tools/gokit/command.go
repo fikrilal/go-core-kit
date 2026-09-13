@@ -11,6 +11,9 @@ const usageText = `gokit commands:
   verify --profile fast|full|ci   run a verification profile (default: full)
   doctor                          inspect local prerequisites
   db generate                     regenerate sqlc output into internal/db/gen
+  drift check                     regenerate and fail on uncommitted or stale artifacts
+  contract sync|check|generate    pin the backend snapshot; verify digest; regenerate types
+  gates honesty                   prove the verification gates fail on injected violations
   knowledge check                 env.example, project map, links, ADR index
   help                            show this message`
 
@@ -54,6 +57,38 @@ func (knowledgeCommand) execute(context.Context) error {
 	return runKnowledgeCheck()
 }
 
+type contractSyncCommand struct {
+	source string
+}
+
+func (c contractSyncCommand) execute(ctx context.Context) error {
+	return runContractSync(ctx, c.source)
+}
+
+type contractCheckCommand struct{}
+
+func (contractCheckCommand) execute(context.Context) error {
+	return runContractCheck()
+}
+
+type contractGenerateCommand struct{}
+
+func (contractGenerateCommand) execute(ctx context.Context) error {
+	return runContractGenerate(ctx)
+}
+
+type gatesHonestyCommand struct{}
+
+func (gatesHonestyCommand) execute(ctx context.Context) error {
+	return runGatesHonesty(ctx)
+}
+
+type driftCheckCommand struct{}
+
+func (driftCheckCommand) execute(ctx context.Context) error {
+	return runDriftCheck(ctx)
+}
+
 type helpCommand struct{}
 
 func (helpCommand) execute(context.Context) error {
@@ -83,6 +118,18 @@ func parseCommand(args []string) (command, error) {
 			return nil, usagef("knowledge expects: gokit knowledge check")
 		}
 		return knowledgeCommand{}, nil
+	case "contract":
+		return parseContract(args[1:])
+	case "gates":
+		if len(args) != 2 || args[1] != "honesty" {
+			return nil, usagef("gates expects: gokit gates honesty")
+		}
+		return gatesHonestyCommand{}, nil
+	case "drift":
+		if len(args) != 2 || args[1] != "check" {
+			return nil, usagef("drift expects: gokit drift check")
+		}
+		return driftCheckCommand{}, nil
 	case "help":
 		if len(args) != 1 {
 			return nil, usagef("help takes no arguments")
@@ -119,4 +166,43 @@ func profileNames() []string {
 	}
 	slices.Sort(names)
 	return names
+}
+
+func parseContract(args []string) (command, error) {
+	if len(args) == 0 {
+		return nil, usagef("contract expects: gokit contract sync|check|generate")
+	}
+	switch args[0] {
+	case "sync":
+		source := ""
+		for i := 1; i < len(args); i++ {
+			switch {
+			case args[i] == "--source":
+				if i+1 >= len(args) {
+					return nil, usagef("contract sync: --source requires a value")
+				}
+				source = args[i+1]
+				i++
+			case strings.HasPrefix(args[i], "--source="):
+				source = strings.TrimPrefix(args[i], "--source=")
+			default:
+				return nil, usagef("contract sync: unexpected argument %q", args[i])
+			}
+		}
+		if source == "" {
+			return nil, usagef("contract sync: --source is required")
+		}
+		return contractSyncCommand{source: source}, nil
+	case "check":
+		if len(args) != 1 {
+			return nil, usagef("contract check takes no arguments")
+		}
+		return contractCheckCommand{}, nil
+	case "generate":
+		if len(args) != 1 {
+			return nil, usagef("contract generate takes no arguments")
+		}
+		return contractGenerateCommand{}, nil
+	}
+	return nil, usagef("contract expects: gokit contract sync|check|generate")
 }

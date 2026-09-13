@@ -16,7 +16,7 @@ type item struct {
 
 func TestDataWritesEnvelope(t *testing.T) {
 	router, _ := testRouter()
-	router.HandleFunc("GET /v1/thing", func(w http.ResponseWriter, r *http.Request) {
+	router.HandleFunc(testOp("GET", "/v1/thing"), func(w http.ResponseWriter, r *http.Request) {
 		httpx.Data(w, r, item{Name: "n1"})
 	})
 
@@ -42,7 +42,7 @@ func TestDataWritesEnvelope(t *testing.T) {
 
 func TestListWritesEnvelopeWithMeta(t *testing.T) {
 	router, _ := testRouter()
-	router.HandleFunc("GET /v1/things", func(w http.ResponseWriter, r *http.Request) {
+	router.HandleFunc(testOp("GET", "/v1/things"), func(w http.ResponseWriter, r *http.Request) {
 		httpx.List(w, r, []item{{Name: "a"}}, httpx.ListMeta{NextCursor: "c1", Limit: 25, HasMore: true})
 	})
 
@@ -63,7 +63,7 @@ func TestListWritesEnvelopeWithMeta(t *testing.T) {
 
 func TestListOmitsEmptyCursor(t *testing.T) {
 	router, _ := testRouter()
-	router.HandleFunc("GET /v1/things", func(w http.ResponseWriter, r *http.Request) {
+	router.HandleFunc(testOp("GET", "/v1/things"), func(w http.ResponseWriter, r *http.Request) {
 		httpx.List(w, r, []item{}, httpx.ListMeta{Limit: 25})
 	})
 
@@ -77,7 +77,7 @@ func TestListOmitsEmptyCursor(t *testing.T) {
 
 func TestCreatedSetsLocation(t *testing.T) {
 	router, _ := testRouter()
-	router.HandleFunc("POST /v1/thing", func(w http.ResponseWriter, r *http.Request) {
+	router.HandleFunc(testOp("POST", "/v1/thing"), func(w http.ResponseWriter, r *http.Request) {
 		httpx.Created(w, r, "/v1/thing/1", item{Name: "n1"})
 	})
 
@@ -94,7 +94,7 @@ func TestCreatedSetsLocation(t *testing.T) {
 
 func TestNoContent(t *testing.T) {
 	router, _ := testRouter()
-	router.HandleFunc("DELETE /v1/thing", func(w http.ResponseWriter, _ *http.Request) {
+	router.HandleFunc(testOp("DELETE", "/v1/thing"), func(w http.ResponseWriter, _ *http.Request) {
 		httpx.NoContent(w)
 	})
 

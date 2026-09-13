@@ -43,29 +43,61 @@ func knowledgeStep() step {
 	}
 }
 
+func contractStep() step {
+	return step{
+		id:     "contract",
+		budget: 30 * time.Second,
+		run: func(context.Context) error {
+			return runContractCheck()
+		},
+	}
+}
+
+func runDriftCheck(ctx context.Context) error {
+	if err := generateDB(); err != nil {
+		return err
+	}
+	if err := runContractGenerate(ctx); err != nil {
+		return err
+	}
+	status, err := generatedDrift(ctx, genDir, contractGeneratedPath)
+	if err != nil {
+		return err
+	}
+	if status != "" {
+		if strings.Contains(status, "?? ") {
+			return fmt.Errorf("generated code is not committed — commit the generated artifacts:\n%s", status)
+		}
+		return fmt.Errorf("generated code is out of date — run make generate and commit:\n%s", status)
+	}
+	fmt.Println("drift: generated artifacts are committed and current")
+	return nil
+}
+
 func driftStep() step {
 	return step{
 		id:     "drift",
 		budget: 2 * time.Minute,
-		run: func(ctx context.Context) error {
-			if err := generateDB(); err != nil {
-				return err
-			}
-			status, err := commandOutput(ctx, "git", "status", "--porcelain", "--", genDir)
-			if err != nil {
-				return err
-			}
-			if status != "" {
-				return fmt.Errorf("generated code is out of date — run make generate and commit:\n%s", status)
-			}
-			return nil
-		},
+		run:    runDriftCheck,
+	}
+}
+
+func contractLintStep() step {
+	return execStep("contract-lint", "vacuum", "lint", "--no-banner", "--fail-severity", "error", "--ruleset", "contracts/vacuum.yaml", "contracts/backend.openapi.yaml")
+}
+
+func gatesHonestyStep() step {
+	return step{
+		id:     "gates-honesty",
+		budget: 2 * time.Minute,
+		run:    runGatesHonesty,
 	}
 }
 
 func fastSteps() []step {
 	return []step{
 		knowledgeStep(),
+		contractStep(),
 		execStep("fmt-check", "golangci-lint", "fmt", "--diff"),
 		execStep("vet", "go", "vet", "./..."),
 		execStep("lint", "golangci-lint", "run"),
@@ -78,6 +110,8 @@ func fullSteps() []step {
 		execStep("build", "go", "build", "./..."),
 		execStep("build-pg", "go", "build", "-tags", "pg", "./..."),
 		driftStep(),
+		contractLintStep(),
+		gatesHonestyStep(),
 	)
 }
 
@@ -134,4 +168,11 @@ func commandOutput(ctx context.Context, name string, args ...string) (string, er
 		return "", fmt.Errorf("%s %s: %w", name, strings.Join(args, " "), err)
 	}
 	return strings.TrimSpace(string(out)), nil
+}
+
+// generatedDrift reports any committed-state difference under paths —
+// modifications, deletions, and untracked generated files.
+func generatedDrift(ctx context.Context, paths ...string) (string, error) {
+	args := append([]string{"status", "--porcelain", "--"}, paths...)
+	return commandOutput(ctx, "git", args...)
 }

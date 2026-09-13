@@ -14,5 +14,5 @@ The wire-contract behaviors are owned by backend-core-kit's standards. This kit 
 | database | planned | platform core (db) |
 | queues-jobs | planned | worker phase |
 | observability | planned | platform core |
-| testing-strategy | planned | platform core |
+| testing-strategy | in place | landed with 2.3 (contract suite harness) |
 | ci-cd | planned | foundation follow-up |

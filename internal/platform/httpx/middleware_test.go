@@ -13,7 +13,7 @@ import (
 func TestRequestIDEchoesProvided(t *testing.T) {
 	router, _ := testRouter()
 	var seen string
-	router.HandleFunc("GET /id", func(w http.ResponseWriter, r *http.Request) {
+	router.HandleFunc(testOp("GET", "/id"), func(w http.ResponseWriter, r *http.Request) {
 		seen = httpx.RequestID(r)
 		httpx.NoContent(w)
 	})
@@ -33,7 +33,7 @@ func TestRequestIDEchoesProvided(t *testing.T) {
 
 func TestRequestIDGeneratedWhenMissing(t *testing.T) {
 	router, _ := testRouter()
-	router.HandleFunc("GET /id", func(_ http.ResponseWriter, _ *http.Request) {})
+	router.HandleFunc(testOp("GET", "/id"), func(_ http.ResponseWriter, _ *http.Request) {})
 
 	first := httptest.NewRecorder()
 	router.ServeHTTP(first, httptest.NewRequestWithContext(t.Context(), http.MethodGet, "/id", nil))
@@ -52,7 +52,7 @@ func TestRequestIDGeneratedWhenMissing(t *testing.T) {
 
 func TestAccessLogEntry(t *testing.T) {
 	router, logs := testRouter()
-	router.HandleFunc("GET /log", func(w http.ResponseWriter, _ *http.Request) {
+	router.HandleFunc(testOp("GET", "/log"), func(w http.ResponseWriter, _ *http.Request) {
 		w.WriteHeader(http.StatusTeapot)
 	})
 
@@ -78,7 +78,7 @@ func TestAccessLogEntry(t *testing.T) {
 
 func TestPanicRecovered(t *testing.T) {
 	router, logs := testRouter()
-	router.HandleFunc("GET /panic", func(http.ResponseWriter, *http.Request) {
+	router.HandleFunc(testOp("GET", "/panic"), func(http.ResponseWriter, *http.Request) {
 		panic("kaboom")
 	})
 
@@ -126,7 +126,7 @@ func TestNotFoundUsesProblemDetails(t *testing.T) {
 
 func TestSkipAccessLogMarksRequest(t *testing.T) {
 	router, logs := testRouter()
-	router.HandleFunc("GET /quiet", func(w http.ResponseWriter, _ *http.Request) {
+	router.HandleFunc(testOp("GET", "/quiet"), func(w http.ResponseWriter, _ *http.Request) {
 		httpx.SkipAccessLog(w)
 		httpx.NoContent(w)
 	})
@@ -141,7 +141,7 @@ func TestSkipAccessLogMarksRequest(t *testing.T) {
 
 func TestRequestBodyLimit(t *testing.T) {
 	router, _ := testRouter()
-	router.HandleFunc("POST /v1/things", func(w http.ResponseWriter, r *http.Request) {
+	router.HandleFunc(testOp("POST", "/v1/things"), func(w http.ResponseWriter, r *http.Request) {
 		var in struct {
 			Name string `json:"name"`
 		}

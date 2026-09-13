@@ -17,6 +17,12 @@ func TestParseCommand(t *testing.T) {
 		{name: "doctor", args: []string{"doctor"}, want: doctorCommand{}},
 		{name: "db generate", args: []string{"db", "generate"}, want: dbGenerateCommand{}},
 		{name: "knowledge check", args: []string{"knowledge", "check"}, want: knowledgeCommand{}},
+		{name: "contract check", args: []string{"contract", "check"}, want: contractCheckCommand{}},
+		{name: "contract generate", args: []string{"contract", "generate"}, want: contractGenerateCommand{}},
+		{name: "contract sync", args: []string{"contract", "sync", "--source", "openapi.yaml"}, want: contractSyncCommand{source: "openapi.yaml"}},
+		{name: "contract sync equals", args: []string{"contract", "sync", "--source=openapi.yaml"}, want: contractSyncCommand{source: "openapi.yaml"}},
+		{name: "gates honesty", args: []string{"gates", "honesty"}, want: gatesHonestyCommand{}},
+		{name: "drift check", args: []string{"drift", "check"}, want: driftCheckCommand{}},
 		{name: "help", args: []string{"help"}, want: helpCommand{}},
 	}
 	for _, tc := range cases {
@@ -43,6 +49,14 @@ func TestParseCommandUsageErrors(t *testing.T) {
 		{"db"},
 		{"db", "drop"},
 		{"knowledge"},
+		{"contract"},
+		{"contract", "sync"},
+		{"contract", "check", "now"},
+		{"contract", "drop"},
+		{"gates"},
+		{"gates", "lies"},
+		{"drift"},
+		{"drift", "now"},
 		{"help", "me"},
 	}
 	for _, args := range cases {

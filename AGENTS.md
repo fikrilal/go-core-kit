@@ -63,7 +63,7 @@ Dependency direction:
 
 Use the repo scripts; do not claim a check passed unless it was actually run.
 
-- `make verify` — full gate via `gokit verify --profile full`: knowledge checks, format, vet, lint (boundary rules), tests, builds, and generated-code drift
+- `make verify` — full gate via `gokit verify --profile full`: knowledge and contract checks, format, vet, lint (boundary rules), tests, builds, generated-code drift, spec lint (vacuum), and gate-honesty probes
 - Once platform code lands: `make generate` + `git diff --exit-code` (drift gate for sqlc output, contract types), `make verify-pg` (Postgres engine lane).
 
 Record exact verification commands and outcomes for auth/session, queue, idempotency, and contract-surface changes.
