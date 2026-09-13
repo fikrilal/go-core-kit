@@ -27,7 +27,7 @@ Rules: findings gate on **new vs baseline**, and updating a baseline requires ex
 
 ## Current Focus
 
-**Phase 1 — Platform core**: 1.0–1.10 landed; next up 1.11 (gokit v0 harness skeleton) with 1.12 (drift & docs checks) alongside, then Phase 2 (contract pinning).
+**Phase 1 complete (1.0–1.12).** Next: **Phase 2 — Contract pinning** (2.1 snapshot + provenance → 2.5 gate honesty).
 
 ## Phase 0 — Foundation (complete, 2026-10-10)
 
@@ -53,8 +53,8 @@ Objective: the platform layer every feature consumes — config, logging, HTTP b
 - [x] 1.8 Idempotency middleware: Redis lock + cached replay + `Idempotency-Replayed` — landed 2026-10-10; 7 tests green; missing key passes through, only 2xx cached, Redis failures fail closed
 - [x] 1.9 DB seam: sqlc dual-engine config, portable subset rules, goose runner, SQLite engine (`internal/platform/db`), minimal `gokit db generate`, drift gate — landed 2026-10-10; 1.9a engine + migrations + review fixes (11 tests), 1.9b sqlc pipeline (build-tag generated package, gokit tool, drift gate in CI)
 - [x] 1.10 API bootstrap: `cmd/api` composition root with graceful shutdown serving `/health` + `/ready` — landed 2026-10-10; smoke + live-boot verified; 1 MiB body cap in the platform chain
-- [ ] 1.11 Harness skeleton (`gokit` v0): typed command layer + `verify --profile fast|full|ci` + `doctor` + tool pinning; `make verify` delegates to the full profile
-- [ ] 1.12 Drift & docs checks: `env.example` ↔ config schema, project map (AGENTS.md tree ↔ dirs), markdown link integrity, ADR index completeness
+- [x] 1.11 Harness skeleton (`gokit` v0): typed command layer + `verify --profile fast|full|ci` + `doctor` + tool pinning; `make verify` delegates to the full profile — landed 2026-10-10; full gate ≈4.1s, fast ≈1.5s; exit codes 0/1/2
+- [x] 1.12 Drift & docs checks: `env.example` ↔ config schema, project map (AGENTS.md tree ↔ dirs), markdown link integrity, ADR index completeness — landed 2026-10-10; all four run first in the fast profile
 
 Exit gate: `make verify` green; `cmd/api` boots; `X-Request-Id` echoed on `/health`, `/ready`; envelope, problem, and validation paths covered by platform tests; generated-artifact drift gate works.
 

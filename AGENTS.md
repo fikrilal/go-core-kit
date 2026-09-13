@@ -49,6 +49,7 @@ db/queries/         sqlc input; portable subset in common/
 internal/db/gen/    generated query code (build-tag selected engine)
 contracts/          pinned OpenAPI snapshot + provenance + generated types
 tools/gokit/        scaffold / verify / doctor CLI
+docs/               standards, ADRs, exec plans, and engineering notes
 ```
 
 Dependency direction:
@@ -62,7 +63,7 @@ Dependency direction:
 
 Use the repo scripts; do not claim a check passed unless it was actually run.
 
-- `make verify` — fmt-check + vet + golangci-lint (boundary rules) + tests + build
+- `make verify` — full gate via `gokit verify --profile full`: knowledge checks, format, vet, lint (boundary rules), tests, builds, and generated-code drift
 - Once platform code lands: `make generate` + `git diff --exit-code` (drift gate for sqlc output, contract types), `make verify-pg` (Postgres engine lane).
 
 Record exact verification commands and outcomes for auth/session, queue, idempotency, and contract-surface changes.

@@ -16,7 +16,9 @@ Status: foundation complete; platform core in progress. Roadmap: `docs/exec-plan
 
 ## Commands
 
-- `make verify` — format check, vet, lint (includes boundary rules), tests, build
+- `make verify` — full gate: knowledge checks, format, vet, lint, tests, builds, generated-code drift (`gokit verify --profile full`)
+- `go run ./tools/gokit verify --profile fast` — quick loop (knowledge, format, vet, lint, tests)
+- `go run ./tools/gokit doctor` — inspect local prerequisites
 - `make generate` — regenerate sqlc output into `internal/db/gen`
 - `make drift` — regenerate and fail when committed generated code is stale
 - `make fmt` — format the tree

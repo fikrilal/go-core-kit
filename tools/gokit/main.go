@@ -2,21 +2,34 @@
 package main
 
 import (
+	"context"
 	"errors"
 	"fmt"
 	"os"
+	"os/signal"
+	"syscall"
 )
 
 func main() {
-	if err := run(os.Args[1:]); err != nil {
-		fmt.Fprintln(os.Stderr, "gokit: "+err.Error())
-		os.Exit(1)
-	}
+	os.Exit(runMain())
 }
 
-func run(args []string) error {
-	if len(args) == 2 && args[0] == "db" && args[1] == "generate" {
-		return generateDB()
+func runMain() int {
+	cmd, err := parseCommand(os.Args[1:])
+	if err != nil {
+		fmt.Fprintln(os.Stderr, "gokit: "+err.Error())
+		var usage *usageError
+		if errors.As(err, &usage) {
+			fmt.Fprintln(os.Stderr, usageText)
+			return 2
+		}
+		return 1
 	}
-	return errors.New("usage: gokit db generate")
+	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
+	defer stop()
+	if err := cmd.execute(ctx); err != nil {
+		fmt.Fprintln(os.Stderr, "gokit: "+err.Error())
+		return 1
+	}
+	return 0
 }

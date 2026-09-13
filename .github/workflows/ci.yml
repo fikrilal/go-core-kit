@@ -23,5 +23,3 @@ jobs:
             | tar -xz -C "$(go env GOPATH)/bin" sqlc
       - name: Verify
         run: make verify
-      - name: Drift
-        run: make drift

@@ -7,7 +7,8 @@ SQLC_VERSION ?= v1.31.1
 
 .PHONY: verify fmt fmt-check vet lint test build build-pg tidy tools generate drift
 
-verify: fmt-check vet lint test build build-pg
+verify:
+	$(GO) run ./tools/gokit verify --profile full
 
 tools:
 	@command -v $(GOLANGCI_LINT) >/dev/null 2>&1 || \
