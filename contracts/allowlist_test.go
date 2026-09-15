@@ -6,7 +6,7 @@ import (
 )
 
 func TestParseAllowlist(t *testing.T) {
-	contents := []byte("# header\noperations:\n  # group\n  - auth.refresh\n  - users.me.get\n\n  - admin.whoami.get\n")
+	contents := []byte("# header\noperations:\n  # group\n  - auth.refresh\n  - users.me.get\n\n  - admin.whoami.get # inline note\n")
 	got := ParseAllowlist(contents)
 	want := []string{"auth.refresh", "users.me.get", "admin.whoami.get"}
 	if !slices.Equal(got, want) {

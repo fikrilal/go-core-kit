@@ -117,13 +117,18 @@ func verifyCoverageHonesty(ctx context.Context) error {
 }
 
 func verifyBoundaryHonesty(ctx context.Context) error {
+	_, statErr := os.Stat(honestyViolationRoot)
+	rootExisted := statErr == nil
+
 	if err := os.MkdirAll(honestyViolationDir, 0o755); err != nil { //nolint:gosec // repository fixture directory
 		return fmt.Errorf("create violation directory: %w", err)
 	}
 	defer func() {
 		_ = os.Remove(filepath.Join(honestyViolationDir, honestyViolationFile))
 		_ = os.Remove(honestyViolationDir)
-		_ = os.Remove(honestyViolationRoot)
+		if !rootExisted {
+			_ = os.Remove(honestyViolationRoot)
+		}
 	}()
 	if err := os.WriteFile(filepath.Join(honestyViolationDir, honestyViolationFile), []byte(honestyViolationSource), 0o600); err != nil {
 		return fmt.Errorf("write violation fixture: %w", err)

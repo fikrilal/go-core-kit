@@ -153,7 +153,7 @@ func checkAllowlist(snapshot []byte) (allowlistState, error) {
 func snapshotOperationIDs(snapshot []byte) []string {
 	var ids []string
 	for _, match := range operationIDPattern.FindAllStringSubmatch(string(snapshot), -1) {
-		ids = append(ids, match[1])
+		ids = append(ids, strings.Trim(match[1], `"'`))
 	}
 	return ids
 }

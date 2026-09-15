@@ -6,6 +6,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"slices"
 	"strings"
 	"testing"
 )
@@ -154,6 +155,15 @@ func TestContractCheckAllowlistIssues(t *testing.T) {
 				t.Fatalf("runContractCheck() error = %v, want marker %q", err, tc.wantMessage)
 			}
 		})
+	}
+}
+
+func TestSnapshotOperationIDs(t *testing.T) {
+	contents := []byte("paths:\n  /a:\n    get:\n      operationId: health.get\n  /b:\n    post:\n      operationId: \"auth.login\"\n")
+	got := snapshotOperationIDs(contents)
+	want := []string{"health.get", "auth.login"}
+	if !slices.Equal(got, want) {
+		t.Fatalf("snapshotOperationIDs() = %v, want %v", got, want)
 	}
 }
 

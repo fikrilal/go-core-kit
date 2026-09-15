@@ -11,7 +11,11 @@ func ParseAllowlist(contents []byte) []string {
 		if !strings.HasPrefix(line, "- ") {
 			continue
 		}
-		if id := strings.TrimSpace(strings.TrimPrefix(line, "- ")); id != "" {
+		id := strings.TrimSpace(strings.TrimPrefix(line, "- "))
+		if index := strings.Index(id, "#"); index >= 0 {
+			id = strings.TrimSpace(id[:index])
+		}
+		if id != "" {
 			ids = append(ids, id)
 		}
 	}
