@@ -6,11 +6,13 @@ package db
 import (
 	"context"
 	"database/sql"
+	"errors"
 	"fmt"
 	"io/fs"
 
 	"github.com/pressly/goose/v3"
-	_ "modernc.org/sqlite" // registers the "sqlite" driver
+	"modernc.org/sqlite"
+	sqlite3 "modernc.org/sqlite/lib"
 )
 
 // Database is the platform handle to the compiled database engine.
@@ -64,8 +66,29 @@ func (d *Database) Close() error {
 	return nil
 }
 
+// Tx is the transaction surface generated queries accept.
+type Tx interface {
+	ExecContext(ctx context.Context, query string, args ...any) (sql.Result, error)
+	PrepareContext(ctx context.Context, query string) (*sql.Stmt, error)
+	QueryContext(ctx context.Context, query string, args ...any) (*sql.Rows, error)
+	QueryRowContext(ctx context.Context, query string, args ...any) *sql.Row
+}
+
+// ErrNoRows reports that a query returned no rows.
+var ErrNoRows = sql.ErrNoRows
+
+// IsUniqueViolation reports whether err is a uniqueness constraint violation.
+func IsUniqueViolation(err error) bool {
+	var sqliteErr *sqlite.Error
+	if !errors.As(err, &sqliteErr) {
+		return false
+	}
+	code := sqliteErr.Code()
+	return code == sqlite3.SQLITE_CONSTRAINT_UNIQUE || code == sqlite3.SQLITE_CONSTRAINT_PRIMARYKEY
+}
+
 // InTx runs fn inside a write transaction, rolling back when fn fails.
-func (d *Database) InTx(ctx context.Context, fn func(tx *sql.Tx) error) error {
+func (d *Database) InTx(ctx context.Context, fn func(tx Tx) error) error {
 	tx, err := d.sql.BeginTx(ctx, nil)
 	if err != nil {
 		return fmt.Errorf("begin transaction: %w", err)

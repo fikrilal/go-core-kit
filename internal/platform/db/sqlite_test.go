@@ -4,7 +4,6 @@ package db_test
 
 import (
 	"context"
-	"database/sql"
 	"errors"
 	"fmt"
 	"path/filepath"
@@ -105,7 +104,7 @@ func TestInTxCommitsAndRollsBack(t *testing.T) {
 	}
 	now := utctime.Time{Time: time.Now().UTC()}
 
-	err := database.InTx(ctx, func(tx *sql.Tx) error {
+	err := database.InTx(ctx, func(tx db.Tx) error {
 		if _, err := tx.ExecContext(ctx,
 			"INSERT INTO users (id, email, created_at, updated_at) VALUES (?, ?, ?, ?)",
 			"u1", "a@b.co", now, now); err != nil {
@@ -118,7 +117,7 @@ func TestInTxCommitsAndRollsBack(t *testing.T) {
 	}
 
 	sentinel := errors.New("rollback this")
-	err = database.InTx(ctx, func(tx *sql.Tx) error {
+	err = database.InTx(ctx, func(tx db.Tx) error {
 		if _, err := tx.ExecContext(ctx,
 			"INSERT INTO users (id, email, created_at, updated_at) VALUES (?, ?, ?, ?)",
 			"u2", "c@d.co", now, now); err != nil {
@@ -162,7 +161,7 @@ func TestInTxRecoversAfterPanic(t *testing.T) {
 				t.Fatal("expected the panic to propagate out of InTx")
 			}
 		}()
-		_ = database.InTx(ctx, func(*sql.Tx) error {
+		_ = database.InTx(ctx, func(db.Tx) error {
 			panic("boom")
 		})
 	}()

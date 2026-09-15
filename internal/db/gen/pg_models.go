@@ -7,12 +7,56 @@
 package gen
 
 import (
+	"database/sql"
+
 	utctime "github.com/fikrilal/go-core-kit/internal/platform/db/utctime"
 )
 
+type PasswordCredential struct {
+	UserID       string
+	PasswordHash string
+	CreatedAt    utctime.Time
+	UpdatedAt    utctime.Time
+}
+
+type RefreshToken struct {
+	ID           string
+	TokenHash    string
+	ExpiresAt    utctime.Time
+	RevokedAt    sql.NullTime
+	SessionID    string
+	ReplacedByID sql.NullString
+	CreatedAt    utctime.Time
+	UpdatedAt    utctime.Time
+}
+
+type Session struct {
+	ID                 string
+	UserID             string
+	DeviceID           sql.NullString
+	DeviceName         sql.NullString
+	PushPlatform       sql.NullString
+	PushToken          sql.NullString
+	PushTokenUpdatedAt sql.NullTime
+	PushTokenRevokedAt sql.NullTime
+	Ip                 sql.NullString
+	UserAgent          sql.NullString
+	ActiveKey          sql.NullString
+	LastSeenAt         utctime.Time
+	ExpiresAt          utctime.Time
+	RevokedAt          sql.NullTime
+	CreatedAt          utctime.Time
+	UpdatedAt          utctime.Time
+}
+
 type User struct {
-	ID        string
-	Email     string
-	CreatedAt utctime.Time
-	UpdatedAt utctime.Time
+	ID              string
+	Email           string
+	CreatedAt       utctime.Time
+	UpdatedAt       utctime.Time
+	EmailVerifiedAt sql.NullTime
+	Role            string
+	Status          string
+	SuspendedAt     sql.NullTime
+	SuspendedReason sql.NullString
 }

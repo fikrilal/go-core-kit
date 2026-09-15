@@ -18,6 +18,81 @@ sql:
               import: "github.com/fikrilal/go-core-kit/internal/platform/db/utctime"
               package: "utctime"
               type: "Time"
+          - column: "users.email_verified_at"
+            go_type:
+              import: "github.com/fikrilal/go-core-kit/internal/platform/db/utctime"
+              package: "utctime"
+              type: "Time"
+          - column: "users.suspended_at"
+            go_type:
+              import: "github.com/fikrilal/go-core-kit/internal/platform/db/utctime"
+              package: "utctime"
+              type: "Time"
+          - column: "password_credentials.created_at"
+            go_type:
+              import: "github.com/fikrilal/go-core-kit/internal/platform/db/utctime"
+              package: "utctime"
+              type: "Time"
+          - column: "password_credentials.updated_at"
+            go_type:
+              import: "github.com/fikrilal/go-core-kit/internal/platform/db/utctime"
+              package: "utctime"
+              type: "Time"
+          - column: "sessions.push_token_updated_at"
+            go_type:
+              import: "github.com/fikrilal/go-core-kit/internal/platform/db/utctime"
+              package: "utctime"
+              type: "Time"
+          - column: "sessions.push_token_revoked_at"
+            go_type:
+              import: "github.com/fikrilal/go-core-kit/internal/platform/db/utctime"
+              package: "utctime"
+              type: "Time"
+          - column: "sessions.last_seen_at"
+            go_type:
+              import: "github.com/fikrilal/go-core-kit/internal/platform/db/utctime"
+              package: "utctime"
+              type: "Time"
+          - column: "sessions.expires_at"
+            go_type:
+              import: "github.com/fikrilal/go-core-kit/internal/platform/db/utctime"
+              package: "utctime"
+              type: "Time"
+          - column: "sessions.revoked_at"
+            go_type:
+              import: "github.com/fikrilal/go-core-kit/internal/platform/db/utctime"
+              package: "utctime"
+              type: "Time"
+          - column: "sessions.created_at"
+            go_type:
+              import: "github.com/fikrilal/go-core-kit/internal/platform/db/utctime"
+              package: "utctime"
+              type: "Time"
+          - column: "sessions.updated_at"
+            go_type:
+              import: "github.com/fikrilal/go-core-kit/internal/platform/db/utctime"
+              package: "utctime"
+              type: "Time"
+          - column: "refresh_tokens.expires_at"
+            go_type:
+              import: "github.com/fikrilal/go-core-kit/internal/platform/db/utctime"
+              package: "utctime"
+              type: "Time"
+          - column: "refresh_tokens.revoked_at"
+            go_type:
+              import: "github.com/fikrilal/go-core-kit/internal/platform/db/utctime"
+              package: "utctime"
+              type: "Time"
+          - column: "refresh_tokens.created_at"
+            go_type:
+              import: "github.com/fikrilal/go-core-kit/internal/platform/db/utctime"
+              package: "utctime"
+              type: "Time"
+          - column: "refresh_tokens.updated_at"
+            go_type:
+              import: "github.com/fikrilal/go-core-kit/internal/platform/db/utctime"
+              package: "utctime"
+              type: "Time"
   - engine: "postgresql"
     schema: "db/migrations/pg"
     queries: "db/queries/common"
