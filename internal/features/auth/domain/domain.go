@@ -8,6 +8,7 @@ import (
 	"errors"
 	"fmt"
 	"strings"
+	"time"
 )
 
 // Roles.
@@ -46,6 +47,40 @@ type LoginUser struct {
 	User         User
 	PasswordHash *string
 }
+
+// LoginSession is the session core a refresh token belongs to.
+type LoginSession struct {
+	ID        string
+	ExpiresAt time.Time
+	Revoked   bool
+}
+
+// RefreshToken is the stored state of a presented refresh token.
+type RefreshToken struct {
+	ID           string
+	ExpiresAt    time.Time
+	Revoked      bool
+	ReplacedByID *string
+}
+
+// RefreshCredentials pairs a presented refresh token with its session and user.
+type RefreshCredentials struct {
+	User    User
+	Session LoginSession
+	Token   RefreshToken
+}
+
+// RotationKind reports how a refresh rotation ended.
+type RotationKind string
+
+// Rotation outcomes.
+const (
+	RotationOK             RotationKind = "ok"
+	RotationNotFound       RotationKind = "not_found"
+	RotationExpired        RotationKind = "expired"
+	RotationSessionRevoked RotationKind = "session_revoked"
+	RotationReused         RotationKind = "reused"
+)
 
 // NormalizeEmail trims and lowercases an email for storage and lookup.
 func NormalizeEmail(raw string) string {

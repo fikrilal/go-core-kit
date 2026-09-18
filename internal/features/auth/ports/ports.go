@@ -31,11 +31,24 @@ type NewSessionInput struct {
 	SessionExpiresAt time.Time
 }
 
+// RotateRefreshTokenInput carries a refresh rotation.
+type RotateRefreshTokenInput struct {
+	CurrentTokenHash string
+	NextTokenID      string
+	NextTokenHash    string
+	Now              time.Time
+	IP               string
+	UserAgent        string
+}
+
 // Repository is the auth feature's persistence boundary.
 type Repository interface {
 	CreateUserWithPassword(ctx context.Context, in CreateUserInput) (domain.User, error)
 	FindUserForLogin(ctx context.Context, email string) (domain.LoginUser, bool, error)
 	CreateSession(ctx context.Context, in NewSessionInput) error
+	FindRefreshToken(ctx context.Context, tokenHash string) (domain.RefreshCredentials, bool, error)
+	RotateRefreshToken(ctx context.Context, in RotateRefreshTokenInput) (domain.RotationKind, error)
+	RevokeSessionByRefreshToken(ctx context.Context, tokenHash string, now time.Time) (bool, error)
 }
 
 // PasswordHasher hashes and verifies passwords.

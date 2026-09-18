@@ -66,3 +66,60 @@ SET revoked_at = sqlc.arg(revoked_at),
 WHERE active_key = NULLIF(sqlc.arg(active_key), '')
   AND user_id = sqlc.arg(user_id)
   AND revoked_at IS NULL;
+
+-- name: GetRefreshTokenWithSession :one
+SELECT
+    t.id AS token_id,
+    t.expires_at AS token_expires_at,
+    t.revoked_at AS token_revoked_at,
+    t.replaced_by_id AS token_replaced_by_id,
+    s.id AS session_id,
+    s.expires_at AS session_expires_at,
+    s.revoked_at AS session_revoked_at,
+    u.id AS user_id,
+    u.email AS user_email,
+    u.email_verified_at AS user_email_verified_at,
+    u.role AS user_role,
+    u.status AS user_status
+FROM refresh_tokens AS t
+JOIN sessions AS s ON s.id = t.session_id
+JOIN users AS u ON u.id = s.user_id
+WHERE t.token_hash = sqlc.arg(token_hash);
+
+-- name: MarkRefreshTokenRotated :execrows
+UPDATE refresh_tokens
+SET revoked_at = sqlc.arg(revoked_at),
+    replaced_by_id = NULLIF(sqlc.arg(replaced_by_id), ''),
+    updated_at = sqlc.arg(revoked_at)
+WHERE id = sqlc.arg(id) AND revoked_at IS NULL AND replaced_by_id IS NULL;
+
+-- name: TouchSession :exec
+UPDATE sessions
+SET last_seen_at = sqlc.arg(last_seen_at),
+    ip = NULLIF(sqlc.arg(ip), ''),
+    user_agent = NULLIF(sqlc.arg(user_agent), ''),
+    updated_at = sqlc.arg(updated_at)
+WHERE id = sqlc.arg(id);
+
+-- name: GetSessionIDByRefreshTokenHash :one
+SELECT session_id FROM refresh_tokens WHERE token_hash = sqlc.arg(token_hash);
+
+-- name: ClearSessionDeviceState :exec
+UPDATE sessions
+SET active_key = NULL,
+    push_platform = NULL,
+    push_token = NULL,
+    push_token_updated_at = sqlc.arg(now),
+    push_token_revoked_at = sqlc.arg(now),
+    updated_at = sqlc.arg(now)
+WHERE id = sqlc.arg(id);
+
+-- name: RevokeSession :execrows
+UPDATE sessions
+SET revoked_at = sqlc.arg(revoked_at), updated_at = sqlc.arg(revoked_at)
+WHERE id = sqlc.arg(id) AND revoked_at IS NULL;
+
+-- name: RevokeSessionRefreshTokens :execrows
+UPDATE refresh_tokens
+SET revoked_at = sqlc.arg(revoked_at), updated_at = sqlc.arg(revoked_at)
+WHERE session_id = sqlc.arg(session_id) AND revoked_at IS NULL;

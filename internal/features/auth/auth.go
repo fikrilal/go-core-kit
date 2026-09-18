@@ -83,6 +83,8 @@ func Register(router *httpx.Router, deps Deps) error {
 	handlers := &handlers{service: service}
 	router.HandleFunc(httpx.Operation{Method: http.MethodPost, Path: "/v1/auth/password/register", ID: "auth.password.register"}, handlers.register)
 	router.HandleFunc(httpx.Operation{Method: http.MethodPost, Path: "/v1/auth/password/login", ID: "auth.password.login"}, handlers.login)
+	router.HandleFunc(httpx.Operation{Method: http.MethodPost, Path: "/v1/auth/refresh", ID: "auth.refresh"}, handlers.refresh)
+	router.HandleFunc(httpx.Operation{Method: http.MethodPost, Path: "/v1/auth/logout", ID: "auth.logout"}, handlers.logout)
 	return nil
 }
 
@@ -143,6 +145,41 @@ func (h *handlers) password(w http.ResponseWriter, r *http.Request, call func(co
 	httpx.Data(w, r, authResult(result))
 }
 
+type refreshTokenRequest struct {
+	RefreshToken string `json:"refreshToken" validate:"required"`
+}
+
+func (h *handlers) refresh(w http.ResponseWriter, r *http.Request) {
+	var body refreshTokenRequest
+	if err := httpx.Decode(r, &body); err != nil {
+		httpx.WriteError(w, r, err)
+		return
+	}
+	result, err := h.service.Refresh(r.Context(), app.RefreshInput{
+		RefreshToken: body.RefreshToken,
+		IP:           clientIP(r),
+		UserAgent:    r.Header.Get("User-Agent"),
+	})
+	if err != nil {
+		httpx.WriteError(w, r, err)
+		return
+	}
+	httpx.Data(w, r, refreshResult(result))
+}
+
+func (h *handlers) logout(w http.ResponseWriter, r *http.Request) {
+	var body refreshTokenRequest
+	if err := httpx.Decode(r, &body); err != nil {
+		httpx.WriteError(w, r, err)
+		return
+	}
+	if err := h.service.Logout(r.Context(), body.RefreshToken); err != nil {
+		httpx.WriteError(w, r, err)
+		return
+	}
+	httpx.NoContent(w)
+}
+
 func authResult(result app.Result) contracts.AuthResultWithMeDto {
 	methods := make([]contracts.MeDtoAuthMethods, 0, len(result.AuthMethods))
 	for _, method := range result.AuthMethods {
@@ -156,6 +193,19 @@ func authResult(result app.Result) contracts.AuthResultWithMeDto {
 			Roles:         []string{result.User.Role},
 			AuthMethods:   methods,
 			Profile:       contracts.MeProfileDto{},
+		},
+		AccessToken:  result.AccessToken,
+		RefreshToken: result.RefreshToken,
+	}
+}
+
+// refreshResult renders the refreshed pair; authMethods is omitted on refresh responses.
+func refreshResult(result app.Result) contracts.AuthResultDto {
+	return contracts.AuthResultDto{
+		User: contracts.AuthUserDto{
+			Id:            result.User.ID,
+			Email:         result.User.Email,
+			EmailVerified: result.User.EmailVerified,
 		},
 		AccessToken:  result.AccessToken,
 		RefreshToken: result.RefreshToken,

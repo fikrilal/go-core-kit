@@ -27,6 +27,16 @@ type fakeRepository struct {
 	loginUser  domain.LoginUser
 	loginFound bool
 	loginErr   error
+
+	refreshCreds domain.RefreshCredentials
+	refreshFound bool
+	refreshErr   error
+	rotationKind domain.RotationKind
+	rotationErr  error
+	rotations    []ports.RotateRefreshTokenInput
+	revokeResult bool
+	revokeErr    error
+	revokes      []string
 }
 
 func (f *fakeRepository) CreateUserWithPassword(_ context.Context, in ports.CreateUserInput) (domain.User, error) {
@@ -44,6 +54,26 @@ func (f *fakeRepository) FindUserForLogin(context.Context, string) (domain.Login
 func (f *fakeRepository) CreateSession(_ context.Context, in ports.NewSessionInput) error {
 	f.sessions = append(f.sessions, in)
 	return nil
+}
+
+func (f *fakeRepository) FindRefreshToken(context.Context, string) (domain.RefreshCredentials, bool, error) {
+	return f.refreshCreds, f.refreshFound, f.refreshErr
+}
+
+func (f *fakeRepository) RotateRefreshToken(_ context.Context, in ports.RotateRefreshTokenInput) (domain.RotationKind, error) {
+	if f.rotationErr != nil {
+		return "", f.rotationErr
+	}
+	f.rotations = append(f.rotations, in)
+	return f.rotationKind, nil
+}
+
+func (f *fakeRepository) RevokeSessionByRefreshToken(_ context.Context, tokenHash string, _ time.Time) (bool, error) {
+	if f.revokeErr != nil {
+		return false, f.revokeErr
+	}
+	f.revokes = append(f.revokes, tokenHash)
+	return f.revokeResult, nil
 }
 
 type fakeHasher struct {
@@ -290,4 +320,162 @@ func TestLoginSuccess(t *testing.T) {
 	if result.AccessToken != "access:user-1" {
 		t.Errorf("access token = %q, want the signed token", result.AccessToken)
 	}
+}
+
+func refreshFixture(t *testing.T) *fixture {
+	t.Helper()
+	f := newFixture(t)
+	f.repo.refreshFound = true
+	f.repo.refreshCreds = domain.RefreshCredentials{
+		User:    domain.User{ID: "user-1", Email: "user@example.com", EmailVerified: true, Role: domain.RoleUser, Status: domain.StatusActive},
+		Session: domain.LoginSession{ID: "session-1", ExpiresAt: moment.Add(24 * time.Hour)},
+		Token:   domain.RefreshToken{ID: "token-1", ExpiresAt: moment.Add(time.Hour)},
+	}
+	f.repo.rotationKind = domain.RotationOK
+	return f
+}
+
+func TestRefreshUnknownToken(t *testing.T) {
+	f := newFixture(t)
+	f.repo.refreshFound = false
+	_, err := f.service.Refresh(context.Background(), app.RefreshInput{RefreshToken: "raw-token"})
+	problem := problemError(t, err)
+	if problem.Status != 401 || problem.Code != httpx.CodeAuthRefreshTokenInvalid {
+		t.Fatalf("problem = %+v, want 401 AUTH_REFRESH_TOKEN_INVALID", problem)
+	}
+	if len(f.repo.rotations) != 0 || len(f.tokens.sessionIDs) != 0 {
+		t.Error("rotation or signing happened for an unknown token")
+	}
+}
+
+func TestRefreshReuseContainsFamily(t *testing.T) {
+	f := refreshFixture(t)
+	f.repo.refreshCreds.Token.Revoked = true
+	f.repo.revokeResult = true
+	_, err := f.service.Refresh(context.Background(), app.RefreshInput{RefreshToken: "raw-token"})
+	problem := problemError(t, err)
+	if problem.Status != 401 || problem.Code != httpx.CodeAuthRefreshTokenReused {
+		t.Fatalf("problem = %+v, want 401 AUTH_REFRESH_TOKEN_REUSED", problem)
+	}
+	if len(f.repo.revokes) != 1 || f.repo.revokes[0] != domain.HashRefreshToken("raw-token") {
+		t.Fatalf("reuse containment revokes = %v, want the presented token's family", f.repo.revokes)
+	}
+	if len(f.repo.rotations) != 0 || len(f.tokens.sessionIDs) != 0 {
+		t.Error("reused token was rotated or signed")
+	}
+}
+
+func TestRefreshExpired(t *testing.T) {
+	f := refreshFixture(t)
+	f.repo.refreshCreds.Token.ExpiresAt = moment.Add(-time.Minute)
+	_, err := f.service.Refresh(context.Background(), app.RefreshInput{RefreshToken: "raw-token"})
+	problem := problemError(t, err)
+	if problem.Status != 401 || problem.Code != httpx.CodeAuthRefreshTokenExpired {
+		t.Fatalf("problem = %+v, want 401 AUTH_REFRESH_TOKEN_EXPIRED", problem)
+	}
+}
+
+func TestRefreshSessionRevoked(t *testing.T) {
+	f := refreshFixture(t)
+	f.repo.refreshCreds.Session.Revoked = true
+	_, err := f.service.Refresh(context.Background(), app.RefreshInput{RefreshToken: "raw-token"})
+	problem := problemError(t, err)
+	if problem.Status != 401 || problem.Code != httpx.CodeAuthSessionRevoked {
+		t.Fatalf("problem = %+v, want 401 AUTH_SESSION_REVOKED", problem)
+	}
+}
+
+func TestRefreshSuspendedAndDeleted(t *testing.T) {
+	suspended := refreshFixture(t)
+	suspended.repo.refreshCreds.User.Status = domain.StatusSuspended
+	suspendedResult, suspendedCallErr := suspended.service.Refresh(context.Background(), app.RefreshInput{RefreshToken: "raw-token"})
+	if code := problemError(t, mustError(t, suspendedResult, suspendedCallErr)).Code; code != httpx.CodeAuthUserSuspended {
+		t.Fatalf("suspended refresh code = %q, want AUTH_USER_SUSPENDED", code)
+	}
+	deleted := refreshFixture(t)
+	deleted.repo.refreshCreds.User.Status = domain.StatusDeleted
+	deletedResult, deletedCallErr := deleted.service.Refresh(context.Background(), app.RefreshInput{RefreshToken: "raw-token"})
+	if code := problemError(t, mustError(t, deletedResult, deletedCallErr)).Code; code != httpx.CodeAuthRefreshTokenInvalid {
+		t.Fatalf("deleted refresh code = %q, want masked AUTH_REFRESH_TOKEN_INVALID", code)
+	}
+}
+
+func TestRefreshMintsBeforeRotating(t *testing.T) {
+	f := refreshFixture(t)
+	f.repo.rotationErr = errors.New("rotate exploded")
+	_, err := f.service.Refresh(context.Background(), app.RefreshInput{RefreshToken: "raw-token"})
+	if err == nil {
+		t.Fatal("Refresh() = nil, want the rotation failure")
+	}
+	if len(f.tokens.sessionIDs) != 1 {
+		t.Fatal("access token was not minted before the failing rotation")
+	}
+}
+
+func TestRefreshSuccess(t *testing.T) {
+	f := refreshFixture(t)
+	result, err := f.service.Refresh(context.Background(), app.RefreshInput{RefreshToken: "raw-token", IP: "203.0.113.9", UserAgent: "agent"})
+	if err != nil {
+		t.Fatalf("Refresh() error = %v", err)
+	}
+	if len(f.repo.rotations) != 1 {
+		t.Fatalf("rotations = %d, want 1", len(f.repo.rotations))
+	}
+	rotation := f.repo.rotations[0]
+	if rotation.CurrentTokenHash != domain.HashRefreshToken("raw-token") {
+		t.Error("rotation did not receive the presented token hash")
+	}
+	if rotation.NextTokenHash != domain.HashRefreshToken(result.RefreshToken) {
+		t.Error("rotation next-hash does not match the issued token")
+	}
+	if result.AccessToken != "access:user-1" || len(f.tokens.sessionIDs) != 1 || f.tokens.sessionIDs[0] != "session-1" {
+		t.Errorf("tokens = %q/%v, want an access token for session-1", result.AccessToken, f.tokens.sessionIDs)
+	}
+}
+
+func TestRefreshRotationKindMapping(t *testing.T) {
+	cases := map[domain.RotationKind]httpx.Code{
+		domain.RotationNotFound:       httpx.CodeAuthRefreshTokenInvalid,
+		domain.RotationExpired:        httpx.CodeAuthRefreshTokenExpired,
+		domain.RotationSessionRevoked: httpx.CodeAuthSessionRevoked,
+		domain.RotationReused:         httpx.CodeAuthRefreshTokenReused,
+	}
+	for kind, wantCode := range cases {
+		t.Run(string(kind), func(t *testing.T) {
+			f := refreshFixture(t)
+			f.repo.rotationKind = kind
+			_, err := f.service.Refresh(context.Background(), app.RefreshInput{RefreshToken: "raw-token"})
+			if got := problemError(t, err).Code; got != wantCode {
+				t.Fatalf("rotation kind %q mapped to %q, want %q", kind, got, wantCode)
+			}
+		})
+	}
+}
+
+func TestLogoutSuccess(t *testing.T) {
+	f := newFixture(t)
+	f.repo.revokeResult = true
+	if err := f.service.Logout(context.Background(), "raw-token"); err != nil {
+		t.Fatalf("Logout() error = %v", err)
+	}
+	if len(f.repo.revokes) != 1 || f.repo.revokes[0] != domain.HashRefreshToken("raw-token") {
+		t.Fatalf("revokes = %v, want the presented token hash", f.repo.revokes)
+	}
+}
+
+func TestLogoutUnknownToken(t *testing.T) {
+	f := newFixture(t)
+	f.repo.revokeResult = false
+	problem := problemError(t, f.service.Logout(context.Background(), "raw-token"))
+	if problem.Status != 401 || problem.Code != httpx.CodeAuthRefreshTokenInvalid {
+		t.Fatalf("problem = %+v, want 401 AUTH_REFRESH_TOKEN_INVALID", problem)
+	}
+}
+
+func mustError(t *testing.T, result app.Result, err error) error {
+	t.Helper()
+	if err == nil {
+		t.Fatalf("expected an error, got result %+v", result)
+	}
+	return err
 }

@@ -9,8 +9,6 @@ operations:
   - auth.password.change
   - auth.password.reset.request
   - auth.password.reset.confirm
-  - auth.refresh
-  - auth.logout
   - auth.jwks.get
   # Phase 4 — me slice
   - users.me.get

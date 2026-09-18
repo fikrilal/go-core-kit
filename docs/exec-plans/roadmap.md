@@ -27,7 +27,7 @@ Rules: findings gate on **new vs baseline**, and updating a baseline requires ex
 
 ## Current Focus
 
-**Phase 3 in progress (3.1–3.2 landed).** Next: **3.3 refresh rotation + reuse detection, then 3.4 EdDSA keyring/JWKS.**
+**Phase 3 in progress (3.1–3.3 landed).** Next: **3.4 access tokens — verifier, guard, and the JWKS endpoint.**
 
 ## Phase 0 — Foundation (complete, 2026-10-10)
 
@@ -76,7 +76,7 @@ Objective: the full auth surface, contract-green.
 
 - [x] 3.1 Schema + migrations: users, credentials, sessions, refresh tokens (sqlite set first) — landed 2026-10-11; sqlite + pg sets, CHECK/FK/cascade/index tests, Down round trip; pg set added early to keep sqlc dual-engine green
 - [x] 3.2 Password register + login (argon2id, dummy-hash equalization, rate limits) — landed 2026-10-11; wire-validated register/login, EdDSA tokens, Redis login limiting with Retry-After; allowlist 32 → 30
-- [ ] 3.3 Sessions: refresh rotation, reuse detection, logout
+- [x] 3.3 Sessions: refresh rotation, reuse detection, logout — landed 2026-10-11; rotation with session-family containment, idempotent 204 logout; allowlist 30 → 28
 - [ ] 3.4 Access tokens: EdDSA keyring, JWKS endpoint
 - [ ] 3.5 Change password
 - [ ] 3.6 Email verification + resend *(needs 5.2)*

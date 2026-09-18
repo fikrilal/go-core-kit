@@ -14,6 +14,27 @@ import (
 	utctime "github.com/fikrilal/go-core-kit/internal/platform/db/utctime"
 )
 
+const clearSessionDeviceState = `-- name: ClearSessionDeviceState :exec
+UPDATE sessions
+SET active_key = NULL,
+    push_platform = NULL,
+    push_token = NULL,
+    push_token_updated_at = $1,
+    push_token_revoked_at = $1,
+    updated_at = $1
+WHERE id = $2
+`
+
+type ClearSessionDeviceStateParams struct {
+	Now sql.NullTime
+	ID  string
+}
+
+func (q *Queries) ClearSessionDeviceState(ctx context.Context, arg ClearSessionDeviceStateParams) error {
+	_, err := q.db.ExecContext(ctx, clearSessionDeviceState, arg.Now, arg.ID)
+	return err
+}
+
 const createPasswordCredential = `-- name: CreatePasswordCredential :exec
 INSERT INTO password_credentials (user_id, password_hash, created_at, updated_at)
 VALUES ($1, $2, $3, $4)
@@ -119,6 +140,72 @@ func (q *Queries) CreateSession(ctx context.Context, arg CreateSessionParams) er
 	return err
 }
 
+const getRefreshTokenWithSession = `-- name: GetRefreshTokenWithSession :one
+SELECT
+    t.id AS token_id,
+    t.expires_at AS token_expires_at,
+    t.revoked_at AS token_revoked_at,
+    t.replaced_by_id AS token_replaced_by_id,
+    s.id AS session_id,
+    s.expires_at AS session_expires_at,
+    s.revoked_at AS session_revoked_at,
+    u.id AS user_id,
+    u.email AS user_email,
+    u.email_verified_at AS user_email_verified_at,
+    u.role AS user_role,
+    u.status AS user_status
+FROM refresh_tokens AS t
+JOIN sessions AS s ON s.id = t.session_id
+JOIN users AS u ON u.id = s.user_id
+WHERE t.token_hash = $1
+`
+
+type GetRefreshTokenWithSessionRow struct {
+	TokenID             string
+	TokenExpiresAt      utctime.Time
+	TokenRevokedAt      sql.NullTime
+	TokenReplacedByID   sql.NullString
+	SessionID           string
+	SessionExpiresAt    utctime.Time
+	SessionRevokedAt    sql.NullTime
+	UserID              string
+	UserEmail           string
+	UserEmailVerifiedAt sql.NullTime
+	UserRole            string
+	UserStatus          string
+}
+
+func (q *Queries) GetRefreshTokenWithSession(ctx context.Context, tokenHash string) (GetRefreshTokenWithSessionRow, error) {
+	row := q.db.QueryRowContext(ctx, getRefreshTokenWithSession, tokenHash)
+	var i GetRefreshTokenWithSessionRow
+	err := row.Scan(
+		&i.TokenID,
+		&i.TokenExpiresAt,
+		&i.TokenRevokedAt,
+		&i.TokenReplacedByID,
+		&i.SessionID,
+		&i.SessionExpiresAt,
+		&i.SessionRevokedAt,
+		&i.UserID,
+		&i.UserEmail,
+		&i.UserEmailVerifiedAt,
+		&i.UserRole,
+		&i.UserStatus,
+	)
+	return i, err
+}
+
+const getSessionIDByRefreshTokenHash = `-- name: GetSessionIDByRefreshTokenHash :one
+SELECT session_id FROM refresh_tokens WHERE token_hash = $1
+`
+
+func (q *Queries) GetSessionIDByRefreshTokenHash(ctx context.Context, tokenHash string) (string, error) {
+	row := q.db.QueryRowContext(ctx, getSessionIDByRefreshTokenHash, tokenHash)
+	var session_id string
+	err := row.Scan(&session_id)
+	return session_id, err
+}
+
 const getUserForLogin = `-- name: GetUserForLogin :one
 SELECT
     u.id,
@@ -155,6 +242,28 @@ func (q *Queries) GetUserForLogin(ctx context.Context, email string) (GetUserFor
 	return i, err
 }
 
+const markRefreshTokenRotated = `-- name: MarkRefreshTokenRotated :execrows
+UPDATE refresh_tokens
+SET revoked_at = $1,
+    replaced_by_id = NULLIF($2, ''),
+    updated_at = $1
+WHERE id = $3 AND revoked_at IS NULL AND replaced_by_id IS NULL
+`
+
+type MarkRefreshTokenRotatedParams struct {
+	RevokedAt    sql.NullTime
+	ReplacedByID interface{}
+	ID           string
+}
+
+func (q *Queries) MarkRefreshTokenRotated(ctx context.Context, arg MarkRefreshTokenRotatedParams) (int64, error) {
+	result, err := q.db.ExecContext(ctx, markRefreshTokenRotated, arg.RevokedAt, arg.ReplacedByID, arg.ID)
+	if err != nil {
+		return 0, err
+	}
+	return result.RowsAffected()
+}
+
 const revokeActiveSessionTokens = `-- name: RevokeActiveSessionTokens :execrows
 UPDATE refresh_tokens
 SET revoked_at = $1, updated_at = $1
@@ -175,6 +284,25 @@ type RevokeActiveSessionTokensParams struct {
 
 func (q *Queries) RevokeActiveSessionTokens(ctx context.Context, arg RevokeActiveSessionTokensParams) (int64, error) {
 	result, err := q.db.ExecContext(ctx, revokeActiveSessionTokens, arg.RevokedAt, arg.ActiveKey, arg.UserID)
+	if err != nil {
+		return 0, err
+	}
+	return result.RowsAffected()
+}
+
+const revokeSession = `-- name: RevokeSession :execrows
+UPDATE sessions
+SET revoked_at = $1, updated_at = $1
+WHERE id = $2 AND revoked_at IS NULL
+`
+
+type RevokeSessionParams struct {
+	RevokedAt sql.NullTime
+	ID        string
+}
+
+func (q *Queries) RevokeSession(ctx context.Context, arg RevokeSessionParams) (int64, error) {
+	result, err := q.db.ExecContext(ctx, revokeSession, arg.RevokedAt, arg.ID)
 	if err != nil {
 		return 0, err
 	}
@@ -207,4 +335,51 @@ func (q *Queries) RevokeSessionByActiveKey(ctx context.Context, arg RevokeSessio
 		return 0, err
 	}
 	return result.RowsAffected()
+}
+
+const revokeSessionRefreshTokens = `-- name: RevokeSessionRefreshTokens :execrows
+UPDATE refresh_tokens
+SET revoked_at = $1, updated_at = $1
+WHERE session_id = $2 AND revoked_at IS NULL
+`
+
+type RevokeSessionRefreshTokensParams struct {
+	RevokedAt sql.NullTime
+	SessionID string
+}
+
+func (q *Queries) RevokeSessionRefreshTokens(ctx context.Context, arg RevokeSessionRefreshTokensParams) (int64, error) {
+	result, err := q.db.ExecContext(ctx, revokeSessionRefreshTokens, arg.RevokedAt, arg.SessionID)
+	if err != nil {
+		return 0, err
+	}
+	return result.RowsAffected()
+}
+
+const touchSession = `-- name: TouchSession :exec
+UPDATE sessions
+SET last_seen_at = $1,
+    ip = NULLIF($2, ''),
+    user_agent = NULLIF($3, ''),
+    updated_at = $4
+WHERE id = $5
+`
+
+type TouchSessionParams struct {
+	LastSeenAt utctime.Time
+	Ip         interface{}
+	UserAgent  interface{}
+	UpdatedAt  utctime.Time
+	ID         string
+}
+
+func (q *Queries) TouchSession(ctx context.Context, arg TouchSessionParams) error {
+	_, err := q.db.ExecContext(ctx, touchSession,
+		arg.LastSeenAt,
+		arg.Ip,
+		arg.UserAgent,
+		arg.UpdatedAt,
+		arg.ID,
+	)
+	return err
 }
