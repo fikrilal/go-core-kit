@@ -34,13 +34,17 @@ func TestContractProbes(t *testing.T) {
 	t.Cleanup(func() { _ = rdb.Close() })
 
 	logger := logging.New(config.LogLevelError, config.LogFormatJSON, io.Discard)
-	httpServer := httptest.NewServer(newServer(0, logger, database, rdb).Handler)
+	server, err := newServer(testConfig(t), logger, database, rdb)
+	if err != nil {
+		t.Fatalf("newServer() error = %v", err)
+	}
+	httpServer := httptest.NewServer(server.Handler)
 	t.Cleanup(httpServer.Close)
 
 	for _, path := range []string{"/health", "/ready"} {
 		req := mustGet(t, httpServer.URL+path)
 		resp := contracttest.Do(t, client, req)
-		suite.ValidateResponse(req, resp)
+		suite.ValidateResponse(t, req, resp)
 		contracttest.AssertRequestID(t, resp)
 	}
 
@@ -67,7 +71,7 @@ func TestContractProbes(t *testing.T) {
 	if probe.Status != "unavailable" || probe.Checks["redis"] != "unavailable" {
 		t.Fatalf("/ready body = %s, want unavailable redis check", resp.Body)
 	}
-	suite.AssertErrorCodeDeclared("ready.get", "INTERNAL")
+	suite.AssertErrorCodeDeclared(t, "ready.get", "INTERNAL")
 
 	resp = contracttest.Do(t, client, mustGet(t, httpServer.URL+"/missing"))
 	contracttest.AssertProblem(t, resp, "NOT_FOUND")

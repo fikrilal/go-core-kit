@@ -16,10 +16,12 @@ The harness validates live responses against `contracts/backend.openapi.yaml`:
 
 - `suite := contracttest.New(t)` loads and validates the pinned snapshot.
 - `contracttest.Do(t, client, req)` performs a request; the returned response value carries status, header, and the fully read body.
-- `suite.ValidateResponse(req, resp)` validates status, headers, and body against the operation schema; undeclared statuses fail.
+- `suite.ValidateResponse(t, req, resp)` validates status, headers, and body against the operation schema; undeclared statuses fail.
 - `contracttest.AssertRequestID(t, resp)` requires a well-formed `X-Request-Id` echo.
 - `contracttest.AssertProblem(t, resp, "CODE")` requires RFC7807 shape, the exact code, and a trace id equal to the request id.
-- `suite.AssertErrorCodeDeclared(operationID, code)` checks membership in the operation's `x-error-codes`.
+- `suite.AssertErrorCodeDeclared(t, operationID, code)` checks membership in the operation's `x-error-codes`.
+
+The pinned snapshot declares success schemas only: happy-path responses validate against it, while problem responses assert the platform shape, the exact status, and declared error codes.
 
 `CONTRACT_SNAPSHOT_PATH` overrides the snapshot location (gate-honesty injections use it).
 

@@ -39,7 +39,6 @@ type Response struct {
 
 // Suite validates live responses against the pinned snapshot.
 type Suite struct {
-	t      *testing.T
 	spec   *openapi3.T
 	router routers.Router
 }
@@ -64,7 +63,7 @@ func New(t *testing.T) *Suite {
 	if err != nil {
 		t.Fatalf("contracttest: build snapshot router: %v", err)
 	}
-	return &Suite{t: t, spec: spec, router: router}
+	return &Suite{spec: spec, router: router}
 }
 
 // SnapshotOperation is an operation declared by the pinned snapshot.
@@ -96,11 +95,11 @@ func RepositoryPath(t *testing.T, relative string) string {
 }
 
 // ValidateResponse checks a live response against the snapshot operation schema.
-func (s *Suite) ValidateResponse(req *http.Request, resp Response) {
-	s.t.Helper()
+func (s *Suite) ValidateResponse(t *testing.T, req *http.Request, resp Response) {
+	t.Helper()
 	route, pathParams, err := s.router.FindRoute(req)
 	if err != nil {
-		s.t.Fatalf("contracttest: %s %s: no matching operation in the snapshot: %v", req.Method, req.URL.Path, err)
+		t.Fatalf("contracttest: %s %s: no matching operation in the snapshot: %v", req.Method, req.URL.Path, err)
 	}
 	input := &openapi3filter.ResponseValidationInput{
 		RequestValidationInput: &openapi3filter.RequestValidationInput{Request: req, Route: route, PathParams: pathParams},
@@ -110,25 +109,26 @@ func (s *Suite) ValidateResponse(req *http.Request, resp Response) {
 		Options:                &openapi3filter.Options{IncludeResponseStatus: true},
 	}
 	if err := openapi3filter.ValidateResponse(context.Background(), input); err != nil {
-		s.t.Fatalf("contracttest: %s %s %d: %v\nbody: %s", req.Method, req.URL.Path, resp.Status, err, resp.Body)
+		t.Fatalf("contracttest: %s %s %d: %v\nbody: %s", req.Method, req.URL.Path, resp.Status, err, resp.Body)
 	}
 }
 
 // AssertErrorCodeDeclared checks membership in the operation's x-error-codes.
-func (s *Suite) AssertErrorCodeDeclared(operationID, code string) {
-	s.t.Helper()
-	operation := s.operation(operationID)
+func (s *Suite) AssertErrorCodeDeclared(t *testing.T, operationID, code string) {
+	t.Helper()
+	operation := s.operation(t, operationID)
 	raw, ok := operation.Extensions["x-error-codes"]
 	if !ok {
-		s.t.Fatalf("contracttest: operation %q declares no x-error-codes", operationID)
+		t.Fatalf("contracttest: operation %q declares no x-error-codes", operationID)
 	}
 	declared := stringList(raw)
 	if !slices.Contains(declared, code) {
-		s.t.Fatalf("contracttest: operation %q does not declare error code %q (declares %v)", operationID, code, declared)
+		t.Fatalf("contracttest: operation %q does not declare error code %q (declares %v)", operationID, code, declared)
 	}
 }
 
-func (s *Suite) operation(operationID string) *openapi3.Operation {
+func (s *Suite) operation(t *testing.T, operationID string) *openapi3.Operation {
+	t.Helper()
 	for _, item := range s.spec.Paths.Map() {
 		for _, operation := range item.Operations() {
 			if operation.OperationID == operationID {
@@ -136,7 +136,7 @@ func (s *Suite) operation(operationID string) *openapi3.Operation {
 			}
 		}
 	}
-	s.t.Fatalf("contracttest: operation %q not found in the snapshot", operationID)
+	t.Fatalf("contracttest: operation %q not found in the snapshot", operationID)
 	return nil
 }
 

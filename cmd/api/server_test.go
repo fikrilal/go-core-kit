@@ -37,7 +37,10 @@ func TestServeServesProbesAndShutsDown(t *testing.T) {
 		t.Fatalf("Migrate() error = %v", err)
 	}
 
-	httpServer := newServer(0, logger, database, rdb)
+	httpServer, err := newServer(testConfig(t), logger, database, rdb)
+	if err != nil {
+		t.Fatalf("newServer() error = %v", err)
+	}
 	lc := net.ListenConfig{}
 	listener, err := lc.Listen(t.Context(), "tcp", "127.0.0.1:0")
 	if err != nil {

@@ -27,7 +27,7 @@ Rules: findings gate on **new vs baseline**, and updating a baseline requires ex
 
 ## Current Focus
 
-**Phases 1–2 complete (1.0–2.5).** Next: **Phase 3 — Auth slice** (3.1 schema → 3.9 forbidigo rules).
+**Phase 3 in progress (3.1–3.2 landed).** Next: **3.3 refresh rotation + reuse detection, then 3.4 EdDSA keyring/JWKS.**
 
 ## Phase 0 — Foundation (complete, 2026-10-10)
 
@@ -74,8 +74,8 @@ Exit gate: harness runs against the booted API; implemented-vs-allowlisted opera
 
 Objective: the full auth surface, contract-green.
 
-- [ ] 3.1 Schema + migrations: users, credentials, sessions, refresh tokens (sqlite set first)
-- [ ] 3.2 Password register + login (argon2id, dummy-hash equalization, rate limits)
+- [x] 3.1 Schema + migrations: users, credentials, sessions, refresh tokens (sqlite set first) — landed 2026-10-11; sqlite + pg sets, CHECK/FK/cascade/index tests, Down round trip; pg set added early to keep sqlc dual-engine green
+- [x] 3.2 Password register + login (argon2id, dummy-hash equalization, rate limits) — landed 2026-10-11; wire-validated register/login, EdDSA tokens, Redis login limiting with Retry-After; allowlist 32 → 30
 - [ ] 3.3 Sessions: refresh rotation, reuse detection, logout
 - [ ] 3.4 Access tokens: EdDSA keyring, JWKS endpoint
 - [ ] 3.5 Change password

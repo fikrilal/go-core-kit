@@ -86,6 +86,35 @@ func (c *Client) Del(ctx context.Context, keys ...string) error {
 	return nil
 }
 
+// Incr increments the counter at key and returns the new value.
+func (c *Client) Incr(ctx context.Context, key string) (int64, error) {
+	value, err := c.rdb.Incr(ctx, key).Result()
+	if err != nil {
+		return 0, fmt.Errorf("incr redis key: %w", err)
+	}
+	return value, nil
+}
+
+// Expire sets a TTL on key.
+func (c *Client) Expire(ctx context.Context, key string, ttl time.Duration) error {
+	if err := c.rdb.Expire(ctx, key, ttl).Err(); err != nil {
+		return fmt.Errorf("expire redis key: %w", err)
+	}
+	return nil
+}
+
+// TTL reports the remaining TTL of key; missing or persistent keys report 0.
+func (c *Client) TTL(ctx context.Context, key string) (time.Duration, error) {
+	ttl, err := c.rdb.TTL(ctx, key).Result()
+	if err != nil {
+		return 0, fmt.Errorf("ttl redis key: %w", err)
+	}
+	if ttl < 0 {
+		return 0, nil
+	}
+	return ttl, nil
+}
+
 // Close releases the connection.
 func (c *Client) Close() error {
 	if err := c.rdb.Close(); err != nil {

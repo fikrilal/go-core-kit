@@ -56,6 +56,9 @@ func writeProblem(w http.ResponseWriter, r *http.Request, pe *ProblemError) {
 		w.Header().Set("Retry-After", strconv.Itoa(pe.RetryAfterSeconds))
 	}
 	title := http.StatusText(pe.Status)
+	if pe.Code == CodeValidationFailed {
+		title = "Validation Failed"
+	}
 	if title == "" {
 		title = "Error"
 	}

@@ -6,8 +6,6 @@ operations:
   - auth.oidc.exchange
   - auth.email.verify
   - auth.email.verification.resend
-  - auth.password.register
-  - auth.password.login
   - auth.password.change
   - auth.password.reset.request
   - auth.password.reset.confirm

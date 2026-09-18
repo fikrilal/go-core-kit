@@ -58,7 +58,10 @@ func run(ctx context.Context, cfg config.Config, logger *slog.Logger) error {
 	}
 	defer closeAndLog(rdb.Close, logger, "redis")
 
-	httpServer := newServer(cfg.HTTPPort, logger, database, rdb)
+	httpServer, err := newServer(cfg, logger, database, rdb)
+	if err != nil {
+		return err
+	}
 	lc := net.ListenConfig{}
 	listener, err := lc.Listen(ctx, "tcp", httpServer.Addr)
 	if err != nil {

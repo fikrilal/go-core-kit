@@ -46,6 +46,22 @@ type Config struct {
 	RedisURL     string    `env:"REDIS_URL,required"`
 	LogLevel     LogLevel  `env:"LOG_LEVEL" envDefault:"info"`
 	LogFormat    LogFormat `env:"LOG_FORMAT" envDefault:"json"`
+
+	AuthAccessTokenTTLSeconds  int    `env:"AUTH_ACCESS_TOKEN_TTL_SECONDS" envDefault:"900"`
+	AuthRefreshTokenTTLSeconds int    `env:"AUTH_REFRESH_TOKEN_TTL_SECONDS" envDefault:"2592000"`
+	AuthPasswordMinLength      int    `env:"AUTH_PASSWORD_MIN_LENGTH" envDefault:"10"`
+	AuthLoginMaxAttempts       int    `env:"AUTH_LOGIN_MAX_ATTEMPTS" envDefault:"10"`
+	AuthLoginWindowSeconds     int    `env:"AUTH_LOGIN_WINDOW_SECONDS" envDefault:"60"`
+	AuthLoginBlockSeconds      int    `env:"AUTH_LOGIN_BLOCK_SECONDS" envDefault:"900"`
+	AuthIssuer                 string `env:"AUTH_ISSUER"`
+	AuthAudience               string `env:"AUTH_AUDIENCE"`
+	AuthSigningKeysJSON        string `env:"AUTH_SIGNING_KEYS_JSON"`
+	AuthSigningKeysJSONBase64  string `env:"AUTH_SIGNING_KEYS_JSON_BASE64"`
+}
+
+// ProductionLike reports whether the environment requires real secrets.
+func (c Config) ProductionLike() bool {
+	return c.AppEnv == EnvStaging || c.AppEnv == EnvProd
 }
 
 // Load reads the environment, applies defaults, and validates the result.
@@ -85,6 +101,18 @@ func (c Config) Validate() error {
 	}
 	if c.AppEnv == EnvProd && c.LogFormat != LogFormatJSON {
 		return fmt.Errorf("LOG_FORMAT must be %q when APP_ENV is prod", LogFormatJSON)
+	}
+	for name, value := range map[string]int{
+		"AUTH_ACCESS_TOKEN_TTL_SECONDS":  c.AuthAccessTokenTTLSeconds,
+		"AUTH_REFRESH_TOKEN_TTL_SECONDS": c.AuthRefreshTokenTTLSeconds,
+		"AUTH_PASSWORD_MIN_LENGTH":       c.AuthPasswordMinLength,
+		"AUTH_LOGIN_MAX_ATTEMPTS":        c.AuthLoginMaxAttempts,
+		"AUTH_LOGIN_WINDOW_SECONDS":      c.AuthLoginWindowSeconds,
+		"AUTH_LOGIN_BLOCK_SECONDS":       c.AuthLoginBlockSeconds,
+	} {
+		if value < 1 {
+			return fmt.Errorf("%s must be a positive number, got %d", name, value)
+		}
 	}
 	return nil
 }

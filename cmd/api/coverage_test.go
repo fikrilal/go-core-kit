@@ -46,7 +46,11 @@ func coverageRouter(t *testing.T) *httpx.Router {
 	rdb := redis.MustOpen("redis://127.0.0.1:1/0")
 	t.Cleanup(func() { _ = rdb.Close() })
 	logger := logging.New(config.LogLevelError, config.LogFormatJSON, io.Discard)
-	router, ok := newServer(0, logger, database, rdb).Handler.(*httpx.Router)
+	server, err := newServer(testConfig(t), logger, database, rdb)
+	if err != nil {
+		t.Fatalf("newServer() error = %v", err)
+	}
+	router, ok := server.Handler.(*httpx.Router)
 	if !ok {
 		t.Fatal("server handler is not an *httpx.Router")
 	}
