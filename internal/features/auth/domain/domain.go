@@ -82,6 +82,17 @@ const (
 	RotationReused         RotationKind = "reused"
 )
 
+// ChangePasswordKind reports how a password change ended.
+type ChangePasswordKind string
+
+// Password change outcomes.
+const (
+	ChangePasswordOK                      ChangePasswordKind = "ok"
+	ChangePasswordNotFound                ChangePasswordKind = "not_found"
+	ChangePasswordPasswordNotSet          ChangePasswordKind = "password_not_set"
+	ChangePasswordCurrentPasswordMismatch ChangePasswordKind = "current_password_mismatch"
+)
+
 // NormalizeEmail trims and lowercases an email for storage and lookup.
 func NormalizeEmail(raw string) string {
 	return strings.ToLower(strings.TrimSpace(raw))

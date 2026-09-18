@@ -80,12 +80,19 @@ func Register(router *httpx.Router, deps Deps) error {
 			DummyHash: dummyHash,
 		},
 	)
+	verifier, err := platformauth.NewVerifier(keyRing, deps.Clock, deps.Config.Issuer, deps.Config.Audience, deps.Config.ProductionLike)
+	if err != nil {
+		return fmt.Errorf("auth: %w", err)
+	}
+	guard := platformauth.NewGuard(verifier)
 	handlers := &handlers{service: service, keys: keyRing}
 	router.HandleFunc(httpx.Operation{Method: http.MethodPost, Path: "/v1/auth/password/register", ID: "auth.password.register"}, handlers.register)
 	router.HandleFunc(httpx.Operation{Method: http.MethodPost, Path: "/v1/auth/password/login", ID: "auth.password.login"}, handlers.login)
 	router.HandleFunc(httpx.Operation{Method: http.MethodPost, Path: "/v1/auth/refresh", ID: "auth.refresh"}, handlers.refresh)
 	router.HandleFunc(httpx.Operation{Method: http.MethodPost, Path: "/v1/auth/logout", ID: "auth.logout"}, handlers.logout)
 	router.HandleFunc(httpx.Operation{Method: http.MethodGet, Path: "/.well-known/jwks.json", ID: "auth.jwks.get"}, handlers.jwks)
+	changePassword := httpx.Operation{Method: http.MethodPost, Path: "/v1/auth/password/change", ID: "auth.password.change"}
+	router.Handle(changePassword, guard.Require(router.Idempotent(changePassword, handlers.changePassword)))
 	return nil
 }
 
@@ -184,6 +191,35 @@ func (h *handlers) logout(w http.ResponseWriter, r *http.Request) {
 
 func (h *handlers) jwks(w http.ResponseWriter, r *http.Request) {
 	httpx.Document(w, r, h.keys.PublicJWKS())
+}
+
+type changePasswordRequest struct {
+	CurrentPassword string `json:"currentPassword" validate:"required"`
+	NewPassword     string `json:"newPassword" validate:"required"`
+}
+
+func (h *handlers) changePassword(w http.ResponseWriter, r *http.Request) {
+	principal, ok := platformauth.PrincipalFrom(r.Context())
+	if !ok {
+		httpx.WriteError(w, r, &httpx.ProblemError{Status: http.StatusUnauthorized, Code: httpx.CodeUnauthorized})
+		return
+	}
+	var body changePasswordRequest
+	if err := httpx.Decode(r, &body); err != nil {
+		httpx.WriteError(w, r, err)
+		return
+	}
+	err := h.service.ChangePassword(r.Context(), app.ChangePasswordInput{
+		UserID:          principal.UserID,
+		SessionID:       principal.SessionID,
+		CurrentPassword: body.CurrentPassword,
+		NewPassword:     body.NewPassword,
+	})
+	if err != nil {
+		httpx.WriteError(w, r, err)
+		return
+	}
+	httpx.NoContent(w)
 }
 
 func authResult(result app.Result) contracts.AuthResultWithMeDto {

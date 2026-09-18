@@ -24,13 +24,19 @@ func WithIdempotency(client *redis.Client) RouterOption {
 	}
 }
 
+// Idempotent wraps h with Idempotency-Key caching and replay for the
+// operation; compose it inside guards so unauthorized requests never touch
+// the replay store.
+func (r *Router) Idempotent(op Operation, h http.HandlerFunc) http.Handler {
+	if r.idempotency == nil {
+		panic("httpx: Idempotent requires WithIdempotency")
+	}
+	return r.idempotency.wrap(op.ID, h)
+}
+
 // HandleIdempotent registers a contract operation with Idempotency-Key caching and replay.
 func (r *Router) HandleIdempotent(op Operation, h http.HandlerFunc) {
-	if r.idempotency == nil {
-		panic("httpx: HandleIdempotent requires WithIdempotency")
-	}
-	r.register(op)
-	r.mux.HandleFunc(op.pattern(), r.idempotency.wrap(op.ID, h))
+	r.Handle(op, r.Idempotent(op, h))
 }
 
 type idempotencyStore struct {

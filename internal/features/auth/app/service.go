@@ -78,7 +78,7 @@ type Result struct {
 // Register creates a password account and issues tokens.
 func (s *Service) Register(ctx context.Context, in Input) (Result, error) {
 	email := domain.NormalizeEmail(in.Email)
-	if err := s.checkPasswordPolicy(in.Password); err != nil {
+	if err := s.checkPasswordPolicy(in.Password, "password"); err != nil {
 		return Result{}, err
 	}
 	passwordHash, err := s.hasher.Hash(in.Password)
@@ -229,6 +229,67 @@ func (s *Service) Logout(ctx context.Context, refreshToken string) error {
 	return nil
 }
 
+// ChangePasswordInput carries a password change for the current user.
+type ChangePasswordInput struct {
+	UserID          string
+	SessionID       string
+	CurrentPassword string
+	NewPassword     string
+}
+
+// ChangePassword changes the authenticated user's password and revokes other sessions.
+func (s *Service) ChangePassword(ctx context.Context, in ChangePasswordInput) error {
+	if err := s.checkPasswordPolicy(in.NewPassword, "newPassword"); err != nil {
+		return err
+	}
+	if in.CurrentPassword == in.NewPassword {
+		return &httpx.ProblemError{
+			Status: http.StatusBadRequest,
+			Code:   httpx.CodeValidationFailed,
+			Issues: []httpx.FieldIssue{{Field: "newPassword", Message: "New password must be different"}},
+		}
+	}
+	existingHash, found, err := s.repo.FindPasswordCredential(ctx, in.UserID)
+	if err != nil {
+		return fmt.Errorf("auth change password: find credential: %w", err)
+	}
+	if !found {
+		return passwordNotSetError()
+	}
+	verified, err := s.hasher.Verify(existingHash, in.CurrentPassword)
+	if err != nil {
+		return fmt.Errorf("auth change password: verify current password: %w", err)
+	}
+	if !verified {
+		return currentPasswordInvalidError()
+	}
+	newHash, err := s.hasher.Hash(in.NewPassword)
+	if err != nil {
+		return fmt.Errorf("auth change password: hash password: %w", err)
+	}
+	kind, err := s.repo.ChangePasswordAndRevokeOtherSessions(ctx, ports.ChangePasswordInput{
+		UserID:                      in.UserID,
+		SessionID:                   in.SessionID,
+		ExpectedCurrentPasswordHash: existingHash,
+		NewPasswordHash:             newHash,
+		Now:                         s.clock.Now(),
+	})
+	if err != nil {
+		return fmt.Errorf("auth change password: update: %w", err)
+	}
+	switch kind {
+	case domain.ChangePasswordOK:
+		return nil
+	case domain.ChangePasswordNotFound:
+		return unauthorizedError()
+	case domain.ChangePasswordPasswordNotSet:
+		return passwordNotSetError()
+	case domain.ChangePasswordCurrentPasswordMismatch:
+		return currentPasswordInvalidError()
+	}
+	return fmt.Errorf("auth change password: unexpected result %q", kind)
+}
+
 func (s *Service) issueSession(ctx context.Context, user domain.User, methods []string, in Input, now time.Time) (Result, error) {
 	refreshToken, err := domain.NewRefreshToken()
 	if err != nil {
@@ -271,7 +332,7 @@ func (s *Service) issueSession(ctx context.Context, user domain.User, methods []
 	}, nil
 }
 
-func (s *Service) checkPasswordPolicy(password string) error {
+func (s *Service) checkPasswordPolicy(password, field string) error {
 	if utf8.RuneCountInString(password) >= s.config.PasswordMinLength {
 		return nil
 	}
@@ -279,7 +340,7 @@ func (s *Service) checkPasswordPolicy(password string) error {
 		Status: http.StatusBadRequest,
 		Code:   httpx.CodeValidationFailed,
 		Issues: []httpx.FieldIssue{{
-			Field:   "password",
+			Field:   field,
 			Message: fmt.Sprintf("Password must be at least %d characters", s.config.PasswordMinLength),
 		}},
 	}
@@ -330,5 +391,28 @@ func suspendedError() error {
 		Status: http.StatusForbidden,
 		Code:   httpx.CodeAuthUserSuspended,
 		Detail: "User is suspended",
+	}
+}
+
+func unauthorizedError() error {
+	return &httpx.ProblemError{
+		Status: http.StatusUnauthorized,
+		Code:   httpx.CodeUnauthorized,
+	}
+}
+
+func passwordNotSetError() error {
+	return &httpx.ProblemError{
+		Status: http.StatusConflict,
+		Code:   httpx.CodeAuthPasswordNotSet,
+		Detail: "Password is not set for this account",
+	}
+}
+
+func currentPasswordInvalidError() error {
+	return &httpx.ProblemError{
+		Status: http.StatusBadRequest,
+		Code:   httpx.CodeAuthCurrentPasswordInvalid,
+		Detail: "Current password is invalid",
 	}
 }

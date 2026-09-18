@@ -41,6 +41,15 @@ type RotateRefreshTokenInput struct {
 	UserAgent        string
 }
 
+// ChangePasswordInput carries a password change with its compare-and-set guard.
+type ChangePasswordInput struct {
+	UserID                      string
+	SessionID                   string
+	ExpectedCurrentPasswordHash string
+	NewPasswordHash             string
+	Now                         time.Time
+}
+
 // Repository is the auth feature's persistence boundary.
 type Repository interface {
 	CreateUserWithPassword(ctx context.Context, in CreateUserInput) (domain.User, error)
@@ -49,6 +58,8 @@ type Repository interface {
 	FindRefreshToken(ctx context.Context, tokenHash string) (domain.RefreshCredentials, bool, error)
 	RotateRefreshToken(ctx context.Context, in RotateRefreshTokenInput) (domain.RotationKind, error)
 	RevokeSessionByRefreshToken(ctx context.Context, tokenHash string, now time.Time) (bool, error)
+	FindPasswordCredential(ctx context.Context, userID string) (string, bool, error)
+	ChangePasswordAndRevokeOtherSessions(ctx context.Context, in ChangePasswordInput) (domain.ChangePasswordKind, error)
 }
 
 // PasswordHasher hashes and verifies passwords.

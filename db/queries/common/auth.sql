@@ -123,3 +123,33 @@ WHERE id = sqlc.arg(id) AND revoked_at IS NULL;
 UPDATE refresh_tokens
 SET revoked_at = sqlc.arg(revoked_at), updated_at = sqlc.arg(revoked_at)
 WHERE session_id = sqlc.arg(session_id) AND revoked_at IS NULL;
+
+-- name: GetPasswordCredentialHash :one
+SELECT password_hash FROM password_credentials WHERE user_id = sqlc.arg(user_id);
+
+-- name: UpdatePasswordCredentialHash :exec
+UPDATE password_credentials
+SET password_hash = sqlc.arg(password_hash), updated_at = sqlc.arg(updated_at)
+WHERE user_id = sqlc.arg(user_id);
+
+-- name: RevokeOtherSessions :execrows
+UPDATE sessions
+SET revoked_at = sqlc.arg(revoked_at),
+    active_key = NULL,
+    push_platform = NULL,
+    push_token = NULL,
+    push_token_updated_at = sqlc.arg(revoked_at),
+    push_token_revoked_at = sqlc.arg(revoked_at),
+    updated_at = sqlc.arg(revoked_at)
+WHERE user_id = sqlc.arg(user_id)
+  AND id != sqlc.arg(session_id)
+  AND revoked_at IS NULL;
+
+-- name: RevokeOtherSessionRefreshTokens :execrows
+UPDATE refresh_tokens
+SET revoked_at = sqlc.arg(revoked_at), updated_at = sqlc.arg(revoked_at)
+WHERE revoked_at IS NULL
+  AND session_id IN (
+      SELECT s.id FROM sessions AS s
+      WHERE s.user_id = sqlc.arg(user_id) AND s.id != sqlc.arg(session_id)
+  );

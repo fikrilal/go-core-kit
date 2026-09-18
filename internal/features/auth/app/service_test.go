@@ -37,6 +37,13 @@ type fakeRepository struct {
 	revokeResult bool
 	revokeErr    error
 	revokes      []string
+
+	passwordHash  string
+	passwordFound bool
+	passwordErr   error
+	changeKind    domain.ChangePasswordKind
+	changeErr     error
+	changes       []ports.ChangePasswordInput
 }
 
 func (f *fakeRepository) CreateUserWithPassword(_ context.Context, in ports.CreateUserInput) (domain.User, error) {
@@ -74,6 +81,18 @@ func (f *fakeRepository) RevokeSessionByRefreshToken(_ context.Context, tokenHas
 	}
 	f.revokes = append(f.revokes, tokenHash)
 	return f.revokeResult, nil
+}
+
+func (f *fakeRepository) FindPasswordCredential(context.Context, string) (string, bool, error) {
+	return f.passwordHash, f.passwordFound, f.passwordErr
+}
+
+func (f *fakeRepository) ChangePasswordAndRevokeOtherSessions(_ context.Context, in ports.ChangePasswordInput) (domain.ChangePasswordKind, error) {
+	if f.changeErr != nil {
+		return "", f.changeErr
+	}
+	f.changes = append(f.changes, in)
+	return f.changeKind, nil
 }
 
 type fakeHasher struct {
@@ -478,4 +497,126 @@ func mustError(t *testing.T, result app.Result, err error) error {
 		t.Fatalf("expected an error, got result %+v", result)
 	}
 	return err
+}
+
+func changePasswordFixture(t *testing.T) *fixture {
+	t.Helper()
+	f := newFixture(t)
+	f.repo.passwordFound = true
+	f.repo.passwordHash = "hashed:correct-password"
+	f.repo.changeKind = domain.ChangePasswordOK
+	return f
+}
+
+func TestChangePasswordPolicy(t *testing.T) {
+	f := changePasswordFixture(t)
+	err := f.service.ChangePassword(context.Background(), app.ChangePasswordInput{
+		UserID: "user-1", SessionID: "session-1", CurrentPassword: "correct-password", NewPassword: "short",
+	})
+	problem := problemError(t, err)
+	if problem.Status != 400 || problem.Code != httpx.CodeValidationFailed {
+		t.Fatalf("problem = %+v, want 400 VALIDATION_FAILED", problem)
+	}
+	if len(problem.Issues) != 1 || problem.Issues[0].Field != "newPassword" {
+		t.Fatalf("issues = %+v, want a newPassword issue", problem.Issues)
+	}
+	if len(f.repo.changes) != 0 {
+		t.Error("repository called for a policy failure")
+	}
+}
+
+func TestChangePasswordSamePassword(t *testing.T) {
+	f := changePasswordFixture(t)
+	err := f.service.ChangePassword(context.Background(), app.ChangePasswordInput{
+		UserID: "user-1", SessionID: "session-1", CurrentPassword: "repeated-password", NewPassword: "repeated-password",
+	})
+	problem := problemError(t, err)
+	if problem.Status != 400 || problem.Code != httpx.CodeValidationFailed {
+		t.Fatalf("problem = %+v, want 400 VALIDATION_FAILED", problem)
+	}
+	if len(problem.Issues) != 1 || problem.Issues[0].Field != "newPassword" || problem.Issues[0].Message != "New password must be different" {
+		t.Fatalf("issues = %+v, want the different-password issue", problem.Issues)
+	}
+	if len(f.repo.changes) != 0 {
+		t.Error("repository called for identical passwords")
+	}
+}
+
+func TestChangePasswordNotSet(t *testing.T) {
+	f := newFixture(t)
+	f.repo.passwordFound = false
+	err := f.service.ChangePassword(context.Background(), app.ChangePasswordInput{
+		UserID: "user-1", SessionID: "session-1", CurrentPassword: "correct-password", NewPassword: "correct-password-2",
+	})
+	problem := problemError(t, err)
+	if problem.Status != 409 || problem.Code != httpx.CodeAuthPasswordNotSet {
+		t.Fatalf("problem = %+v, want 409 AUTH_PASSWORD_NOT_SET", problem)
+	}
+}
+
+func TestChangePasswordCurrentInvalid(t *testing.T) {
+	f := changePasswordFixture(t)
+	err := f.service.ChangePassword(context.Background(), app.ChangePasswordInput{
+		UserID: "user-1", SessionID: "session-1", CurrentPassword: "wrong-password", NewPassword: "correct-password-2",
+	})
+	problem := problemError(t, err)
+	if problem.Status != 400 || problem.Code != httpx.CodeAuthCurrentPasswordInvalid {
+		t.Fatalf("problem = %+v, want 400 AUTH_CURRENT_PASSWORD_INVALID", problem)
+	}
+	if f.hasher.verifiedHash != "hashed:correct-password" {
+		t.Errorf("verified hash = %q, want the stored hash", f.hasher.verifiedHash)
+	}
+	if len(f.repo.changes) != 0 {
+		t.Error("repository called with an invalid current password")
+	}
+}
+
+func TestChangePasswordSuccess(t *testing.T) {
+	f := changePasswordFixture(t)
+	err := f.service.ChangePassword(context.Background(), app.ChangePasswordInput{
+		UserID: "user-1", SessionID: "session-1", CurrentPassword: "correct-password", NewPassword: "correct-password-2",
+	})
+	if err != nil {
+		t.Fatalf("ChangePassword() error = %v", err)
+	}
+	if len(f.repo.changes) != 1 {
+		t.Fatalf("changes = %d, want 1", len(f.repo.changes))
+	}
+	change := f.repo.changes[0]
+	if change.UserID != "user-1" || change.SessionID != "session-1" {
+		t.Errorf("change user/session = %q/%q, want the principal", change.UserID, change.SessionID)
+	}
+	if change.ExpectedCurrentPasswordHash != "hashed:correct-password" {
+		t.Errorf("expected hash = %q, want the stored hash (compare-and-set)", change.ExpectedCurrentPasswordHash)
+	}
+	if change.NewPasswordHash != "hashed:correct-password-2" {
+		t.Errorf("new hash = %q, want the hashed new password", change.NewPasswordHash)
+	}
+	if !change.Now.Equal(moment) {
+		t.Errorf("now = %v, want the injected clock", change.Now)
+	}
+}
+
+func TestChangePasswordKindMapping(t *testing.T) {
+	cases := map[domain.ChangePasswordKind]struct {
+		status int
+		code   httpx.Code
+	}{
+		domain.ChangePasswordNotFound:                {status: 401, code: httpx.CodeUnauthorized},
+		domain.ChangePasswordPasswordNotSet:          {status: 409, code: httpx.CodeAuthPasswordNotSet},
+		domain.ChangePasswordCurrentPasswordMismatch: {status: 400, code: httpx.CodeAuthCurrentPasswordInvalid},
+	}
+	for kind, want := range cases {
+		t.Run(string(kind), func(t *testing.T) {
+			f := changePasswordFixture(t)
+			f.repo.changeKind = kind
+			err := f.service.ChangePassword(context.Background(), app.ChangePasswordInput{
+				UserID: "user-1", SessionID: "session-1", CurrentPassword: "correct-password", NewPassword: "correct-password-2",
+			})
+			problem := problemError(t, err)
+			if problem.Status != want.status || problem.Code != want.code {
+				t.Fatalf("kind %q mapped to %d/%s, want %d/%s", kind, problem.Status, problem.Code, want.status, want.code)
+			}
+		})
+	}
 }

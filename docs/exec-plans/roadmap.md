@@ -27,7 +27,7 @@ Rules: findings gate on **new vs baseline**, and updating a baseline requires ex
 
 ## Current Focus
 
-**Phase 3 in progress (3.1–3.4 landed).** Next: **3.5 change password** (first protected route; mounts the guard).
+**Phase 3 in progress (3.1–3.5 landed).** 3.6/3.7 await the 5.2 worker; next: **3.8 OIDC exchange** or **3.9 forbidigo rules**.
 
 ## Phase 0 — Foundation (complete, 2026-10-10)
 
@@ -78,7 +78,7 @@ Objective: the full auth surface, contract-green.
 - [x] 3.2 Password register + login (argon2id, dummy-hash equalization, rate limits) — landed 2026-10-11; wire-validated register/login, EdDSA tokens, Redis login limiting with Retry-After; allowlist 32 → 30
 - [x] 3.3 Sessions: refresh rotation, reuse detection, logout — landed 2026-10-11; rotation with session-family containment, idempotent 204 logout; allowlist 30 → 28
 - [x] 3.4 Access tokens: EdDSA keyring, JWKS endpoint — landed 2026-10-11; JWKS live and snapshot-validated, verifier with the reference rejection matrix, principal guard unit-tested; allowlist 28 → 27
-- [ ] 3.5 Change password
+- [x] 3.5 Change password — landed 2026-10-11; first protected route (guard + idempotency composed guard-outer), CAS credential update, other-session revocation; allowlist 27 → 26
 - [ ] 3.6 Email verification + resend *(needs 5.2)*
 - [ ] 3.7 Password reset request/confirm *(needs 5.2)*
 - [ ] 3.8 OIDC exchange

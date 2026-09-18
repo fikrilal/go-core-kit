@@ -140,6 +140,17 @@ func (q *Queries) CreateSession(ctx context.Context, arg CreateSessionParams) er
 	return err
 }
 
+const getPasswordCredentialHash = `-- name: GetPasswordCredentialHash :one
+SELECT password_hash FROM password_credentials WHERE user_id = $1
+`
+
+func (q *Queries) GetPasswordCredentialHash(ctx context.Context, userID string) (string, error) {
+	row := q.db.QueryRowContext(ctx, getPasswordCredentialHash, userID)
+	var password_hash string
+	err := row.Scan(&password_hash)
+	return password_hash, err
+}
+
 const getRefreshTokenWithSession = `-- name: GetRefreshTokenWithSession :one
 SELECT
     t.id AS token_id,
@@ -290,6 +301,58 @@ func (q *Queries) RevokeActiveSessionTokens(ctx context.Context, arg RevokeActiv
 	return result.RowsAffected()
 }
 
+const revokeOtherSessionRefreshTokens = `-- name: RevokeOtherSessionRefreshTokens :execrows
+UPDATE refresh_tokens
+SET revoked_at = $1, updated_at = $1
+WHERE revoked_at IS NULL
+  AND session_id IN (
+      SELECT s.id FROM sessions AS s
+      WHERE s.user_id = $2 AND s.id != $3
+  )
+`
+
+type RevokeOtherSessionRefreshTokensParams struct {
+	RevokedAt sql.NullTime
+	UserID    string
+	SessionID string
+}
+
+func (q *Queries) RevokeOtherSessionRefreshTokens(ctx context.Context, arg RevokeOtherSessionRefreshTokensParams) (int64, error) {
+	result, err := q.db.ExecContext(ctx, revokeOtherSessionRefreshTokens, arg.RevokedAt, arg.UserID, arg.SessionID)
+	if err != nil {
+		return 0, err
+	}
+	return result.RowsAffected()
+}
+
+const revokeOtherSessions = `-- name: RevokeOtherSessions :execrows
+UPDATE sessions
+SET revoked_at = $1,
+    active_key = NULL,
+    push_platform = NULL,
+    push_token = NULL,
+    push_token_updated_at = $1,
+    push_token_revoked_at = $1,
+    updated_at = $1
+WHERE user_id = $2
+  AND id != $3
+  AND revoked_at IS NULL
+`
+
+type RevokeOtherSessionsParams struct {
+	RevokedAt sql.NullTime
+	UserID    string
+	SessionID string
+}
+
+func (q *Queries) RevokeOtherSessions(ctx context.Context, arg RevokeOtherSessionsParams) (int64, error) {
+	result, err := q.db.ExecContext(ctx, revokeOtherSessions, arg.RevokedAt, arg.UserID, arg.SessionID)
+	if err != nil {
+		return 0, err
+	}
+	return result.RowsAffected()
+}
+
 const revokeSession = `-- name: RevokeSession :execrows
 UPDATE sessions
 SET revoked_at = $1, updated_at = $1
@@ -381,5 +444,22 @@ func (q *Queries) TouchSession(ctx context.Context, arg TouchSessionParams) erro
 		arg.UpdatedAt,
 		arg.ID,
 	)
+	return err
+}
+
+const updatePasswordCredentialHash = `-- name: UpdatePasswordCredentialHash :exec
+UPDATE password_credentials
+SET password_hash = $1, updated_at = $2
+WHERE user_id = $3
+`
+
+type UpdatePasswordCredentialHashParams struct {
+	PasswordHash string
+	UpdatedAt    utctime.Time
+	UserID       string
+}
+
+func (q *Queries) UpdatePasswordCredentialHash(ctx context.Context, arg UpdatePasswordCredentialHashParams) error {
+	_, err := q.db.ExecContext(ctx, updatePasswordCredentialHash, arg.PasswordHash, arg.UpdatedAt, arg.UserID)
 	return err
 }

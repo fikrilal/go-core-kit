@@ -223,6 +223,73 @@ func (r *Repository) RevokeSessionByRefreshToken(ctx context.Context, tokenHash 
 	return revoked, nil
 }
 
+// FindPasswordCredential returns the stored password hash when one exists.
+func (r *Repository) FindPasswordCredential(ctx context.Context, userID string) (string, bool, error) {
+	hash, err := r.queries.GetPasswordCredentialHash(ctx, userID)
+	if errors.Is(err, db.ErrNoRows) {
+		return "", false, nil
+	}
+	if err != nil {
+		return "", false, fmt.Errorf("find password credential: %w", err)
+	}
+	return hash, true, nil
+}
+
+// ChangePasswordAndRevokeOtherSessions updates the credential behind a
+// compare-and-set guard and revokes every other active session.
+func (r *Repository) ChangePasswordAndRevokeOtherSessions(ctx context.Context, in ports.ChangePasswordInput) (domain.ChangePasswordKind, error) {
+	now := utctime.Time{Time: in.Now}
+	kind := domain.ChangePasswordOK
+	err := r.database.InTx(ctx, func(tx db.Tx) error {
+		queries := gen.New(tx)
+		if _, err := queries.GetUserByID(ctx, in.UserID); err != nil {
+			if errors.Is(err, db.ErrNoRows) {
+				kind = domain.ChangePasswordNotFound
+				return nil
+			}
+			return fmt.Errorf("find user: %w", err)
+		}
+		credential, err := queries.GetPasswordCredentialHash(ctx, in.UserID)
+		if errors.Is(err, db.ErrNoRows) {
+			kind = domain.ChangePasswordPasswordNotSet
+			return nil
+		}
+		if err != nil {
+			return fmt.Errorf("find password credential: %w", err)
+		}
+		if credential != in.ExpectedCurrentPasswordHash {
+			kind = domain.ChangePasswordCurrentPasswordMismatch
+			return nil
+		}
+		if err := queries.UpdatePasswordCredentialHash(ctx, gen.UpdatePasswordCredentialHashParams{
+			PasswordHash: in.NewPasswordHash,
+			UpdatedAt:    now,
+			UserID:       in.UserID,
+		}); err != nil {
+			return fmt.Errorf("update password credential: %w", err)
+		}
+		if _, err := queries.RevokeOtherSessions(ctx, gen.RevokeOtherSessionsParams{
+			RevokedAt: now,
+			UserID:    in.UserID,
+			SessionID: in.SessionID,
+		}); err != nil {
+			return fmt.Errorf("revoke other sessions: %w", err)
+		}
+		if _, err := queries.RevokeOtherSessionRefreshTokens(ctx, gen.RevokeOtherSessionRefreshTokensParams{
+			RevokedAt: now,
+			UserID:    in.UserID,
+			SessionID: in.SessionID,
+		}); err != nil {
+			return fmt.Errorf("revoke other session tokens: %w", err)
+		}
+		return nil
+	})
+	if err != nil {
+		return "", fmt.Errorf("change password: %w", err)
+	}
+	return kind, nil
+}
+
 func revokeSessionFamily(ctx context.Context, queries *gen.Queries, sessionID string, now utctime.Time) error {
 	if err := queries.ClearSessionDeviceState(ctx, gen.ClearSessionDeviceStateParams{Now: now, ID: sessionID}); err != nil {
 		return fmt.Errorf("clear session device state: %w", err)
