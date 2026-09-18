@@ -35,6 +35,7 @@ type authFixture struct {
 	client   *http.Client
 	baseURL  string
 	database *db.Database
+	cfg      config.Config
 }
 
 type passwordRequest struct {
@@ -69,14 +70,15 @@ func newAuthFixture(t *testing.T) *authFixture {
 	mini := miniredis.RunT(t)
 	rdb := redis.MustOpen("redis://" + mini.Addr() + "/0")
 	t.Cleanup(func() { _ = rdb.Close() })
+	cfg := testConfig(t)
 	logger := logging.New(config.LogLevelError, config.LogFormatJSON, io.Discard)
-	server, err := newServer(testConfig(t), logger, database, rdb)
+	server, err := newServer(cfg, logger, database, rdb)
 	if err != nil {
 		t.Fatalf("newServer() error = %v", err)
 	}
 	httpServer := httptest.NewServer(server.Handler)
 	t.Cleanup(httpServer.Close)
-	return &authFixture{suite: suite, client: testClient(), baseURL: httpServer.URL, database: database}
+	return &authFixture{suite: suite, client: testClient(), baseURL: httpServer.URL, database: database, cfg: cfg}
 }
 
 func (f *authFixture) post(t *testing.T, path string, body any) (*http.Request, contracttest.Response) {

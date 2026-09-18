@@ -92,6 +92,25 @@ func TestCreatedSetsLocation(t *testing.T) {
 	}
 }
 
+func TestDocumentWritesRawJSON(t *testing.T) {
+	router, _ := testRouter()
+	router.HandleFunc(testOp("GET", "/.well-known/jwks.json"), func(w http.ResponseWriter, r *http.Request) {
+		httpx.Document(w, r, map[string]any{"keys": []any{}})
+	})
+
+	rec := httptest.NewRecorder()
+	router.ServeHTTP(rec, httptest.NewRequestWithContext(t.Context(), http.MethodGet, "/.well-known/jwks.json", nil))
+	if rec.Code != http.StatusOK {
+		t.Fatalf("status = %d, want 200", rec.Code)
+	}
+	if contentType := rec.Header().Get("Content-Type"); contentType != "application/json" {
+		t.Errorf("content type = %q, want application/json", contentType)
+	}
+	if body := strings.TrimSpace(rec.Body.String()); body != `{"keys":[]}` {
+		t.Errorf("body = %q, want the unwrapped document", body)
+	}
+}
+
 func TestNoContent(t *testing.T) {
 	router, _ := testRouter()
 	router.HandleFunc(testOp("DELETE", "/v1/thing"), func(w http.ResponseWriter, _ *http.Request) {

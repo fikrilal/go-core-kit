@@ -44,6 +44,17 @@ func NoContent(w http.ResponseWriter) {
 	w.WriteHeader(http.StatusNoContent)
 }
 
+// Document writes a 200 non-enveloped JSON document; used by contract
+// endpoints whose payload is a standard document, such as the JWKS.
+func Document(w http.ResponseWriter, r *http.Request, v any) {
+	body, err := json.Marshal(v)
+	if err != nil {
+		WriteError(w, r, fmt.Errorf("marshal response: %w", err))
+		return
+	}
+	writeBody(w, http.StatusOK, contentTypeJSON, body)
+}
+
 func writeJSON(w http.ResponseWriter, r *http.Request, status int, v any) {
 	body, err := json.Marshal(v)
 	if err != nil {

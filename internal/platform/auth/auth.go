@@ -1,4 +1,4 @@
-// Package auth provides JWT key management and access-token issuance.
+// Package auth provides JWT key management, access-token issuance, and verification.
 package auth
 
 import (
@@ -7,6 +7,7 @@ import (
 	"encoding/base64"
 	"encoding/json"
 	"fmt"
+	"slices"
 	"strings"
 	"time"
 
@@ -18,10 +19,17 @@ import (
 	"github.com/fikrilal/go-core-kit/internal/platform/clock"
 )
 
-// KeyRing holds the access-token signing key.
+// JWKS is the published JSON Web Key Set document.
+type JWKS struct {
+	Keys []jwk.Key `json:"keys"`
+}
+
+// KeyRing holds the access-token signing key and its published public keys.
 type KeyRing struct {
 	signingKey jwk.Key
 	kid        string
+	publicKeys []jwk.Key
+	keysByKid  map[string]jwk.Key
 }
 
 // KeyRingOptions configure key loading.
@@ -53,33 +61,61 @@ func NewKeyRing(opts KeyRingOptions) (*KeyRing, error) {
 	if err != nil {
 		return nil, fmt.Errorf("auth: parse signing keys: %w", err)
 	}
+	ring := &KeyRing{keysByKid: map[string]jwk.Key{}}
 	for i := range set.Len() {
-		key, ok := set.Key(i)
-		if !ok {
-			continue
+		if key, ok := set.Key(i); ok {
+			ring.addKey(key)
 		}
-		isPrivate, err := jwk.IsPrivateKey(key)
-		if err != nil || !isPrivate {
-			continue
-		}
-		kid, ok := key.KeyID()
-		if !ok || strings.TrimSpace(kid) == "" {
-			continue
-		}
-		return &KeyRing{signingKey: key, kid: kid}, nil
 	}
-	if opts.ProductionLike {
-		return nil, fmt.Errorf("auth: AUTH_SIGNING_KEYS_JSON did not contain any usable private keys")
+	if ring.signingKey == nil {
+		if opts.ProductionLike {
+			return nil, fmt.Errorf("auth: AUTH_SIGNING_KEYS_JSON did not contain any usable private keys")
+		}
+		return ephemeralKeyRing()
 	}
-	return ephemeralKeyRing()
+	kid, _ := ring.signingKey.KeyID()
+	ring.kid = kid
+	return ring, nil
+}
+
+func (k *KeyRing) addKey(key jwk.Key) {
+	kid, ok := key.KeyID()
+	if !ok || strings.TrimSpace(kid) == "" {
+		return
+	}
+	isPrivate, err := jwk.IsPrivateKey(key)
+	if err != nil {
+		return
+	}
+	publicKey := key
+	if isPrivate {
+		derived, err := key.PublicKey()
+		if err != nil {
+			return
+		}
+		publicKey = derived
+	}
+	if err := publicKey.Set(jwk.KeyIDKey, kid); err != nil {
+		return
+	}
+	if err := publicKey.Set(jwk.KeyUsageKey, "sig"); err != nil {
+		return
+	}
+	if err := publicKey.Set(jwk.AlgorithmKey, jwa.EdDSA()); err != nil {
+		return
+	}
+	k.publicKeys = append(k.publicKeys, publicKey)
+	k.keysByKid[kid] = publicKey
+	if isPrivate && k.signingKey == nil {
+		k.signingKey = key
+	}
 }
 
 func ephemeralKeyRing() (*KeyRing, error) {
-	publicKey, privateKey, err := ed25519.GenerateKey(rand.Reader)
+	_, privateKey, err := ed25519.GenerateKey(rand.Reader)
 	if err != nil {
 		return nil, fmt.Errorf("auth: generate ephemeral key: %w", err)
 	}
-	_ = publicKey
 	key, err := jwk.Import(privateKey)
 	if err != nil {
 		return nil, fmt.Errorf("auth: import ephemeral key: %w", err)
@@ -88,7 +124,25 @@ func ephemeralKeyRing() (*KeyRing, error) {
 	if err := key.Set(jwk.KeyIDKey, kid); err != nil {
 		return nil, fmt.Errorf("auth: set ephemeral kid: %w", err)
 	}
-	return &KeyRing{signingKey: key, kid: kid}, nil
+	publicKey, err := key.PublicKey()
+	if err != nil {
+		return nil, fmt.Errorf("auth: derive ephemeral public key: %w", err)
+	}
+	if err := publicKey.Set(jwk.KeyIDKey, kid); err != nil {
+		return nil, fmt.Errorf("auth: publish ephemeral key: %w", err)
+	}
+	if err := publicKey.Set(jwk.KeyUsageKey, "sig"); err != nil {
+		return nil, fmt.Errorf("auth: publish ephemeral key: %w", err)
+	}
+	if err := publicKey.Set(jwk.AlgorithmKey, jwa.EdDSA()); err != nil {
+		return nil, fmt.Errorf("auth: publish ephemeral key: %w", err)
+	}
+	return &KeyRing{
+		signingKey: key,
+		kid:        kid,
+		publicKeys: []jwk.Key{publicKey},
+		keysByKid:  map[string]jwk.Key{kid: publicKey},
+	}, nil
 }
 
 // SigningKey returns the key used to sign access tokens.
@@ -99,6 +153,17 @@ func (k *KeyRing) SigningKey() jwk.Key {
 // Kid returns the key id published in token headers.
 func (k *KeyRing) Kid() string {
 	return k.kid
+}
+
+// PublicJWKS returns the publishable key set document.
+func (k *KeyRing) PublicJWKS() JWKS {
+	return JWKS{Keys: slices.Clone(k.publicKeys)}
+}
+
+// PublicKeyForKid returns the verification key for a key id.
+func (k *KeyRing) PublicKeyForKid(kid string) (jwk.Key, bool) {
+	key, ok := k.keysByKid[kid]
+	return key, ok
 }
 
 // Issuer signs first-party access tokens with EdDSA.

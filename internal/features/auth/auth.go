@@ -80,11 +80,12 @@ func Register(router *httpx.Router, deps Deps) error {
 			DummyHash: dummyHash,
 		},
 	)
-	handlers := &handlers{service: service}
+	handlers := &handlers{service: service, keys: keyRing}
 	router.HandleFunc(httpx.Operation{Method: http.MethodPost, Path: "/v1/auth/password/register", ID: "auth.password.register"}, handlers.register)
 	router.HandleFunc(httpx.Operation{Method: http.MethodPost, Path: "/v1/auth/password/login", ID: "auth.password.login"}, handlers.login)
 	router.HandleFunc(httpx.Operation{Method: http.MethodPost, Path: "/v1/auth/refresh", ID: "auth.refresh"}, handlers.refresh)
 	router.HandleFunc(httpx.Operation{Method: http.MethodPost, Path: "/v1/auth/logout", ID: "auth.logout"}, handlers.logout)
+	router.HandleFunc(httpx.Operation{Method: http.MethodGet, Path: "/.well-known/jwks.json", ID: "auth.jwks.get"}, handlers.jwks)
 	return nil
 }
 
@@ -107,6 +108,7 @@ func (a issuerAdapter) SignAccessToken(user domain.User, sessionID string) (stri
 
 type handlers struct {
 	service *app.Service
+	keys    *platformauth.KeyRing
 }
 
 type passwordRequest struct {
@@ -178,6 +180,10 @@ func (h *handlers) logout(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	httpx.NoContent(w)
+}
+
+func (h *handlers) jwks(w http.ResponseWriter, r *http.Request) {
+	httpx.Document(w, r, h.keys.PublicJWKS())
 }
 
 func authResult(result app.Result) contracts.AuthResultWithMeDto {
