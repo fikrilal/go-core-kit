@@ -3,7 +3,6 @@
 operations:
   # Phase 3 — auth slice
   - auth.oidc.connect
-  - auth.oidc.exchange
   - auth.email.verify
   - auth.email.verification.resend
   - auth.password.reset.request

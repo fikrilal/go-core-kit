@@ -38,6 +38,8 @@ type Config struct {
 	SigningKeysJSON       string
 	SigningKeysJSONBase64 string
 	ProductionLike        bool
+	OIDCGoogleClientIDs   string
+	OIDCGoogleJWKSURL     string
 }
 
 // Deps are the auth feature's dependencies.
@@ -76,6 +78,7 @@ func Register(router *httpx.Router, deps Deps) error {
 				keyRing, deps.Clock, deps.Config.Issuer, deps.Config.Audience, deps.Config.AccessTokenTTL,
 			)},
 			Limiter:   infra.NewLoginLimiter(deps.Redis, deps.Config.LoginMaxAttempts, deps.Config.LoginWindow, deps.Config.LoginBlock),
+			Oidc:      infra.NewGoogleIDTokenVerifier(deps.Config.OIDCGoogleClientIDs, deps.Config.OIDCGoogleJWKSURL, deps.Clock),
 			Clock:     deps.Clock,
 			DummyHash: dummyHash,
 		},
@@ -91,6 +94,7 @@ func Register(router *httpx.Router, deps Deps) error {
 	router.HandleFunc(httpx.Operation{Method: http.MethodPost, Path: "/v1/auth/refresh", ID: "auth.refresh"}, handlers.refresh)
 	router.HandleFunc(httpx.Operation{Method: http.MethodPost, Path: "/v1/auth/logout", ID: "auth.logout"}, handlers.logout)
 	router.HandleFunc(httpx.Operation{Method: http.MethodGet, Path: "/.well-known/jwks.json", ID: "auth.jwks.get"}, handlers.jwks)
+	router.HandleFunc(httpx.Operation{Method: http.MethodPost, Path: "/v1/auth/oidc/exchange", ID: "auth.oidc.exchange"}, handlers.exchangeOidc)
 	changePassword := httpx.Operation{Method: http.MethodPost, Path: "/v1/auth/password/change", ID: "auth.password.change"}
 	router.Handle(changePassword, guard.Require(router.Idempotent(changePassword, handlers.changePassword)))
 	return nil
@@ -151,7 +155,44 @@ func (h *handlers) password(w http.ResponseWriter, r *http.Request, call func(co
 		httpx.WriteError(w, r, err)
 		return
 	}
-	httpx.Data(w, r, authResult(result))
+	h.respondAuth(w, r, result)
+}
+
+type oidcExchangeRequest struct {
+	Provider   string `json:"provider" validate:"required,oneof=GOOGLE"`
+	IDToken    string `json:"idToken" validate:"required"`
+	DeviceID   string `json:"deviceId"`
+	DeviceName string `json:"deviceName"`
+}
+
+func (h *handlers) exchangeOidc(w http.ResponseWriter, r *http.Request) {
+	var body oidcExchangeRequest
+	if err := httpx.Decode(r, &body); err != nil {
+		httpx.WriteError(w, r, err)
+		return
+	}
+	result, err := h.service.ExchangeOidc(r.Context(), app.OidcExchangeInput{
+		Provider:   body.Provider,
+		IDToken:    body.IDToken,
+		DeviceID:   body.DeviceID,
+		DeviceName: body.DeviceName,
+		IP:         clientIP(r),
+		UserAgent:  r.Header.Get("User-Agent"),
+	})
+	if err != nil {
+		httpx.WriteError(w, r, err)
+		return
+	}
+	h.respondAuth(w, r, result)
+}
+
+func (h *handlers) respondAuth(w http.ResponseWriter, r *http.Request, result app.Result) {
+	me, err := h.service.MeView(r.Context(), result.User.ID)
+	if err != nil {
+		httpx.WriteError(w, r, err)
+		return
+	}
+	httpx.Data(w, r, authResult(result, me))
 }
 
 type refreshTokenRequest struct {
@@ -222,23 +263,34 @@ func (h *handlers) changePassword(w http.ResponseWriter, r *http.Request) {
 	httpx.NoContent(w)
 }
 
-func authResult(result app.Result) contracts.AuthResultWithMeDto {
-	methods := make([]contracts.MeDtoAuthMethods, 0, len(result.AuthMethods))
-	for _, method := range result.AuthMethods {
+func authResult(result app.Result, me domain.MeView) contracts.AuthResultWithMeDto {
+	methods := make([]contracts.MeDtoAuthMethods, 0, len(me.AuthMethods))
+	for _, method := range me.AuthMethods {
 		methods = append(methods, contracts.MeDtoAuthMethods(method))
 	}
 	return contracts.AuthResultWithMeDto{
 		User: contracts.MeDto{
-			Id:            result.User.ID,
-			Email:         result.User.Email,
-			EmailVerified: result.User.EmailVerified,
-			Roles:         []string{result.User.Role},
+			Id:            me.User.ID,
+			Email:         me.User.Email,
+			EmailVerified: me.User.EmailVerified,
+			Roles:         []string{me.User.Role},
 			AuthMethods:   methods,
-			Profile:       contracts.MeProfileDto{},
+			Profile: contracts.MeProfileDto{
+				DisplayName: nullableString(me.Profile.DisplayName),
+				GivenName:   nullableString(me.Profile.GivenName),
+				FamilyName:  nullableString(me.Profile.FamilyName),
+			},
 		},
 		AccessToken:  result.AccessToken,
 		RefreshToken: result.RefreshToken,
 	}
+}
+
+func nullableString(value string) *string {
+	if value == "" {
+		return nil
+	}
+	return &value
 }
 
 // refreshResult renders the refreshed pair; authMethods is omitted on refresh responses.

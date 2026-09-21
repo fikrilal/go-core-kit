@@ -26,4 +26,8 @@ const (
 	CodeAuthSessionRevoked         Code = "AUTH_SESSION_REVOKED"
 	CodeAuthPasswordNotSet         Code = "AUTH_PASSWORD_NOT_SET"
 	CodeAuthCurrentPasswordInvalid Code = "AUTH_CURRENT_PASSWORD_INVALID" //nolint:gosec // wire error code, not a credential
+	CodeAuthOidcNotConfigured      Code = "AUTH_OIDC_NOT_CONFIGURED"
+	CodeAuthOidcTokenInvalid       Code = "AUTH_OIDC_TOKEN_INVALID" //nolint:gosec // wire error code, not a credential
+	CodeAuthOidcEmailNotVerified   Code = "AUTH_OIDC_EMAIL_NOT_VERIFIED"
+	CodeAuthOidcLinkRequired       Code = "AUTH_OIDC_LINK_REQUIRED"
 )

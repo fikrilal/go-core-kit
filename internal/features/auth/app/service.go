@@ -29,16 +29,18 @@ type Deps struct {
 	Hasher     ports.PasswordHasher
 	Tokens     ports.AccessTokens
 	Limiter    ports.LoginLimiter
+	Oidc       ports.OidcVerifier
 	Clock      clock.Clock
 	DummyHash  string
 }
 
-// Service implements password register and login.
+// Service implements the auth use cases.
 type Service struct {
 	repo      ports.Repository
 	hasher    ports.PasswordHasher
 	tokens    ports.AccessTokens
 	limiter   ports.LoginLimiter
+	oidc      ports.OidcVerifier
 	clock     clock.Clock
 	config    Config
 	dummyHash string
@@ -51,6 +53,7 @@ func New(config Config, deps Deps) *Service {
 		hasher:    deps.Hasher,
 		tokens:    deps.Tokens,
 		limiter:   deps.Limiter,
+		oidc:      deps.Oidc,
 		clock:     deps.Clock,
 		config:    config,
 		dummyHash: deps.DummyHash,
@@ -67,10 +70,17 @@ type Input struct {
 	UserAgent  string
 }
 
+// SessionParams carry client metadata for session issuance.
+type SessionParams struct {
+	DeviceID   string
+	DeviceName string
+	IP         string
+	UserAgent  string
+}
+
 // Result is the issued session a handler renders.
 type Result struct {
 	User         domain.User
-	AuthMethods  []string
 	AccessToken  string
 	RefreshToken string
 }
@@ -106,7 +116,11 @@ func (s *Service) Register(ctx context.Context, in Input) (Result, error) {
 	if err != nil {
 		return Result{}, fmt.Errorf("auth register: create user: %w", err)
 	}
-	return s.issueSession(ctx, user, []string{domain.AuthMethodPassword}, in, now)
+	return s.issueSession(ctx, user, sessionParams(in), now)
+}
+
+func sessionParams(in Input) SessionParams {
+	return SessionParams{DeviceID: in.DeviceID, DeviceName: in.DeviceName, IP: in.IP, UserAgent: in.UserAgent}
 }
 
 // Login verifies credentials and issues tokens.
@@ -139,7 +153,7 @@ func (s *Service) Login(ctx context.Context, in Input) (Result, error) {
 	if err := s.limiter.RecordSuccess(ctx, email, in.IP); err != nil {
 		return Result{}, fmt.Errorf("auth login: record success: %w", err)
 	}
-	return s.issueSession(ctx, found.User, []string{domain.AuthMethodPassword}, in, s.clock.Now())
+	return s.issueSession(ctx, found.User, sessionParams(in), s.clock.Now())
 }
 
 // RefreshInput carries a token refresh.
@@ -237,6 +251,114 @@ type ChangePasswordInput struct {
 	NewPassword     string
 }
 
+// OidcExchangeInput carries an OIDC exchange request.
+type OidcExchangeInput struct {
+	Provider   string
+	IDToken    string
+	DeviceID   string
+	DeviceName string
+	IP         string
+	UserAgent  string
+}
+
+// ExchangeOidc verifies an OIDC id token and issues a session for the resolved user.
+func (s *Service) ExchangeOidc(ctx context.Context, in OidcExchangeInput) (Result, error) {
+	verification, err := s.oidc.VerifyIDToken(ctx, in.Provider, in.IDToken)
+	if err != nil {
+		return Result{}, fmt.Errorf("auth oidc: verify token: %w", err)
+	}
+	switch verification.Kind {
+	case domain.OidcVerifyNotConfigured:
+		return Result{}, oidcNotConfiguredError()
+	case domain.OidcVerifyInvalid:
+		return Result{}, oidcTokenInvalidError()
+	case domain.OidcVerifyVerified:
+	}
+	identity := verification.Identity
+	if !identity.EmailVerified {
+		return Result{}, oidcEmailNotVerifiedError()
+	}
+	now := s.clock.Now()
+	email := domain.NormalizeEmail(identity.Email)
+	user, found, err := s.repo.FindUserByExternalIdentity(ctx, identity.Provider, identity.Subject)
+	if err != nil {
+		return Result{}, fmt.Errorf("auth oidc: find identity: %w", err)
+	}
+	if !found {
+		user, err = s.createOidcUser(ctx, identity, email, now)
+		if err != nil {
+			return Result{}, err
+		}
+	}
+	if user.Status == domain.StatusDeleted {
+		return Result{}, invalidCredentials()
+	}
+	if user.Status == domain.StatusSuspended {
+		return Result{}, suspendedError()
+	}
+	return s.issueSession(ctx, user, SessionParams{
+		DeviceID:   in.DeviceID,
+		DeviceName: in.DeviceName,
+		IP:         in.IP,
+		UserAgent:  in.UserAgent,
+	}, now)
+}
+
+func (s *Service) createOidcUser(ctx context.Context, identity domain.OidcIdentity, email string, now time.Time) (domain.User, error) {
+	_, exists, err := s.repo.FindUserIDByEmail(ctx, email)
+	if err != nil {
+		return domain.User{}, fmt.Errorf("auth oidc: find email: %w", err)
+	}
+	if exists {
+		return domain.User{}, oidcLinkRequiredError()
+	}
+	userID, err := uuid.NewV7()
+	if err != nil {
+		return domain.User{}, fmt.Errorf("auth oidc: generate user id: %w", err)
+	}
+	user, err := s.repo.CreateUserWithExternalIdentity(ctx, ports.CreateOidcUserInput{
+		ID:    userID.String(),
+		Email: email,
+		Profile: domain.Profile{
+			DisplayName: identity.DisplayName,
+			GivenName:   identity.GivenName,
+			FamilyName:  identity.FamilyName,
+		},
+		Provider: identity.Provider,
+		Subject:  identity.Subject,
+		Now:      now,
+	})
+	if errors.Is(err, domain.ErrEmailExists) {
+		return domain.User{}, oidcLinkRequiredError()
+	}
+	if errors.Is(err, domain.ErrExternalIdentityExists) {
+		existing, found, err := s.repo.FindUserByExternalIdentity(ctx, identity.Provider, identity.Subject)
+		if err != nil {
+			return domain.User{}, fmt.Errorf("auth oidc: refetch identity: %w", err)
+		}
+		if !found {
+			return domain.User{}, fmt.Errorf("auth oidc: identity missing after conflict")
+		}
+		return existing, nil
+	}
+	if err != nil {
+		return domain.User{}, fmt.Errorf("auth oidc: create user: %w", err)
+	}
+	return user, nil
+}
+
+// MeView composes the user, profile, and auth methods for Me responses.
+func (s *Service) MeView(ctx context.Context, userID string) (domain.MeView, error) {
+	view, found, err := s.repo.GetMeView(ctx, userID)
+	if err != nil {
+		return domain.MeView{}, fmt.Errorf("auth me view: %w", err)
+	}
+	if !found {
+		return domain.MeView{}, fmt.Errorf("auth me view: user %s not found", userID)
+	}
+	return view, nil
+}
+
 // ChangePassword changes the authenticated user's password and revokes other sessions.
 func (s *Service) ChangePassword(ctx context.Context, in ChangePasswordInput) error {
 	if err := s.checkPasswordPolicy(in.NewPassword, "newPassword"); err != nil {
@@ -290,7 +412,7 @@ func (s *Service) ChangePassword(ctx context.Context, in ChangePasswordInput) er
 	return fmt.Errorf("auth change password: unexpected result %q", kind)
 }
 
-func (s *Service) issueSession(ctx context.Context, user domain.User, methods []string, in Input, now time.Time) (Result, error) {
+func (s *Service) issueSession(ctx context.Context, user domain.User, session SessionParams, now time.Time) (Result, error) {
 	refreshToken, err := domain.NewRefreshToken()
 	if err != nil {
 		return Result{}, fmt.Errorf("auth: create refresh token: %w", err)
@@ -303,16 +425,16 @@ func (s *Service) issueSession(ctx context.Context, user domain.User, methods []
 	if err != nil {
 		return Result{}, fmt.Errorf("auth: generate refresh token id: %w", err)
 	}
-	activeKey, _ := domain.ActiveSessionKey(user.ID, in.DeviceID)
-	userAgent, _ := domain.NormalizeUserAgent(in.UserAgent)
+	activeKey, _ := domain.ActiveSessionKey(user.ID, session.DeviceID)
+	userAgent, _ := domain.NormalizeUserAgent(session.UserAgent)
 	if err := s.repo.CreateSession(ctx, ports.NewSessionInput{
 		SessionID:        sessionID.String(),
 		RefreshTokenID:   refreshTokenID.String(),
 		RefreshTokenHash: domain.HashRefreshToken(refreshToken),
 		UserID:           user.ID,
-		DeviceID:         in.DeviceID,
-		DeviceName:       in.DeviceName,
-		IP:               in.IP,
+		DeviceID:         session.DeviceID,
+		DeviceName:       session.DeviceName,
+		IP:               session.IP,
 		UserAgent:        userAgent,
 		ActiveKey:        activeKey,
 		Now:              now,
@@ -326,7 +448,6 @@ func (s *Service) issueSession(ctx context.Context, user domain.User, methods []
 	}
 	return Result{
 		User:         user,
-		AuthMethods:  methods,
 		AccessToken:  accessToken,
 		RefreshToken: refreshToken,
 	}, nil
@@ -414,5 +535,37 @@ func currentPasswordInvalidError() error {
 		Status: http.StatusBadRequest,
 		Code:   httpx.CodeAuthCurrentPasswordInvalid,
 		Detail: "Current password is invalid",
+	}
+}
+
+func oidcNotConfiguredError() error {
+	return &httpx.ProblemError{
+		Status: http.StatusInternalServerError,
+		Code:   httpx.CodeAuthOidcNotConfigured,
+		Detail: "OIDC is not configured",
+	}
+}
+
+func oidcTokenInvalidError() error {
+	return &httpx.ProblemError{
+		Status: http.StatusUnauthorized,
+		Code:   httpx.CodeAuthOidcTokenInvalid,
+		Detail: "Invalid OIDC token",
+	}
+}
+
+func oidcEmailNotVerifiedError() error {
+	return &httpx.ProblemError{
+		Status: http.StatusBadRequest,
+		Code:   httpx.CodeAuthOidcEmailNotVerified,
+		Detail: "Email is not verified",
+	}
+}
+
+func oidcLinkRequiredError() error {
+	return &httpx.ProblemError{
+		Status: http.StatusConflict,
+		Code:   httpx.CodeAuthOidcLinkRequired,
+		Detail: "We found an existing account for this email. Sign in with your password to link Google sign-in.",
 	}
 }

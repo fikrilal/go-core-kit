@@ -45,6 +45,8 @@ func newServer(cfg config.Config, logger *slog.Logger, database *db.Database, rd
 			SigningKeysJSON:       cfg.AuthSigningKeysJSON,
 			SigningKeysJSONBase64: cfg.AuthSigningKeysJSONBase64,
 			ProductionLike:        cfg.ProductionLike(),
+			OIDCGoogleClientIDs:   cfg.AuthOIDCGoogleClientIDs,
+			OIDCGoogleJWKSURL:     cfg.AuthOIDCGoogleJWKSURL,
 		},
 	})
 	if err != nil {

@@ -22,7 +22,7 @@ func TestMigrateCreatesAuthSchema(t *testing.T) {
 		t.Fatalf("Migrate() error = %v", err)
 	}
 
-	for _, table := range []string{"password_credentials", "sessions", "refresh_tokens"} {
+	for _, table := range []string{"password_credentials", "sessions", "refresh_tokens", "user_profiles", "external_identities"} {
 		if !tableExists(t, database, table) {
 			t.Errorf("table %s missing", table)
 		}
@@ -95,11 +95,12 @@ func TestAuthSchemaEnforcesConstraints(t *testing.T) {
 		"t1", "hash-1", testNow, "s1", testNow, testNow); err != nil {
 		t.Fatalf("insert refresh token: %v", err)
 	}
+	insertOidcFixtures(t, exec)
 
 	if err := exec("DELETE FROM users WHERE id = ?", "u1"); err != nil {
 		t.Fatalf("delete user: %v", err)
 	}
-	for _, table := range []string{"password_credentials", "sessions", "refresh_tokens"} {
+	for _, table := range []string{"password_credentials", "sessions", "refresh_tokens", "user_profiles", "external_identities"} {
 		var count int
 		if err := database.SQL().QueryRowContext(ctx, "SELECT COUNT(*) FROM "+table).Scan(&count); err != nil {
 			t.Fatalf("count %s: %v", table, err)
@@ -107,6 +108,22 @@ func TestAuthSchemaEnforcesConstraints(t *testing.T) {
 		if count != 0 {
 			t.Errorf("%s has %d rows after user delete, want 0 (cascade)", table, count)
 		}
+	}
+}
+
+func insertOidcFixtures(t *testing.T, exec func(query string, args ...any) error) {
+	t.Helper()
+	if err := exec("INSERT INTO user_profiles (user_id, display_name, created_at, updated_at) VALUES (?, ?, ?, ?)",
+		"u1", "Dante", testNow, testNow); err != nil {
+		t.Fatalf("insert user profile: %v", err)
+	}
+	if err := exec("INSERT INTO external_identities (id, provider, subject, user_id, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?)",
+		"e1", "GOOGLE", "subject-1", "u1", testNow, testNow); err != nil {
+		t.Fatalf("insert external identity: %v", err)
+	}
+	if err := exec("INSERT INTO external_identities (id, provider, subject, user_id, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?)",
+		"e2", "GOOGLE", "subject-1", "u1", testNow, testNow); err == nil {
+		t.Error("duplicate (provider, subject) identity not rejected")
 	}
 }
 
@@ -126,7 +143,13 @@ func TestAuthMigrationDownRestoresSkeleton(t *testing.T) {
 		t.Fatalf("new provider: %v", err)
 	}
 	if _, err := provider.Down(ctx); err != nil {
-		t.Fatalf("Down() error = %v", err)
+		t.Fatalf("Down() 0003 error = %v", err)
+	}
+	if tableExists(t, database, "user_profiles") || tableExists(t, database, "external_identities") {
+		t.Error("oidc tables still present after Down")
+	}
+	if _, err := provider.Down(ctx); err != nil {
+		t.Fatalf("Down() 0002 error = %v", err)
 	}
 
 	if tableExists(t, database, "password_credentials") {
@@ -135,11 +158,13 @@ func TestAuthMigrationDownRestoresSkeleton(t *testing.T) {
 	if columns := tableColumns(t, database, "users"); !slices.Equal(columns, []string{"id", "email", "created_at", "updated_at"}) {
 		t.Errorf("users columns after Down = %v, want the 0001 shape", columns)
 	}
-	if _, err := provider.Up(ctx); err != nil {
-		t.Fatalf("Up() after Down error = %v", err)
+	for range 2 {
+		if _, err := provider.Up(ctx); err != nil {
+			t.Fatalf("Up() after Down error = %v", err)
+		}
 	}
-	if !tableExists(t, database, "password_credentials") {
-		t.Error("password_credentials missing after re-Up")
+	if !tableExists(t, database, "password_credentials") || !tableExists(t, database, "user_profiles") {
+		t.Error("auth tables missing after re-Up")
 	}
 }
 

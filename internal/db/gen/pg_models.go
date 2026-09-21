@@ -12,6 +12,16 @@ import (
 	utctime "github.com/fikrilal/go-core-kit/internal/platform/db/utctime"
 )
 
+type ExternalIdentity struct {
+	ID        string
+	Provider  string
+	Subject   string
+	Email     sql.NullString
+	UserID    string
+	CreatedAt utctime.Time
+	UpdatedAt utctime.Time
+}
+
 type PasswordCredential struct {
 	UserID       string
 	PasswordHash string
@@ -59,4 +69,13 @@ type User struct {
 	Status          string
 	SuspendedAt     sql.NullTime
 	SuspendedReason sql.NullString
+}
+
+type UserProfile struct {
+	UserID      string
+	DisplayName sql.NullString
+	GivenName   sql.NullString
+	FamilyName  sql.NullString
+	CreatedAt   utctime.Time
+	UpdatedAt   utctime.Time
 }

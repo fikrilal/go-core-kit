@@ -3,6 +3,7 @@ package app_test
 import (
 	"context"
 	"errors"
+	"fmt"
 	"testing"
 	"time"
 
@@ -44,6 +45,19 @@ type fakeRepository struct {
 	changeKind    domain.ChangePasswordKind
 	changeErr     error
 	changes       []ports.ChangePasswordInput
+
+	emailUserID      string
+	emailUserIDFound bool
+	emailUserIDErr   error
+	identityUser     domain.User
+	identityFound    bool
+	identityErr      error
+	createOidcUser   domain.User
+	createOidcErr    error
+	createOidcInputs []ports.CreateOidcUserInput
+	meView           domain.MeView
+	meViewFound      bool
+	meViewErr        error
 }
 
 func (f *fakeRepository) CreateUserWithPassword(_ context.Context, in ports.CreateUserInput) (domain.User, error) {
@@ -93,6 +107,26 @@ func (f *fakeRepository) ChangePasswordAndRevokeOtherSessions(_ context.Context,
 	}
 	f.changes = append(f.changes, in)
 	return f.changeKind, nil
+}
+
+func (f *fakeRepository) FindUserIDByEmail(context.Context, string) (string, bool, error) {
+	return f.emailUserID, f.emailUserIDFound, f.emailUserIDErr
+}
+
+func (f *fakeRepository) FindUserByExternalIdentity(context.Context, string, string) (domain.User, bool, error) {
+	return f.identityUser, f.identityFound, f.identityErr
+}
+
+func (f *fakeRepository) CreateUserWithExternalIdentity(_ context.Context, in ports.CreateOidcUserInput) (domain.User, error) {
+	f.createOidcInputs = append(f.createOidcInputs, in)
+	if f.createOidcErr != nil {
+		return domain.User{}, f.createOidcErr
+	}
+	return f.createOidcUser, nil
+}
+
+func (f *fakeRepository) GetMeView(context.Context, string) (domain.MeView, bool, error) {
+	return f.meView, f.meViewFound, f.meViewErr
 }
 
 type fakeHasher struct {
@@ -146,6 +180,20 @@ type fixture struct {
 	hasher  *fakeHasher
 	tokens  *fakeTokens
 	limiter *fakeLimiter
+	oidc    *fakeOidc
+}
+
+type fakeOidc struct {
+	verification domain.OidcVerification
+	err          error
+	provider     string
+	token        string
+}
+
+func (f *fakeOidc) VerifyIDToken(_ context.Context, provider, idToken string) (domain.OidcVerification, error) {
+	f.provider = provider
+	f.token = idToken
+	return f.verification, f.err
 }
 
 func newFixture(t *testing.T) *fixture {
@@ -155,6 +203,7 @@ func newFixture(t *testing.T) *fixture {
 		hasher:  &fakeHasher{},
 		tokens:  &fakeTokens{},
 		limiter: &fakeLimiter{},
+		oidc:    &fakeOidc{},
 	}
 	f.service = app.New(
 		app.Config{PasswordMinLength: 10, SessionTTL: serviceSession},
@@ -163,6 +212,7 @@ func newFixture(t *testing.T) *fixture {
 			Hasher:     f.hasher,
 			Tokens:     f.tokens,
 			Limiter:    f.limiter,
+			Oidc:       f.oidc,
 			Clock:      clock.Fixed{Moment: moment},
 			DummyHash:  dummyHash,
 		},
@@ -242,9 +292,6 @@ func TestRegisterIssuesSession(t *testing.T) {
 	}
 	if result.AccessToken != "access:"+result.User.ID || len(f.tokens.sessionIDs) != 1 {
 		t.Errorf("tokens = %q/%v, want the signed session token", result.AccessToken, f.tokens.sessionIDs)
-	}
-	if len(result.AuthMethods) != 1 || result.AuthMethods[0] != domain.AuthMethodPassword {
-		t.Errorf("authMethods = %v, want [PASSWORD]", result.AuthMethods)
 	}
 	if f.limiter.failures != 0 || f.limiter.successes != 0 {
 		t.Error("login limiter touched during registration")
@@ -594,6 +641,176 @@ func TestChangePasswordSuccess(t *testing.T) {
 	}
 	if !change.Now.Equal(moment) {
 		t.Errorf("now = %v, want the injected clock", change.Now)
+	}
+}
+
+func exchangeFixture(t *testing.T) *fixture {
+	t.Helper()
+	f := newFixture(t)
+	f.oidc.verification = domain.OidcVerification{
+		Kind: domain.OidcVerifyVerified,
+		Identity: domain.OidcIdentity{
+			Provider:      domain.AuthMethodGoogle,
+			Subject:       "google-sub-1",
+			Email:         "Dante@Example.com",
+			EmailVerified: true,
+			DisplayName:   "Dante",
+			GivenName:     "Dante",
+			FamilyName:    "Alighieri",
+		},
+	}
+	return f
+}
+
+func (f *fixture) exchange(t *testing.T) (app.Result, error) {
+	t.Helper()
+	result, err := f.service.ExchangeOidc(context.Background(), app.OidcExchangeInput{
+		Provider: domain.AuthMethodGoogle, IDToken: "id-token", DeviceID: "device-a", UserAgent: "agent",
+	})
+	if err != nil {
+		return app.Result{}, fmt.Errorf("exchange: %w", err)
+	}
+	return result, nil
+}
+
+func TestExchangeOidcCreatesUserAndSession(t *testing.T) {
+	f := exchangeFixture(t)
+	f.repo.createOidcUser = domain.User{ID: "user-9", Email: "dante@example.com", EmailVerified: true, Role: domain.RoleUser, Status: domain.StatusActive}
+	result, err := f.exchange(t)
+	if err != nil {
+		t.Fatalf("ExchangeOidc() error = %v", err)
+	}
+	if result.User.ID != "user-9" {
+		t.Errorf("user = %q, want user-9", result.User.ID)
+	}
+	if len(f.repo.createOidcInputs) != 1 {
+		t.Fatalf("create inputs = %d, want 1", len(f.repo.createOidcInputs))
+	}
+	created := f.repo.createOidcInputs[0]
+	if created.Email != "dante@example.com" || created.Provider != domain.AuthMethodGoogle || created.Subject != "google-sub-1" {
+		t.Errorf("created = %+v, want normalized email and the verified identity", created)
+	}
+	if created.Profile.DisplayName != "Dante" || created.Profile.FamilyName != "Alighieri" {
+		t.Errorf("profile = %+v, want the token names", created.Profile)
+	}
+	if created.ID == "" {
+		t.Error("created user id is empty")
+	}
+	if len(f.repo.sessions) != 1 || len(f.tokens.sessionIDs) != 1 {
+		t.Errorf("sessions/tokens = %d/%d, want one issued session", len(f.repo.sessions), len(f.tokens.sessionIDs))
+	}
+}
+
+func TestExchangeOidcExistingIdentityReusesUser(t *testing.T) {
+	f := exchangeFixture(t)
+	f.repo.identityFound = true
+	f.repo.identityUser = domain.User{ID: "user-5", Email: "dante@example.com", EmailVerified: true, Role: domain.RoleUser, Status: domain.StatusActive}
+	result, err := f.exchange(t)
+	if err != nil {
+		t.Fatalf("ExchangeOidc() error = %v", err)
+	}
+	if result.User.ID != "user-5" {
+		t.Errorf("user = %q, want the existing user", result.User.ID)
+	}
+	if len(f.repo.createOidcInputs) != 0 {
+		t.Error("user created for an existing identity")
+	}
+}
+
+func TestExchangeOidcIdentityRaceRefetchesWinner(t *testing.T) {
+	f := exchangeFixture(t)
+	f.repo.createOidcErr = domain.ErrExternalIdentityExists
+	f.repo.identityFound = true
+	f.repo.identityUser = domain.User{ID: "user-7", Email: "dante@example.com", Role: domain.RoleUser, Status: domain.StatusActive}
+	result, err := f.exchange(t)
+	if err != nil {
+		t.Fatalf("ExchangeOidc() error = %v", err)
+	}
+	if result.User.ID != "user-7" {
+		t.Errorf("user = %q, want the raced winner", result.User.ID)
+	}
+}
+
+func TestExchangeOidcLinkRequired(t *testing.T) {
+	f := exchangeFixture(t)
+	f.repo.emailUserIDFound = true
+	f.repo.emailUserID = "existing-user"
+	_, err := f.exchange(t)
+	problem := problemError(t, err)
+	if problem.Status != 409 || problem.Code != httpx.CodeAuthOidcLinkRequired {
+		t.Fatalf("problem = %+v, want 409 AUTH_OIDC_LINK_REQUIRED", problem)
+	}
+	if len(f.repo.createOidcInputs) != 0 {
+		t.Error("user created despite the email collision")
+	}
+}
+
+func TestExchangeOidcKindMapping(t *testing.T) {
+	cases := map[domain.OidcVerifyKind]struct {
+		status int
+		code   httpx.Code
+	}{
+		domain.OidcVerifyNotConfigured: {status: 500, code: httpx.CodeAuthOidcNotConfigured},
+		domain.OidcVerifyInvalid:       {status: 401, code: httpx.CodeAuthOidcTokenInvalid},
+	}
+	for kind, want := range cases {
+		t.Run(string(kind), func(t *testing.T) {
+			f := exchangeFixture(t)
+			f.oidc.verification = domain.OidcVerification{Kind: kind}
+			_, err := f.exchange(t)
+			problem := problemError(t, err)
+			if problem.Status != want.status || problem.Code != want.code {
+				t.Fatalf("kind %q mapped to %d/%s, want %d/%s", kind, problem.Status, problem.Code, want.status, want.code)
+			}
+		})
+	}
+}
+
+func TestExchangeOidcEmailNotVerified(t *testing.T) {
+	f := exchangeFixture(t)
+	f.oidc.verification.Identity.EmailVerified = false
+	_, err := f.exchange(t)
+	problem := problemError(t, err)
+	if problem.Status != 400 || problem.Code != httpx.CodeAuthOidcEmailNotVerified {
+		t.Fatalf("problem = %+v, want 400 AUTH_OIDC_EMAIL_NOT_VERIFIED", problem)
+	}
+}
+
+func TestExchangeOidcDeletedAndSuspended(t *testing.T) {
+	deleted := exchangeFixture(t)
+	deleted.repo.identityFound = true
+	deleted.repo.identityUser = domain.User{ID: "user-1", Status: domain.StatusDeleted}
+	deletedResult, deletedCallErr := deleted.exchange(t)
+	if code := problemError(t, mustError(t, deletedResult, deletedCallErr)).Code; code != httpx.CodeAuthInvalidCredentials {
+		t.Fatalf("deleted exchange code = %q, want masked AUTH_INVALID_CREDENTIALS", code)
+	}
+	suspended := exchangeFixture(t)
+	suspended.repo.identityFound = true
+	suspended.repo.identityUser = domain.User{ID: "user-1", Status: domain.StatusSuspended}
+	suspendedResult, suspendedCallErr := suspended.exchange(t)
+	if code := problemError(t, mustError(t, suspendedResult, suspendedCallErr)).Code; code != httpx.CodeAuthUserSuspended {
+		t.Fatalf("suspended exchange code = %q, want AUTH_USER_SUSPENDED", code)
+	}
+}
+
+func TestMeViewPassesThroughRepository(t *testing.T) {
+	f := newFixture(t)
+	f.repo.meViewFound = true
+	f.repo.meView = domain.MeView{
+		User:        domain.User{ID: "user-1", Email: "user@example.com", Role: domain.RoleUser, Status: domain.StatusActive},
+		Profile:     domain.Profile{DisplayName: "Dante"},
+		AuthMethods: []string{domain.AuthMethodGoogle, domain.AuthMethodPassword},
+	}
+	view, err := f.service.MeView(context.Background(), "user-1")
+	if err != nil {
+		t.Fatalf("MeView() error = %v", err)
+	}
+	if view.User.ID != "user-1" || view.Profile.DisplayName != "Dante" || len(view.AuthMethods) != 2 {
+		t.Fatalf("view = %+v, want the repository view", view)
+	}
+	f.repo.meViewFound = false
+	if _, err := f.service.MeView(context.Background(), "missing"); err == nil {
+		t.Fatal("MeView() = nil for a missing user, want an error")
 	}
 }
 

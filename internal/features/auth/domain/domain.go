@@ -27,11 +27,17 @@ const (
 // AuthMethodPassword names the password authentication method.
 const AuthMethodPassword = "PASSWORD"
 
+// AuthMethodGoogle names the Google OIDC authentication method.
+const AuthMethodGoogle = "GOOGLE"
+
 // userAgentMaxLength mirrors the reference kit's session metadata policy.
 const userAgentMaxLength = 512
 
 // ErrEmailExists reports an email uniqueness violation.
 var ErrEmailExists = errors.New("auth: email already exists")
+
+// ErrExternalIdentityExists reports an identity uniqueness violation.
+var ErrExternalIdentityExists = errors.New("auth: external identity already exists")
 
 // User is the authenticated account core.
 type User struct {
@@ -92,6 +98,47 @@ const (
 	ChangePasswordPasswordNotSet          ChangePasswordKind = "password_not_set"
 	ChangePasswordCurrentPasswordMismatch ChangePasswordKind = "current_password_mismatch"
 )
+
+// Profile is the display profile attached to a user.
+type Profile struct {
+	DisplayName string
+	GivenName   string
+	FamilyName  string
+}
+
+// MeView is the composed Me response core: user, profile, and auth methods.
+type MeView struct {
+	User        User
+	Profile     Profile
+	AuthMethods []string
+}
+
+// OidcVerifyKind reports how an OIDC token verification ended.
+type OidcVerifyKind string
+
+// OIDC verification kinds.
+const (
+	OidcVerifyVerified      OidcVerifyKind = "verified"
+	OidcVerifyInvalid       OidcVerifyKind = "invalid"
+	OidcVerifyNotConfigured OidcVerifyKind = "not_configured"
+)
+
+// OidcIdentity is a verified external identity.
+type OidcIdentity struct {
+	Provider      string
+	Subject       string
+	Email         string
+	EmailVerified bool
+	DisplayName   string
+	GivenName     string
+	FamilyName    string
+}
+
+// OidcVerification pairs a verification kind with the identity when verified.
+type OidcVerification struct {
+	Kind     OidcVerifyKind
+	Identity OidcIdentity
+}
 
 // NormalizeEmail trims and lowercases an email for storage and lookup.
 func NormalizeEmail(raw string) string {

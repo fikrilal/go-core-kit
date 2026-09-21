@@ -57,6 +57,8 @@ type Config struct {
 	AuthAudience               string `env:"AUTH_AUDIENCE"`
 	AuthSigningKeysJSON        string `env:"AUTH_SIGNING_KEYS_JSON"`
 	AuthSigningKeysJSONBase64  string `env:"AUTH_SIGNING_KEYS_JSON_BASE64"`
+	AuthOIDCGoogleClientIDs    string `env:"AUTH_OIDC_GOOGLE_CLIENT_IDS"`
+	AuthOIDCGoogleJWKSURL      string `env:"AUTH_OIDC_GOOGLE_JWKS_URL"`
 }
 
 // ProductionLike reports whether the environment requires real secrets.

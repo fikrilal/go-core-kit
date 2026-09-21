@@ -35,6 +35,42 @@ func (q *Queries) ClearSessionDeviceState(ctx context.Context, arg ClearSessionD
 	return err
 }
 
+const createExternalIdentity = `-- name: CreateExternalIdentity :exec
+INSERT INTO external_identities (id, provider, subject, email, user_id, created_at, updated_at)
+VALUES (
+    ?1,
+    ?2,
+    ?3,
+    NULLIF(?4, ''),
+    ?5,
+    ?6,
+    ?7
+)
+`
+
+type CreateExternalIdentityParams struct {
+	ID        string
+	Provider  string
+	Subject   string
+	Email     interface{}
+	UserID    string
+	CreatedAt utctime.Time
+	UpdatedAt utctime.Time
+}
+
+func (q *Queries) CreateExternalIdentity(ctx context.Context, arg CreateExternalIdentityParams) error {
+	_, err := q.db.ExecContext(ctx, createExternalIdentity,
+		arg.ID,
+		arg.Provider,
+		arg.Subject,
+		arg.Email,
+		arg.UserID,
+		arg.CreatedAt,
+		arg.UpdatedAt,
+	)
+	return err
+}
+
 const createPasswordCredential = `-- name: CreatePasswordCredential :exec
 INSERT INTO password_credentials (user_id, password_hash, created_at, updated_at)
 VALUES (?1, ?2, ?3, ?4)
@@ -140,6 +176,110 @@ func (q *Queries) CreateSession(ctx context.Context, arg CreateSessionParams) er
 	return err
 }
 
+const createUserProfile = `-- name: CreateUserProfile :exec
+INSERT INTO user_profiles (user_id, display_name, given_name, family_name, created_at, updated_at)
+VALUES (
+    ?1,
+    NULLIF(?2, ''),
+    NULLIF(?3, ''),
+    NULLIF(?4, ''),
+    ?5,
+    ?6
+)
+`
+
+type CreateUserProfileParams struct {
+	UserID      string
+	DisplayName interface{}
+	GivenName   interface{}
+	FamilyName  interface{}
+	CreatedAt   utctime.Time
+	UpdatedAt   utctime.Time
+}
+
+func (q *Queries) CreateUserProfile(ctx context.Context, arg CreateUserProfileParams) error {
+	_, err := q.db.ExecContext(ctx, createUserProfile,
+		arg.UserID,
+		arg.DisplayName,
+		arg.GivenName,
+		arg.FamilyName,
+		arg.CreatedAt,
+		arg.UpdatedAt,
+	)
+	return err
+}
+
+const getAuthMethods = `-- name: GetAuthMethods :many
+SELECT 'PASSWORD' AS method FROM password_credentials AS pc WHERE pc.user_id = ?1
+UNION
+SELECT ei.provider AS method FROM external_identities AS ei WHERE ei.user_id = ?1
+`
+
+func (q *Queries) GetAuthMethods(ctx context.Context, userID string) ([]string, error) {
+	rows, err := q.db.QueryContext(ctx, getAuthMethods, userID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []string
+	for rows.Next() {
+		var method string
+		if err := rows.Scan(&method); err != nil {
+			return nil, err
+		}
+		items = append(items, method)
+	}
+	if err := rows.Close(); err != nil {
+		return nil, err
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const getMeView = `-- name: GetMeView :one
+SELECT
+    u.id AS user_id,
+    u.email AS user_email,
+    u.email_verified_at AS user_email_verified_at,
+    u.role AS user_role,
+    u.status AS user_status,
+    p.display_name AS profile_display_name,
+    p.given_name AS profile_given_name,
+    p.family_name AS profile_family_name
+FROM users AS u
+LEFT JOIN user_profiles AS p ON p.user_id = u.id
+WHERE u.id = ?1
+`
+
+type GetMeViewRow struct {
+	UserID              string
+	UserEmail           string
+	UserEmailVerifiedAt utctime.Time
+	UserRole            string
+	UserStatus          string
+	ProfileDisplayName  sql.NullString
+	ProfileGivenName    sql.NullString
+	ProfileFamilyName   sql.NullString
+}
+
+func (q *Queries) GetMeView(ctx context.Context, userID string) (GetMeViewRow, error) {
+	row := q.db.QueryRowContext(ctx, getMeView, userID)
+	var i GetMeViewRow
+	err := row.Scan(
+		&i.UserID,
+		&i.UserEmail,
+		&i.UserEmailVerifiedAt,
+		&i.UserRole,
+		&i.UserStatus,
+		&i.ProfileDisplayName,
+		&i.ProfileGivenName,
+		&i.ProfileFamilyName,
+	)
+	return i, err
+}
+
 const getPasswordCredentialHash = `-- name: GetPasswordCredentialHash :one
 SELECT password_hash FROM password_credentials WHERE user_id = ?1
 `
@@ -217,6 +357,39 @@ func (q *Queries) GetSessionIDByRefreshTokenHash(ctx context.Context, tokenHash 
 	return session_id, err
 }
 
+const getUserByExternalIdentity = `-- name: GetUserByExternalIdentity :one
+SELECT u.id, u.email, u.email_verified_at, u.role, u.status
+FROM external_identities AS e
+JOIN users AS u ON u.id = e.user_id
+WHERE e.provider = ?1 AND e.subject = ?2
+`
+
+type GetUserByExternalIdentityParams struct {
+	Provider string
+	Subject  string
+}
+
+type GetUserByExternalIdentityRow struct {
+	ID              string
+	Email           string
+	EmailVerifiedAt utctime.Time
+	Role            string
+	Status          string
+}
+
+func (q *Queries) GetUserByExternalIdentity(ctx context.Context, arg GetUserByExternalIdentityParams) (GetUserByExternalIdentityRow, error) {
+	row := q.db.QueryRowContext(ctx, getUserByExternalIdentity, arg.Provider, arg.Subject)
+	var i GetUserByExternalIdentityRow
+	err := row.Scan(
+		&i.ID,
+		&i.Email,
+		&i.EmailVerifiedAt,
+		&i.Role,
+		&i.Status,
+	)
+	return i, err
+}
+
 const getUserForLogin = `-- name: GetUserForLogin :one
 SELECT
     u.id,
@@ -251,6 +424,17 @@ func (q *Queries) GetUserForLogin(ctx context.Context, email string) (GetUserFor
 		&i.PasswordHash,
 	)
 	return i, err
+}
+
+const getUserIDByEmail = `-- name: GetUserIDByEmail :one
+SELECT id FROM users WHERE email = ?1
+`
+
+func (q *Queries) GetUserIDByEmail(ctx context.Context, email string) (string, error) {
+	row := q.db.QueryRowContext(ctx, getUserIDByEmail, email)
+	var id string
+	err := row.Scan(&id)
+	return id, err
 }
 
 const markRefreshTokenRotated = `-- name: MarkRefreshTokenRotated :execrows
@@ -417,6 +601,23 @@ func (q *Queries) RevokeSessionRefreshTokens(ctx context.Context, arg RevokeSess
 		return 0, err
 	}
 	return result.RowsAffected()
+}
+
+const setUserEmailVerified = `-- name: SetUserEmailVerified :exec
+UPDATE users
+SET email_verified_at = ?1, updated_at = ?2
+WHERE id = ?3
+`
+
+type SetUserEmailVerifiedParams struct {
+	EmailVerifiedAt utctime.Time
+	UpdatedAt       utctime.Time
+	ID              string
+}
+
+func (q *Queries) SetUserEmailVerified(ctx context.Context, arg SetUserEmailVerifiedParams) error {
+	_, err := q.db.ExecContext(ctx, setUserEmailVerified, arg.EmailVerifiedAt, arg.UpdatedAt, arg.ID)
+	return err
 }
 
 const touchSession = `-- name: TouchSession :exec

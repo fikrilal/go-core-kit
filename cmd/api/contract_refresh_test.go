@@ -64,7 +64,7 @@ func TestContractAuthRefreshRotates(t *testing.T) {
 	if decoded.Data.RefreshToken == oldRefresh {
 		t.Error("refresh token was not rotated")
 	}
-	assertAccessToken(t, decoded.Data.AccessToken, userID)
+	assertAccessToken(t, decoded.Data.AccessToken, userID, false)
 
 	var revokedAt *string
 	var replacedByID *string

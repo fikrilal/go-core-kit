@@ -153,3 +153,59 @@ WHERE revoked_at IS NULL
       SELECT s.id FROM sessions AS s
       WHERE s.user_id = sqlc.arg(user_id) AND s.id != sqlc.arg(session_id)
   );
+
+-- name: GetUserIDByEmail :one
+SELECT id FROM users WHERE email = sqlc.arg(email);
+
+-- name: SetUserEmailVerified :exec
+UPDATE users
+SET email_verified_at = sqlc.arg(email_verified_at), updated_at = sqlc.arg(updated_at)
+WHERE id = sqlc.arg(id);
+
+-- name: GetUserByExternalIdentity :one
+SELECT u.id, u.email, u.email_verified_at, u.role, u.status
+FROM external_identities AS e
+JOIN users AS u ON u.id = e.user_id
+WHERE e.provider = sqlc.arg(provider) AND e.subject = sqlc.arg(subject);
+
+-- name: CreateExternalIdentity :exec
+INSERT INTO external_identities (id, provider, subject, email, user_id, created_at, updated_at)
+VALUES (
+    sqlc.arg(id),
+    sqlc.arg(provider),
+    sqlc.arg(subject),
+    NULLIF(sqlc.arg(email), ''),
+    sqlc.arg(user_id),
+    sqlc.arg(created_at),
+    sqlc.arg(updated_at)
+);
+
+-- name: CreateUserProfile :exec
+INSERT INTO user_profiles (user_id, display_name, given_name, family_name, created_at, updated_at)
+VALUES (
+    sqlc.arg(user_id),
+    NULLIF(sqlc.arg(display_name), ''),
+    NULLIF(sqlc.arg(given_name), ''),
+    NULLIF(sqlc.arg(family_name), ''),
+    sqlc.arg(created_at),
+    sqlc.arg(updated_at)
+);
+
+-- name: GetMeView :one
+SELECT
+    u.id AS user_id,
+    u.email AS user_email,
+    u.email_verified_at AS user_email_verified_at,
+    u.role AS user_role,
+    u.status AS user_status,
+    p.display_name AS profile_display_name,
+    p.given_name AS profile_given_name,
+    p.family_name AS profile_family_name
+FROM users AS u
+LEFT JOIN user_profiles AS p ON p.user_id = u.id
+WHERE u.id = sqlc.arg(user_id);
+
+-- name: GetAuthMethods :many
+SELECT 'PASSWORD' AS method FROM password_credentials AS pc WHERE pc.user_id = sqlc.arg(user_id)
+UNION
+SELECT ei.provider AS method FROM external_identities AS ei WHERE ei.user_id = sqlc.arg(user_id);

@@ -7,7 +7,10 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"slices"
 	"time"
+
+	"github.com/google/uuid"
 
 	"github.com/fikrilal/go-core-kit/internal/db/gen"
 	"github.com/fikrilal/go-core-kit/internal/features/auth/domain"
@@ -288,6 +291,147 @@ func (r *Repository) ChangePasswordAndRevokeOtherSessions(ctx context.Context, i
 		return "", fmt.Errorf("change password: %w", err)
 	}
 	return kind, nil
+}
+
+// FindUserIDByEmail resolves a user id by email.
+func (r *Repository) FindUserIDByEmail(ctx context.Context, email string) (string, bool, error) {
+	id, err := r.queries.GetUserIDByEmail(ctx, email)
+	if errors.Is(err, db.ErrNoRows) {
+		return "", false, nil
+	}
+	if err != nil {
+		return "", false, fmt.Errorf("find user id by email: %w", err)
+	}
+	return id, true, nil
+}
+
+// FindUserByExternalIdentity resolves the user behind a provider identity.
+func (r *Repository) FindUserByExternalIdentity(ctx context.Context, provider, subject string) (domain.User, bool, error) {
+	row, err := r.queries.GetUserByExternalIdentity(ctx, gen.GetUserByExternalIdentityParams{
+		Provider: provider,
+		Subject:  subject,
+	})
+	if errors.Is(err, db.ErrNoRows) {
+		return domain.User{}, false, nil
+	}
+	if err != nil {
+		return domain.User{}, false, fmt.Errorf("find user by external identity: %w", err)
+	}
+	return domain.User{
+		ID:            row.ID,
+		Email:         row.Email,
+		EmailVerified: !row.EmailVerifiedAt.IsZero(),
+		Role:          row.Role,
+		Status:        row.Status,
+	}, true, nil
+}
+
+// CreateUserWithExternalIdentity creates the verified user, profile, and identity atomically.
+func (r *Repository) CreateUserWithExternalIdentity(ctx context.Context, in ports.CreateOidcUserInput) (domain.User, error) {
+	now := utctime.Time{Time: in.Now}
+	err := r.database.InTx(ctx, func(tx db.Tx) error {
+		queries := gen.New(tx)
+		if _, err := queries.CreateUser(ctx, gen.CreateUserParams{
+			ID:        in.ID,
+			Email:     in.Email,
+			CreatedAt: now,
+			UpdatedAt: now,
+		}); err != nil {
+			if db.IsUniqueViolation(err) {
+				return domain.ErrEmailExists
+			}
+			return fmt.Errorf("create user: %w", err)
+		}
+		if err := queries.SetUserEmailVerified(ctx, gen.SetUserEmailVerifiedParams{
+			EmailVerifiedAt: now,
+			UpdatedAt:       now,
+			ID:              in.ID,
+		}); err != nil {
+			return fmt.Errorf("mark user verified: %w", err)
+		}
+		if err := queries.CreateUserProfile(ctx, gen.CreateUserProfileParams{
+			UserID:      in.ID,
+			DisplayName: in.Profile.DisplayName,
+			GivenName:   in.Profile.GivenName,
+			FamilyName:  in.Profile.FamilyName,
+			CreatedAt:   now,
+			UpdatedAt:   now,
+		}); err != nil {
+			return fmt.Errorf("create user profile: %w", err)
+		}
+		identityID, err := uuid.NewV7()
+		if err != nil {
+			return fmt.Errorf("generate identity id: %w", err)
+		}
+		if err := queries.CreateExternalIdentity(ctx, gen.CreateExternalIdentityParams{
+			ID:        identityID.String(),
+			Provider:  in.Provider,
+			Subject:   in.Subject,
+			Email:     in.Email,
+			UserID:    in.ID,
+			CreatedAt: now,
+			UpdatedAt: now,
+		}); err != nil {
+			if db.IsUniqueViolation(err) {
+				return domain.ErrExternalIdentityExists
+			}
+			return fmt.Errorf("create external identity: %w", err)
+		}
+		return nil
+	})
+	if err != nil {
+		return domain.User{}, fmt.Errorf("create user with external identity: %w", err)
+	}
+	return domain.User{
+		ID:            in.ID,
+		Email:         in.Email,
+		EmailVerified: true,
+		Role:          domain.RoleUser,
+		Status:        domain.StatusActive,
+	}, nil
+}
+
+// GetMeView composes the user, profile, and auth methods for Me responses.
+func (r *Repository) GetMeView(ctx context.Context, userID string) (domain.MeView, bool, error) {
+	row, err := r.queries.GetMeView(ctx, userID)
+	if errors.Is(err, db.ErrNoRows) {
+		return domain.MeView{}, false, nil
+	}
+	if err != nil {
+		return domain.MeView{}, false, fmt.Errorf("get me view: %w", err)
+	}
+	methods, err := r.queries.GetAuthMethods(ctx, userID)
+	if err != nil {
+		return domain.MeView{}, false, fmt.Errorf("get auth methods: %w", err)
+	}
+	view := domain.MeView{
+		User: domain.User{
+			ID:            row.UserID,
+			Email:         row.UserEmail,
+			EmailVerified: !row.UserEmailVerifiedAt.IsZero(),
+			Role:          row.UserRole,
+			Status:        row.UserStatus,
+		},
+		Profile: domain.Profile{
+			DisplayName: row.ProfileDisplayName.String,
+			GivenName:   row.ProfileGivenName.String,
+			FamilyName:  row.ProfileFamilyName.String,
+		},
+		AuthMethods: orderAuthMethods(methods),
+	}
+	return view, true, nil
+}
+
+func orderAuthMethods(methods []string) []string {
+	precedence := map[string]int{
+		domain.AuthMethodPassword: 0,
+		domain.AuthMethodGoogle:   1,
+	}
+	ordered := slices.Clone(methods)
+	slices.SortStableFunc(ordered, func(a, b string) int {
+		return precedence[a] - precedence[b]
+	})
+	return ordered
 }
 
 func revokeSessionFamily(ctx context.Context, queries *gen.Queries, sessionID string, now utctime.Time) error {

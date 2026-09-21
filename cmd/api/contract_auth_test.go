@@ -61,6 +61,11 @@ type authResponse struct {
 
 func newAuthFixture(t *testing.T) *authFixture {
 	t.Helper()
+	return newAuthFixtureWith(t, nil)
+}
+
+func newAuthFixtureWith(t *testing.T, mutate func(cfg *config.Config)) *authFixture {
+	t.Helper()
 	suite := contracttest.New(t)
 	database := db.MustOpen(filepath.Join(t.TempDir(), "auth.db"))
 	t.Cleanup(func() { _ = database.Close() })
@@ -71,6 +76,9 @@ func newAuthFixture(t *testing.T) *authFixture {
 	rdb := redis.MustOpen("redis://" + mini.Addr() + "/0")
 	t.Cleanup(func() { _ = rdb.Close() })
 	cfg := testConfig(t)
+	if mutate != nil {
+		mutate(&cfg)
+	}
 	logger := logging.New(config.LogLevelError, config.LogFormatJSON, io.Discard)
 	server, err := newServer(cfg, logger, database, rdb)
 	if err != nil {
@@ -124,7 +132,7 @@ func decodeAuthResponse(t *testing.T, body []byte) authResponse {
 	return decoded
 }
 
-func assertAccessToken(t *testing.T, token, userID string) string {
+func assertAccessToken(t *testing.T, token, userID string, wantEmailVerified bool) string {
 	t.Helper()
 	message, err := jws.Parse([]byte(token))
 	if err != nil {
@@ -158,8 +166,8 @@ func assertAccessToken(t *testing.T, token, userID string) string {
 	if payload.Type != "access" || payload.ExpiresAt-payload.IssuedAt != 900 {
 		t.Errorf("access token typ/ttl = %q/%d, want access/900", payload.Type, payload.ExpiresAt-payload.IssuedAt)
 	}
-	if payload.EmailVerified {
-		t.Error("access token email_verified = true, want false for a fresh registration")
+	if payload.EmailVerified != wantEmailVerified {
+		t.Errorf("access token email_verified = %v, want %v", payload.EmailVerified, wantEmailVerified)
 	}
 	if len(payload.Roles) != 1 || payload.Roles[0] != "USER" {
 		t.Errorf("access token roles = %v, want [USER]", payload.Roles)
@@ -195,7 +203,7 @@ func TestContractAuthRegisterIssuesSession(t *testing.T) {
 		t.Errorf("authMethods = %v, want [PASSWORD]", user.AuthMethods)
 	}
 
-	sessionID := assertAccessToken(t, decoded.Data.AccessToken, user.ID)
+	sessionID := assertAccessToken(t, decoded.Data.AccessToken, user.ID, false)
 	if sessionID == "" {
 		t.Fatal("no session id in access token")
 	}
@@ -232,7 +240,7 @@ func TestContractAuthLoginAndEmailNormalization(t *testing.T) {
 	if decoded.Data.User.ID != registered.Data.User.ID {
 		t.Errorf("login user id = %q, want %q", decoded.Data.User.ID, registered.Data.User.ID)
 	}
-	assertAccessToken(t, decoded.Data.AccessToken, registered.Data.User.ID)
+	assertAccessToken(t, decoded.Data.AccessToken, registered.Data.User.ID, false)
 
 	var count int
 	if err := f.database.SQL().QueryRowContext(t.Context(),

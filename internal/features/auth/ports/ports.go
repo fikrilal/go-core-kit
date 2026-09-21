@@ -50,6 +50,16 @@ type ChangePasswordInput struct {
 	Now                         time.Time
 }
 
+// CreateOidcUserInput carries an OIDC sign-up.
+type CreateOidcUserInput struct {
+	ID       string
+	Email    string
+	Profile  domain.Profile
+	Provider string
+	Subject  string
+	Now      time.Time
+}
+
 // Repository is the auth feature's persistence boundary.
 type Repository interface {
 	CreateUserWithPassword(ctx context.Context, in CreateUserInput) (domain.User, error)
@@ -60,6 +70,15 @@ type Repository interface {
 	RevokeSessionByRefreshToken(ctx context.Context, tokenHash string, now time.Time) (bool, error)
 	FindPasswordCredential(ctx context.Context, userID string) (string, bool, error)
 	ChangePasswordAndRevokeOtherSessions(ctx context.Context, in ChangePasswordInput) (domain.ChangePasswordKind, error)
+	FindUserIDByEmail(ctx context.Context, email string) (string, bool, error)
+	FindUserByExternalIdentity(ctx context.Context, provider, subject string) (domain.User, bool, error)
+	CreateUserWithExternalIdentity(ctx context.Context, in CreateOidcUserInput) (domain.User, error)
+	GetMeView(ctx context.Context, userID string) (domain.MeView, bool, error)
+}
+
+// OidcVerifier verifies OIDC id_tokens for a provider.
+type OidcVerifier interface {
+	VerifyIDToken(ctx context.Context, provider, idToken string) (domain.OidcVerification, error)
 }
 
 // PasswordHasher hashes and verifies passwords.
