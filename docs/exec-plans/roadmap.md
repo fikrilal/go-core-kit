@@ -27,7 +27,7 @@ Rules: findings gate on **new vs baseline**, and updating a baseline requires ex
 
 ## Current Focus
 
-**Phase 3 in progress (3.1–3.5, 3.8 landed).** 3.6/3.7 await the 5.2 worker; next: **3.9 forbidigo rules** or **oidc.connect**.
+**Phase 3 essential tasks landed (3.1–3.5, 3.8, 3.9).** 3.6/3.7 await the 5.2 worker; next: **`oidc.connect`** or **Phase 4 — me slice**.
 
 ## Phase 0 — Foundation (complete, 2026-10-10)
 
@@ -82,7 +82,7 @@ Objective: the full auth surface, contract-green.
 - [ ] 3.6 Email verification + resend *(needs 5.2)*
 - [ ] 3.7 Password reset request/confirm *(needs 5.2)*
 - [x] 3.8 OIDC exchange — landed 2026-10-11; Google id_token verification (JWKS-cached adapter), identity resolve/create with link-required collisions, unified MeView; allowlist 26 → 25
-- [ ] 3.9 `forbidigo` rules land with the first feature (no `time.Now()` in services, no raw JSON writes)
+- [x] 3.9 `forbidigo` rules land with the first feature (no `time.Now()` in services, no raw JSON writes) — landed 2026-10-11; rules proven live via gate honesty (driver/raw-JSON/time.Now/platform→features fixtures); six honesty scenarios run in `make verify`
 
 Exit gate: contract suite green for all auth operations; rotation/reuse parity assertions pass.
 
