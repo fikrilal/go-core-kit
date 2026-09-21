@@ -19,6 +19,7 @@ go-core-kit is a production-grade Go backend template that serves the same wire 
 - Proposals (historical, not source of truth)
   - `_WIP/go-core-kit-architecture-proposal.md`
   - `_WIP/go-core-kit-dual-engine-data-layer-proposal.md`
+  - `_WIP/go-core-kit-readability-proposal.md` — draft; implementation taste against mobile-core-kit
 
 ## Doc Conventions
 

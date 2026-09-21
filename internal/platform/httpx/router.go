@@ -25,13 +25,18 @@ type Router struct {
 // RouterOption configures optional router behavior.
 type RouterOption func(*Router)
 
-// NewRouter builds the router with request id, access logging, and panic recovery.
+// NewRouter builds the router with request id, access logging, panic recovery, and a body limit.
 func NewRouter(logger *slog.Logger, opts ...RouterOption) *Router {
 	mux := http.NewServeMux()
 	mux.HandleFunc("/", notFound)
+	// Auth and idempotency wrap single routes, guard outside.
+	handler := bodyLimit(mux)
+	handler = recoverPanics(handler)
+	handler = accessLog(logger, handler)
+	handler = requestID(handler)
 	router := &Router{
 		mux:     mux,
-		handler: requestID(accessLog(logger, recoverPanics(bodyLimit(mux)))),
+		handler: handler,
 	}
 	for _, opt := range opts {
 		opt(router)

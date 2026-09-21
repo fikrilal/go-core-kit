@@ -18,6 +18,8 @@ const (
 	MaxSortFields    = 3
 )
 
+// filter[field] and filter[field][op]. The op group is lowercase only, so
+// filter[status][GTE] is "not a valid filter", not "operator not allowed".
 var filterKeyPattern = regexp.MustCompile(`^filter\[([A-Za-z0-9_]+)\](?:\[([a-z]+)\])?$`)
 
 // ListQuery is the parsed list request: pagination, sort, filters, and search.

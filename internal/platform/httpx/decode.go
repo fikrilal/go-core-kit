@@ -21,6 +21,7 @@ func Decode(r *http.Request, v any) error {
 	if err := dec.Decode(v); err != nil {
 		return invalidBody()
 	}
+	// Reject a second JSON value. DisallowUnknownFields does not.
 	if err := dec.Decode(&struct{}{}); !errors.Is(err, io.EOF) {
 		return invalidBody()
 	}
@@ -29,14 +30,16 @@ func Decode(r *http.Request, v any) error {
 
 func newValidator() *validator.Validate {
 	v := validator.New(validator.WithRequiredStructEnabled())
-	v.RegisterTagNameFunc(func(fld reflect.StructField) string {
-		name := strings.SplitN(fld.Tag.Get("json"), ",", 2)[0]
-		if name == "-" {
-			return ""
-		}
-		return name
-	})
+	v.RegisterTagNameFunc(jsonFieldName)
 	return v
+}
+
+func jsonFieldName(fld reflect.StructField) string {
+	name := strings.SplitN(fld.Tag.Get("json"), ",", 2)[0]
+	if name == "-" {
+		return ""
+	}
+	return name
 }
 
 func validateStruct(v any) error {

@@ -1,7 +1,7 @@
 # Roadmap
 
 - Status: living document — update as phases and tasks land
-- Updated: 2026-10-10
+- Updated: 2026-10-11
 - Scope: high-level phases, task tracking, and exit gates. Details live in per-task execution plans.
 
 ## How To Use
@@ -27,7 +27,13 @@ Rules: findings gate on **new vs baseline**, and updating a baseline requires ex
 
 ## Current Focus
 
-**Phase 3 essential tasks landed (3.1–3.5, 3.8, 3.9).** 3.6/3.7 await the 5.2 worker; next: **`oidc.connect`** or **Phase 4 — me slice**.
+**Phase 3 essential tasks landed (3.1–3.5, 3.8, 3.9).** 3.6/3.7 await the 5.2 worker; next product work: **`oidc.connect`** or **Phase 4 — me slice**.
+
+Readability note 01 is in three plans. Product work stays paused until those finish.
+
+- [x] R1 httpx taste — `completed/r1-httpx-taste.md`
+- [ ] R2 httpx problem details (B1, B3) — `active/r2-httpx-problem-details.md`
+- [ ] R3 httpx idempotency caller scope (B2) — `active/r3-httpx-idempotency-scope.md`
 
 ## Phase 0 — Foundation (complete, 2026-10-10)
 

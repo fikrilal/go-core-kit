@@ -169,13 +169,14 @@ func TestIdempotencyDoesNotCacheErrors(t *testing.T) {
 
 func TestIdempotencyReleasesLock(t *testing.T) {
 	router, server := testIdempotentRouter(t)
-	router.HandleIdempotent(testOp("POST", "/v1/things"), func(w http.ResponseWriter, _ *http.Request) {
+	op := testOp("POST", "/v1/things")
+	router.HandleIdempotent(op, func(w http.ResponseWriter, _ *http.Request) {
 		httpx.NoContent(w)
 	})
 
 	router.ServeHTTP(httptest.NewRecorder(), idempotentRequest(t, "key-1"))
 
-	lockKey := redis.Key("idempotency", "POST /v1/things", "key-1") + ":lock"
+	lockKey := redis.Key("idempotency", op.ID, "key-1") + ":lock"
 	if server.Exists(lockKey) {
 		t.Errorf("lock key %q still present after completion", lockKey)
 	}

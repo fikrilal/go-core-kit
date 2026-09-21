@@ -63,7 +63,13 @@ func (s *idempotencyStore) wrap(scope string, next http.HandlerFunc) http.Handle
 
 func (s *idempotencyStore) handle(w http.ResponseWriter, r *http.Request, scope, key string, next http.HandlerFunc) {
 	responseKey := redis.Key("idempotency", scope, key)
-	if s.tryReplay(w, r, responseKey) {
+	cached, found, err := s.loadCached(r.Context(), responseKey)
+	if err != nil {
+		WriteError(w, r, err)
+		return
+	}
+	if found {
+		writeCached(w, cached)
 		return
 	}
 	lockKey := responseKey + ":lock"
@@ -73,7 +79,13 @@ func (s *idempotencyStore) handle(w http.ResponseWriter, r *http.Request, scope,
 		return
 	}
 	if !acquired {
-		if s.tryReplay(w, r, responseKey) {
+		cached, found, err = s.loadCached(r.Context(), responseKey)
+		if err != nil {
+			WriteError(w, r, err)
+			return
+		}
+		if found {
+			writeCached(w, cached)
 			return
 		}
 		WriteError(w, r, &ProblemError{
@@ -90,20 +102,22 @@ func (s *idempotencyStore) handle(w http.ResponseWriter, r *http.Request, scope,
 	s.store(r, responseKey, recorder)
 }
 
-func (s *idempotencyStore) tryReplay(w http.ResponseWriter, r *http.Request, responseKey string) bool {
-	raw, found, err := s.client.Get(r.Context(), responseKey)
+func (s *idempotencyStore) loadCached(ctx context.Context, responseKey string) (cachedResponse, bool, error) {
+	raw, found, err := s.client.Get(ctx, responseKey)
 	if err != nil {
-		WriteError(w, r, fmt.Errorf("idempotency read: %w", err))
-		return true
+		return cachedResponse{}, false, fmt.Errorf("idempotency read: %w", err)
 	}
 	if !found {
-		return false
+		return cachedResponse{}, false, nil
 	}
 	var cached cachedResponse
 	if err := json.Unmarshal([]byte(raw), &cached); err != nil {
-		WriteError(w, r, fmt.Errorf("idempotency decode: %w", err))
-		return true
+		return cachedResponse{}, false, fmt.Errorf("idempotency decode: %w", err)
 	}
+	return cached, true, nil
+}
+
+func writeCached(w http.ResponseWriter, cached cachedResponse) {
 	w.Header().Set("Idempotency-Replayed", "true")
 	if cached.ContentType != "" {
 		w.Header().Set("Content-Type", cached.ContentType)
@@ -113,7 +127,6 @@ func (s *idempotencyStore) tryReplay(w http.ResponseWriter, r *http.Request, res
 	}
 	w.WriteHeader(cached.Status)
 	_, _ = w.Write(cached.Body)
-	return true
 }
 
 func (s *idempotencyStore) store(r *http.Request, responseKey string, recorder *recordingWriter) {
@@ -133,6 +146,7 @@ func (s *idempotencyStore) store(r *http.Request, responseKey string, recorder *
 }
 
 func (s *idempotencyStore) releaseLock(r *http.Request, lockKey string) {
+	// WithoutCancel so a disconnected client still deletes the lock.
 	if err := s.client.Del(context.WithoutCancel(r.Context()), lockKey); err != nil {
 		Logger(r).Error("release idempotency lock", slog.Any("error", err))
 	}
