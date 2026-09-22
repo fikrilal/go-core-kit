@@ -1,10 +1,10 @@
 # Section note: `internal/platform/httpx`
 
-- Status: Taste and B4 shipped in R1. B1, B2, and B3 still open.
+- Status: Taste, B4, and B3 shipped. B1 blocked on the contract. B2 still open.
 - Date: 2026-10-11
 - Scope: every hand-written file in `internal/platform/httpx` (8 production files, 8 test files)
 - Ruler: `_WIP/go-core-kit-readability-proposal.md`
-- Code changes: R1 applied 2026-10-11. See `docs/exec-plans/completed/r1-httpx-taste.md`.
+- Code changes: R1 and R2 applied 2026-10-11. See `docs/exec-plans/completed/r1-httpx-taste.md` and `docs/exec-plans/completed/r2-httpx-problem-details.md`.
 
 ## Verdict
 
@@ -321,7 +321,7 @@ Not in this acceptance:
 
 ## Verification
 
-Audit probes below ran before any edit. R1 then landed the taste list and B4. `go test ./internal/platform/httpx -count=1` and `make verify` both passed on 2026-10-11. Evidence is in `docs/exec-plans/completed/r1-httpx-taste.md`.
+Audit probes below ran before any edit. R1 then landed the taste list and B4. R2 landed the oversized-body detail and stopped B1 because the snapshot has no 405 response and no method-not-allowed code. Evidence is in `docs/exec-plans/completed/r1-httpx-taste.md` and `docs/exec-plans/completed/r2-httpx-problem-details.md`.
 
 Probe, deleted afterward (`internal/platform/httpx/probe_audit_test.go` is not part of the tree):
 

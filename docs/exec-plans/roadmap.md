@@ -32,7 +32,7 @@ Rules: findings gate on **new vs baseline**, and updating a baseline requires ex
 Readability note 01 is in three plans. Product work stays paused until those finish.
 
 - [x] R1 httpx taste — `completed/r1-httpx-taste.md`
-- [ ] R2 httpx problem details (B1, B3) — `active/r2-httpx-problem-details.md`
+- [x] R2 httpx problem details (B3 shipped, B1 blocked) — `completed/r2-httpx-problem-details.md`
 - [ ] R3 httpx idempotency caller scope (B2) — `active/r3-httpx-idempotency-scope.md`
 
 ## Phase 0 — Foundation (complete, 2026-10-10)

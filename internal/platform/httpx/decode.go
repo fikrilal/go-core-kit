@@ -19,11 +19,11 @@ func Decode(r *http.Request, v any) error {
 	dec := json.NewDecoder(r.Body)
 	dec.DisallowUnknownFields()
 	if err := dec.Decode(v); err != nil {
-		return invalidBody()
+		return decodeBodyError(err)
 	}
 	// Reject a second JSON value. DisallowUnknownFields does not.
 	if err := dec.Decode(&struct{}{}); !errors.Is(err, io.EOF) {
-		return invalidBody()
+		return decodeBodyError(err)
 	}
 	return validateStruct(v)
 }
@@ -76,6 +76,14 @@ func validationMessage(fe validator.FieldError) string {
 		return "must have length " + fe.Param()
 	}
 	return "is invalid"
+}
+
+func decodeBodyError(err error) *ProblemError {
+	var tooLarge *http.MaxBytesError
+	if errors.As(err, &tooLarge) {
+		return &ProblemError{Status: http.StatusBadRequest, Code: CodeValidationFailed, Detail: "request body is too large"}
+	}
+	return invalidBody()
 }
 
 func invalidBody() *ProblemError {

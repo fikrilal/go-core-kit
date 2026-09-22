@@ -160,4 +160,14 @@ func TestRequestBodyLimit(t *testing.T) {
 	if rec.Code != http.StatusBadRequest {
 		t.Fatalf("status = %d, want 400 for an oversized body", rec.Code)
 	}
+	var problem problemResponse
+	if err := json.Unmarshal(rec.Body.Bytes(), &problem); err != nil {
+		t.Fatalf("decode body: %v", err)
+	}
+	if problem.Code != "VALIDATION_FAILED" {
+		t.Errorf("code = %q, want VALIDATION_FAILED", problem.Code)
+	}
+	if problem.Detail != "request body is too large" {
+		t.Errorf("detail = %q, want request body is too large", problem.Detail)
+	}
 }
