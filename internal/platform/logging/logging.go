@@ -61,6 +61,8 @@ func slogLevel(l config.LogLevel) slog.Level {
 	return slog.LevelInfo
 }
 
+// redact covers the attribute key only. A nested map, a slog.Any value,
+// message text, and a camelCase key such as accessToken are left as written.
 func redact(_ []string, a slog.Attr) slog.Attr {
 	if _, ok := sensitiveKeys[strings.ToLower(a.Key)]; ok {
 		a.Value = slog.StringValue(redactedMarker)

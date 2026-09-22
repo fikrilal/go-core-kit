@@ -35,6 +35,11 @@ Readability note 01 has landed.
 - [x] R2 httpx problem details (B3 shipped, B1 blocked) — `completed/r2-httpx-problem-details.md`
 - [x] R3 httpx idempotency caller scope (B2) — `completed/r3-httpx-idempotency-scope.md`
 
+Readability note 02 is in two plans.
+
+- [x] N2 config order and redact limit — `completed/n2-config-redact.md`
+- [ ] N2 health probes — `active/n2-health-probes.md`
+
 ## Phase 0 — Foundation (complete, 2026-10-10)
 
 - [x] Toolchain: Go 1.27.2 + golangci-lint v2.14.0 (user-local; lint version pinned in CI)

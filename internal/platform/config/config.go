@@ -62,6 +62,7 @@ type Config struct {
 }
 
 // ProductionLike reports whether the environment requires real secrets.
+// platform/auth NewKeyRing and NewVerifier enforce them. Validate does not.
 func (c Config) ProductionLike() bool {
 	return c.AppEnv == EnvStaging || c.AppEnv == EnvProd
 }
@@ -104,16 +105,20 @@ func (c Config) Validate() error {
 	if c.AppEnv == EnvProd && c.LogFormat != LogFormatJSON {
 		return fmt.Errorf("LOG_FORMAT must be %q when APP_ENV is prod", LogFormatJSON)
 	}
-	for name, value := range map[string]int{
-		"AUTH_ACCESS_TOKEN_TTL_SECONDS":  c.AuthAccessTokenTTLSeconds,
-		"AUTH_REFRESH_TOKEN_TTL_SECONDS": c.AuthRefreshTokenTTLSeconds,
-		"AUTH_PASSWORD_MIN_LENGTH":       c.AuthPasswordMinLength,
-		"AUTH_LOGIN_MAX_ATTEMPTS":        c.AuthLoginMaxAttempts,
-		"AUTH_LOGIN_WINDOW_SECONDS":      c.AuthLoginWindowSeconds,
-		"AUTH_LOGIN_BLOCK_SECONDS":       c.AuthLoginBlockSeconds,
-	} {
-		if value < 1 {
-			return fmt.Errorf("%s must be a positive number, got %d", name, value)
+	authIntegers := []struct {
+		name  string
+		value int
+	}{
+		{"AUTH_ACCESS_TOKEN_TTL_SECONDS", c.AuthAccessTokenTTLSeconds},
+		{"AUTH_REFRESH_TOKEN_TTL_SECONDS", c.AuthRefreshTokenTTLSeconds},
+		{"AUTH_PASSWORD_MIN_LENGTH", c.AuthPasswordMinLength},
+		{"AUTH_LOGIN_MAX_ATTEMPTS", c.AuthLoginMaxAttempts},
+		{"AUTH_LOGIN_WINDOW_SECONDS", c.AuthLoginWindowSeconds},
+		{"AUTH_LOGIN_BLOCK_SECONDS", c.AuthLoginBlockSeconds},
+	}
+	for _, check := range authIntegers {
+		if check.value < 1 {
+			return fmt.Errorf("%s must be a positive number, got %d", check.name, check.value)
 		}
 	}
 	return nil

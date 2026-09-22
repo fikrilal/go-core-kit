@@ -112,6 +112,21 @@ func TestLoadFailsOnPortOutOfRange(t *testing.T) {
 	}
 }
 
+func TestLoadAuthIntegersFailInOrder(t *testing.T) {
+	setRequired(t)
+	t.Setenv("AUTH_ACCESS_TOKEN_TTL_SECONDS", "0")
+	t.Setenv("AUTH_PASSWORD_MIN_LENGTH", "0")
+
+	_, err := config.Load()
+	if err == nil {
+		t.Fatal("Load() error = nil, want the first auth integer")
+	}
+	const want = "AUTH_ACCESS_TOKEN_TTL_SECONDS must be a positive number, got 0"
+	if err.Error() != want {
+		t.Errorf("Load() error = %q, want %q", err.Error(), want)
+	}
+}
+
 func TestLoadProdRequiresJSONLogs(t *testing.T) {
 	setRequired(t)
 	t.Setenv("APP_ENV", "prod")

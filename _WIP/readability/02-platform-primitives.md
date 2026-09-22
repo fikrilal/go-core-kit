@@ -1,11 +1,11 @@
 # Section note: platform primitives
 
-- Status: Draft, waiting for acceptance
+- Status: Config order and the redact limit shipped in N2. Health probes still open. Nested redaction and `version` still need a yes.
 - Date: 2026-10-11
 - Scope: `internal/platform/config`, `logging`, `clock`, `health`, `version`
 - Ruler: `_WIP/go-core-kit-readability-proposal.md`
-- Code changes: none in this pass
-- Previous note: `_WIP/readability/01-platform-httpx.md` stays unapplied
+- Code changes: config order and redact comment applied 2026-10-11. See `docs/exec-plans/completed/n2-config-redact.md`.
+- Previous note: `_WIP/readability/01-platform-httpx.md` is applied.
 
 ## Verdict
 
