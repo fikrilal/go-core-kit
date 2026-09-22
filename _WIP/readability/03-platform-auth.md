@@ -1,11 +1,11 @@
 # Section note: `internal/platform/auth`
 
-- Status: Draft, waiting for acceptance
+- Status: Comments shipped in N3. B1, B2, and B3 still need a yes.
 - Date: 2026-10-11
 - Scope: `auth.go`, `verifier.go`, `guard.go`, and their three test files
 - Ruler: `_WIP/go-core-kit-readability-proposal.md`
-- Code changes: none in this pass
-- Earlier notes stay unapplied: `01-platform-httpx.md`, `02-platform-primitives.md`
+- Code changes: comments applied 2026-10-11. See `docs/exec-plans/completed/n3-auth-comments.md`.
+- Earlier notes 01 and 02 are applied.
 
 ## Verdict
 
@@ -190,7 +190,7 @@ Not in this acceptance:
 
 ## Verification
 
-No production edit. `make verify` was not run.
+The audit probe below ran before any edit. N3 then landed the three comments. Evidence is in `docs/exec-plans/completed/n3-auth-comments.md`.
 
 Probe, deleted afterward (`internal/platform/auth/probe_audit_test.go` is not in the tree):
 

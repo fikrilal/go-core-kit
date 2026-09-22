@@ -39,8 +39,10 @@ type KeyRingOptions struct {
 	ProductionLike bool
 }
 
-// NewKeyRing loads a signing key from a JWK set, falling back to an ephemeral
-// key outside production-like environments. Staging and production require keys.
+// NewKeyRing loads a signing key from a JWK set. After trim, KeysJSON wins
+// over KeysJSONBase64. A set with no signer is an error in production. Any
+// other environment drops that set, including its public keys, and mints an
+// ephemeral Ed25519 key. Staging and production require keys.
 func NewKeyRing(opts KeyRingOptions) (*KeyRing, error) {
 	raw := strings.TrimSpace(opts.KeysJSON)
 	if raw == "" && strings.TrimSpace(opts.KeysJSONBase64) != "" {
@@ -78,6 +80,9 @@ func NewKeyRing(opts KeyRingOptions) (*KeyRing, error) {
 	return ring, nil
 }
 
+// addKey publishes a usable key. The first private key signs. Later private
+// keys are published and can verify, and they do not sign. A public-only key
+// is published when some other key signs. A bad key returns without an error.
 func (k *KeyRing) addKey(key jwk.Key) {
 	kid, ok := key.KeyID()
 	if !ok || strings.TrimSpace(kid) == "" {

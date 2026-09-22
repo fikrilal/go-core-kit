@@ -47,6 +47,7 @@ func (g *Guard) Require(next http.Handler) http.Handler {
 				httpx.WriteError(w, r, unauthorized())
 				return
 			}
+			// A client token never reaches this branch. It is a broken verifier.
 			httpx.WriteError(w, r, err)
 			return
 		}

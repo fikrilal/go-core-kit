@@ -91,6 +91,8 @@ func (v *Verifier) verifiedPayload(token string) ([]byte, error) {
 	return message.Payload(), nil
 }
 
+// principalFromClaims reads a map because aud is a string or an array.
+// accessTokenPayload can only emit a string.
 func (v *Verifier) principalFromClaims(claims map[string]any) (Principal, error) {
 	nowSeconds := float64(v.clock.Now().Unix())
 	issuedAt, ok := numberClaim(claims, "iat")

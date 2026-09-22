@@ -40,6 +40,10 @@ Readability note 02 is in two plans.
 - [x] N2 config order and redact limit — `completed/n2-config-redact.md`
 - [x] N2 health probes — `completed/n2-health-probes.md`
 
+Readability note 03 starts with comments. The auth bugs wait for a yes.
+
+- [x] N3 auth comments — `completed/n3-auth-comments.md`
+
 ## Phase 0 — Foundation (complete, 2026-10-10)
 
 - [x] Toolchain: Go 1.27.2 + golangci-lint v2.14.0 (user-local; lint version pinned in CI)
