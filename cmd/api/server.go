@@ -24,7 +24,7 @@ const shutdownTimeout = 10 * time.Second
 
 func newServer(cfg config.Config, logger *slog.Logger, database *db.Database, rdb *redis.Client) (*http.Server, error) {
 	router := httpx.NewRouter(logger, httpx.WithIdempotency(rdb))
-	health.New(logger,
+	health.New(
 		health.Check{Name: "database", Verify: database.Ping},
 		health.Check{Name: "redis", Verify: rdb.Ping},
 	).Register(router)

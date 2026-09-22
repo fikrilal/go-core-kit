@@ -1,10 +1,10 @@
 # Section note: platform primitives
 
-- Status: Config order and the redact limit shipped in N2. Health probes still open. Nested redaction and `version` still need a yes.
+- Status: Both N2 plans shipped. Nested redaction and `version` still need a yes.
 - Date: 2026-10-11
 - Scope: `internal/platform/config`, `logging`, `clock`, `health`, `version`
 - Ruler: `_WIP/go-core-kit-readability-proposal.md`
-- Code changes: config order and redact comment applied 2026-10-11. See `docs/exec-plans/completed/n2-config-redact.md`.
+- Code changes: both N2 plans applied 2026-10-11. See `docs/exec-plans/completed/n2-config-redact.md` and `docs/exec-plans/completed/n2-health-probes.md`.
 - Previous note: `_WIP/readability/01-platform-httpx.md` is applied.
 
 ## Verdict
@@ -202,7 +202,7 @@ Not in this acceptance:
 
 ## Verification
 
-No production edit. `make verify` was not run.
+The audit probe below ran before any edit. Both N2 plans then landed. Evidence is in `docs/exec-plans/completed/n2-config-redact.md` and `docs/exec-plans/completed/n2-health-probes.md`.
 
 Probe, deleted afterward (`internal/platform/logging/probe_audit_test.go` is not in the tree):
 

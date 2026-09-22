@@ -38,7 +38,7 @@ Readability note 01 has landed.
 Readability note 02 is in two plans.
 
 - [x] N2 config order and redact limit — `completed/n2-config-redact.md`
-- [ ] N2 health probes — `active/n2-health-probes.md`
+- [x] N2 health probes — `completed/n2-health-probes.md`
 
 ## Phase 0 — Foundation (complete, 2026-10-10)
 

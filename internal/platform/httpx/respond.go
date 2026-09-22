@@ -44,10 +44,15 @@ func NoContent(w http.ResponseWriter) {
 	w.WriteHeader(http.StatusNoContent)
 }
 
+// WriteDocument writes a non-enveloped JSON document at status.
+func WriteDocument(w http.ResponseWriter, r *http.Request, status int, v any) {
+	writeJSON(w, r, status, v)
+}
+
 // Document writes a 200 non-enveloped JSON document; used by contract
 // endpoints whose payload is a standard document, such as the JWKS.
 func Document(w http.ResponseWriter, r *http.Request, v any) {
-	writeJSON(w, r, http.StatusOK, v)
+	WriteDocument(w, r, http.StatusOK, v)
 }
 
 func writeJSON(w http.ResponseWriter, r *http.Request, status int, v any) {

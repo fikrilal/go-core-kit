@@ -26,7 +26,7 @@ func testProbes(t *testing.T, checks ...health.Check) (*httpx.Router, *bytes.Buf
 	var logs bytes.Buffer
 	logger := logging.New(config.LogLevelDebug, config.LogFormatJSON, &logs)
 	router := httpx.NewRouter(logger)
-	health.New(logger, checks...).Register(router)
+	health.New(checks...).Register(router)
 	return router, &logs
 }
 
@@ -86,7 +86,10 @@ func TestReadyWithFailingCheck(t *testing.T) {
 	}
 	router, logs := testProbes(t, downCheck)
 
-	rec := get(t, router, "/ready")
+	req := httptest.NewRequestWithContext(t.Context(), http.MethodGet, "/ready", nil)
+	req.Header.Set("X-Request-Id", "req-ready-1")
+	rec := httptest.NewRecorder()
+	router.ServeHTTP(rec, req)
 
 	if rec.Code != http.StatusServiceUnavailable {
 		t.Fatalf("status = %d, want 503", rec.Code)
@@ -100,6 +103,9 @@ func TestReadyWithFailingCheck(t *testing.T) {
 	}
 	if !strings.Contains(logs.String(), "readiness check failed") || !strings.Contains(logs.String(), "connection refused") {
 		t.Errorf("check failure not logged: %s", logs.String())
+	}
+	if !strings.Contains(logs.String(), "req-ready-1") {
+		t.Errorf("warning missing request id: %s", logs.String())
 	}
 	if strings.Contains(logs.String(), "http request") {
 		t.Errorf("probes should skip the access log: %s", logs.String())

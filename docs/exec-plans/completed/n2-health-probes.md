@@ -1,6 +1,6 @@
 # N2 — health probes
 
-- Status: active
+- Status: completed
 - Owner: Core kit maintainers
 - Risk: low
 - Date: 2026-10-11
@@ -39,11 +39,11 @@ Make a failing readiness check log on the request logger, and make the probe bod
 
 ## Steps
 
-- [ ] Add the status-taking JSON helper and point `Document` at it.
-- [ ] Log readiness failures with `httpx.Logger(r)` and drop the stored logger.
-- [ ] Update `cmd/api` and the health tests.
-- [ ] Assert `request_id` on the failing-check warning.
-- [ ] `go test ./internal/platform/health ./internal/platform/httpx ./cmd/api` and `make verify`.
+- [x] Add the status-taking JSON helper and point `Document` at it.
+- [x] Log readiness failures with `httpx.Logger(r)` and drop the stored logger.
+- [x] Update `cmd/api` and the health tests.
+- [x] Assert `request_id` on the failing-check warning.
+- [x] `go test ./internal/platform/health ./internal/platform/httpx ./cmd/api` and `make verify`.
 
 ## Decision Log
 
@@ -57,7 +57,11 @@ go test ./internal/platform/health ./internal/platform/httpx ./cmd/api -count=1
 make verify
 ```
 
+Outcome (2026-10-11): both commands passed. `make verify` full profile passed in 26.6s. Probe status and body stayed `200 {"status":"ok"}` and `503` with `unavailable` checks.
+
 ## Completion Notes
+
+`httpx.WriteDocument` writes a non-enveloped JSON document at a caller-chosen status. `Document` calls it with `200`. Readiness failures log through `httpx.Logger(r)`, so the warning carries `request_id`. `health.New` takes only checks. `Handler` no longer stores a logger. The check error stays in the log. The body stays the word `unavailable`.
 
 ## Follow-Ups
 
