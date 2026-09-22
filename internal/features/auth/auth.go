@@ -88,6 +88,7 @@ func Register(router *httpx.Router, deps Deps) error {
 		return fmt.Errorf("auth: %w", err)
 	}
 	guard := platformauth.NewGuard(verifier)
+	router.SetIdempotencyCaller(idempotencyCaller)
 	handlers := &handlers{service: service, keys: keyRing}
 	router.HandleFunc(httpx.Operation{Method: http.MethodPost, Path: "/v1/auth/password/register", ID: "auth.password.register"}, handlers.register)
 	router.HandleFunc(httpx.Operation{Method: http.MethodPost, Path: "/v1/auth/password/login", ID: "auth.password.login"}, handlers.login)
@@ -98,6 +99,14 @@ func Register(router *httpx.Router, deps Deps) error {
 	changePassword := httpx.Operation{Method: http.MethodPost, Path: "/v1/auth/password/change", ID: "auth.password.change"}
 	router.Handle(changePassword, guard.Require(router.Idempotent(changePassword, handlers.changePassword)))
 	return nil
+}
+
+func idempotencyCaller(r *http.Request) (string, bool) {
+	principal, ok := platformauth.PrincipalFrom(r.Context())
+	if !ok || principal.UserID == "" {
+		return "", false
+	}
+	return principal.UserID, true
 }
 
 type issuerAdapter struct {

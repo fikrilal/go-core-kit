@@ -29,11 +29,11 @@ Rules: findings gate on **new vs baseline**, and updating a baseline requires ex
 
 **Phase 3 essential tasks landed (3.1–3.5, 3.8, 3.9).** 3.6/3.7 await the 5.2 worker; next product work: **`oidc.connect`** or **Phase 4 — me slice**.
 
-Readability note 01 is in three plans. Product work stays paused until those finish.
+Readability note 01 has landed.
 
 - [x] R1 httpx taste — `completed/r1-httpx-taste.md`
 - [x] R2 httpx problem details (B3 shipped, B1 blocked) — `completed/r2-httpx-problem-details.md`
-- [ ] R3 httpx idempotency caller scope (B2) — `active/r3-httpx-idempotency-scope.md`
+- [x] R3 httpx idempotency caller scope (B2) — `completed/r3-httpx-idempotency-scope.md`
 
 ## Phase 0 — Foundation (complete, 2026-10-10)
 

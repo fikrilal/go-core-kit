@@ -16,10 +16,11 @@ type Operation struct {
 
 // Router serves the platform middleware chain over contract operations.
 type Router struct {
-	mux         *http.ServeMux
-	handler     http.Handler
-	operations  []Operation
-	idempotency *idempotencyStore
+	mux               *http.ServeMux
+	handler           http.Handler
+	operations        []Operation
+	idempotency       *idempotencyStore
+	idempotencyCaller func(*http.Request) (string, bool)
 }
 
 // RouterOption configures optional router behavior.

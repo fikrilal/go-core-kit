@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"log/slog"
 	"net/http"
@@ -24,14 +25,21 @@ func WithIdempotency(client *redis.Client) RouterOption {
 	}
 }
 
-// Idempotent wraps h with Idempotency-Key caching and replay for the
-// operation; compose it inside guards so unauthorized requests never touch
-// the replay store.
+// SetIdempotencyCaller registers the caller id that scopes idempotency keys.
+func (r *Router) SetIdempotencyCaller(caller func(*http.Request) (string, bool)) {
+	r.idempotencyCaller = caller
+}
+
+// Idempotent wraps h with caller-scoped Idempotency-Key caching and replay.
+// Compose it inside a guard. A request with no caller fails closed.
 func (r *Router) Idempotent(op Operation, h http.HandlerFunc) http.Handler {
 	if r.idempotency == nil {
 		panic("httpx: Idempotent requires WithIdempotency")
 	}
-	return r.idempotency.wrap(op.ID, h)
+	if r.idempotencyCaller == nil {
+		panic("httpx: Idempotent requires SetIdempotencyCaller")
+	}
+	return r.idempotency.wrap(op.ID, r.idempotencyCaller, h)
 }
 
 // HandleIdempotent registers a contract operation with Idempotency-Key caching and replay.
@@ -50,19 +58,24 @@ type cachedResponse struct {
 	Body        []byte `json:"body"`
 }
 
-func (s *idempotencyStore) wrap(scope string, next http.HandlerFunc) http.HandlerFunc {
+func (s *idempotencyStore) wrap(scope string, caller func(*http.Request) (string, bool), next http.HandlerFunc) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
+		userID, ok := caller(r)
+		if !ok || userID == "" {
+			WriteError(w, r, errors.New("idempotency caller missing"))
+			return
+		}
 		key := r.Header.Get("Idempotency-Key")
 		if key == "" {
 			next(w, r)
 			return
 		}
-		s.handle(w, r, scope, key, next)
+		s.handle(w, r, scope, userID, key, next)
 	}
 }
 
-func (s *idempotencyStore) handle(w http.ResponseWriter, r *http.Request, scope, key string, next http.HandlerFunc) {
-	responseKey := redis.Key("idempotency", scope, key)
+func (s *idempotencyStore) handle(w http.ResponseWriter, r *http.Request, scope, userID, key string, next http.HandlerFunc) {
+	responseKey := idempotencyKey(scope, userID, key)
 	cached, found, err := s.loadCached(r.Context(), responseKey)
 	if err != nil {
 		WriteError(w, r, err)
@@ -100,6 +113,12 @@ func (s *idempotencyStore) handle(w http.ResponseWriter, r *http.Request, scope,
 	recorder := &recordingWriter{ResponseWriter: w, status: http.StatusOK}
 	next(recorder, r)
 	s.store(r, responseKey, recorder)
+}
+
+// idempotencyKey is idempotency:<operation id>:<user id>:<header>.
+// A body fingerprint is deferred (plan 1.8). The same key with a different body still replays.
+func idempotencyKey(operationID, userID, header string) string {
+	return redis.Key("idempotency", operationID, userID, header)
 }
 
 func (s *idempotencyStore) loadCached(ctx context.Context, responseKey string) (cachedResponse, bool, error) {

@@ -1,6 +1,6 @@
 # R3 — httpx idempotency caller scope
 
-- Status: active
+- Status: completed
 - Owner: Core kit maintainers
 - Risk: high (write replay can cross users)
 - Date: 2026-10-11
@@ -41,25 +41,30 @@ Stop two authenticated callers who reuse one `Idempotency-Key` from sharing a ca
 
 ## Steps
 
-- [ ] Add the user-id resolver at the composition site in the auth feature. Keep the Redis client option as it is.
-- [ ] Put the user id in the key. Fail closed when the resolver returns no id.
-- [ ] Comment the deferred body fingerprint.
-- [ ] Unit-test two principals and the missing-principal case.
-- [ ] Run `go test ./internal/platform/httpx ./internal/features/auth ./cmd/api` and `make verify`.
+- [x] Add the user-id resolver at the composition site in the auth feature. Keep the Redis client option as it is.
+- [x] Put the user id in the key. Fail closed when the resolver returns no id.
+- [x] Comment the deferred body fingerprint.
+- [x] Unit-test two principals and the missing-principal case.
+- [x] Run `go test ./internal/platform/httpx ./internal/features/auth ./cmd/api` and `make verify`.
 
 ## Decision Log
 
 - 2026-10-11: User id is enough. Backend also hashes a scope and the body. Scope here is already the operation id. The body hash stays the plan 1.8 follow-up.
 - 2026-10-11: Write-through is not in this plan. Fixing it means holding the response until Redis accepts the record, which is a different design from the writer that exists today.
+- 2026-10-11: `httpx` stores a `func(*http.Request) (string, bool)`. `auth.Register` sets it from `platformauth.PrincipalFrom` and `Principal.UserID`. A missing or empty id returns 500 `INTERNAL`, does not call the handler, and does not write Redis. An empty `Idempotency-Key` still passes through once a caller id is present.
 
 ## Verification
 
 ```bash
-go test ./internal/platform/httpx ./internal/features/auth ./cmd/api -count=1
+go test ./internal/platform/httpx ./internal/features/auth/... ./cmd/api -count=1
 make verify
 ```
 
+Outcome (2026-10-11): httpx, auth app, auth infra, and cmd/api passed. `make verify` full profile passed in 20.359s. Change-password contract tests passed, including the anonymous request that must not prime the store.
+
 ## Completion Notes
+
+The Redis key is `idempotency:<operation id>:<user id>:<header>`. `SetIdempotencyCaller` is registered from `auth.Register` and reads `Principal.UserID`. `httpx` does not import `internal/platform/auth`. Two callers with one header get two records and two handler calls. The same caller replays. A missing caller is 500 `INTERNAL` with no handler call and no Redis write. `idempotencyKey` comments that the body fingerprint stays deferred in plan 1.8. `recordingWriter` still writes through.
 
 ## Follow-Ups
 

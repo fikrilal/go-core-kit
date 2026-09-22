@@ -1,6 +1,7 @@
 package httpx_test
 
 import (
+	"context"
 	"encoding/json"
 	"io"
 	"net/http"
@@ -20,7 +21,32 @@ func testIdempotentRouter(t *testing.T) (*httpx.Router, *miniredis.Miniredis) {
 	logger := logging.New(config.LogLevelError, config.LogFormatJSON, io.Discard)
 	server := miniredis.RunT(t)
 	client := redis.MustOpen("redis://" + server.Addr() + "/0")
-	return httpx.NewRouter(logger, httpx.WithIdempotency(client)), server
+	router := httpx.NewRouter(logger, httpx.WithIdempotency(client))
+	router.SetIdempotencyCaller(func(*http.Request) (string, bool) {
+		return testCallerID, true
+	})
+	return router, server
+}
+
+const testCallerID = "user-1"
+
+type testCallerKey struct{}
+
+func requestAs(t *testing.T, key, userID string) *http.Request {
+	t.Helper()
+	req := idempotentRequest(t, key)
+	if userID == "" {
+		return req
+	}
+	return req.WithContext(context.WithValue(req.Context(), testCallerKey{}, userID))
+}
+
+func callerFromContext(r *http.Request) (string, bool) {
+	id, _ := r.Context().Value(testCallerKey{}).(string)
+	if id == "" {
+		return "", false
+	}
+	return id, true
 }
 
 func idempotentRequest(t *testing.T, key string) *http.Request {
@@ -176,9 +202,70 @@ func TestIdempotencyReleasesLock(t *testing.T) {
 
 	router.ServeHTTP(httptest.NewRecorder(), idempotentRequest(t, "key-1"))
 
-	lockKey := redis.Key("idempotency", op.ID, "key-1") + ":lock"
+	lockKey := redis.Key("idempotency", op.ID, testCallerID, "key-1") + ":lock"
 	if server.Exists(lockKey) {
 		t.Errorf("lock key %q still present after completion", lockKey)
+	}
+}
+
+func TestIdempotencyScopesByCaller(t *testing.T) {
+	router, server := testIdempotentRouter(t)
+	router.SetIdempotencyCaller(callerFromContext)
+	calls := 0
+	op := testOp("POST", "/v1/things")
+	router.HandleIdempotent(op, func(w http.ResponseWriter, _ *http.Request) {
+		calls++
+		httpx.NoContent(w)
+	})
+
+	router.ServeHTTP(httptest.NewRecorder(), requestAs(t, "key-1", "user-a"))
+	router.ServeHTTP(httptest.NewRecorder(), requestAs(t, "key-1", "user-b"))
+	replay := httptest.NewRecorder()
+	router.ServeHTTP(replay, requestAs(t, "key-1", "user-a"))
+
+	if calls != 2 {
+		t.Errorf("handler calls = %d, want 2", calls)
+	}
+	if replay.Header().Get("Idempotency-Replayed") != "true" {
+		t.Errorf("Idempotency-Replayed = %q, want true", replay.Header().Get("Idempotency-Replayed"))
+	}
+	keyA := redis.Key("idempotency", op.ID, "user-a", "key-1")
+	keyB := redis.Key("idempotency", op.ID, "user-b", "key-1")
+	if !server.Exists(keyA) || !server.Exists(keyB) {
+		t.Errorf("keys = %v, want %s and %s", server.Keys(), keyA, keyB)
+	}
+}
+
+func TestIdempotencyMissingCallerDoesNotRun(t *testing.T) {
+	router, server := testIdempotentRouter(t)
+	router.SetIdempotencyCaller(func(*http.Request) (string, bool) {
+		return "", false
+	})
+	calls := 0
+	router.HandleIdempotent(testOp("POST", "/v1/things"), func(w http.ResponseWriter, _ *http.Request) {
+		calls++
+		httpx.NoContent(w)
+	})
+
+	rec := httptest.NewRecorder()
+	router.ServeHTTP(rec, idempotentRequest(t, "key-1"))
+	router.ServeHTTP(httptest.NewRecorder(), idempotentRequest(t, ""))
+
+	if calls != 0 {
+		t.Errorf("handler calls = %d, want 0", calls)
+	}
+	if rec.Code != http.StatusInternalServerError {
+		t.Fatalf("status = %d, want 500", rec.Code)
+	}
+	var body problemResponse
+	if err := json.Unmarshal(rec.Body.Bytes(), &body); err != nil {
+		t.Fatalf("decode body: %v", err)
+	}
+	if body.Code != "INTERNAL" {
+		t.Errorf("code = %q, want INTERNAL", body.Code)
+	}
+	if keys := server.Keys(); len(keys) != 0 {
+		t.Errorf("keys = %v, want none", keys)
 	}
 }
 
@@ -187,6 +274,19 @@ func TestHandleIdempotentRequiresConfiguration(t *testing.T) {
 	defer func() {
 		if recover() == nil {
 			t.Fatal("expected panic without WithIdempotency")
+		}
+	}()
+	router.HandleIdempotent(testOp("POST", "/v1/x"), func(http.ResponseWriter, *http.Request) {})
+}
+
+func TestHandleIdempotentRequiresCaller(t *testing.T) {
+	logger := logging.New(config.LogLevelError, config.LogFormatJSON, io.Discard)
+	server := miniredis.RunT(t)
+	client := redis.MustOpen("redis://" + server.Addr() + "/0")
+	router := httpx.NewRouter(logger, httpx.WithIdempotency(client))
+	defer func() {
+		if recover() == nil {
+			t.Fatal("expected panic without SetIdempotencyCaller")
 		}
 	}()
 	router.HandleIdempotent(testOp("POST", "/v1/x"), func(http.ResponseWriter, *http.Request) {})
