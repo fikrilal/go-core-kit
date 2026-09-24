@@ -8,6 +8,8 @@ import (
 )
 
 // Time is a timestamp stored and loaded as UTC.
+// Scan of NULL is the zero time, so IsZero means a NULL read.
+// Value of the zero time still writes year 1, not SQL NULL.
 type Time struct {
 	time.Time
 }

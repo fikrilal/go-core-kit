@@ -59,6 +59,7 @@ func TestOpenAppliesPragmas(t *testing.T) {
 	if err := database.SQL().QueryRowContext(ctx, "PRAGMA synchronous").Scan(&synchronous); err != nil {
 		t.Fatalf("read synchronous: %v", err)
 	}
+	// 1 is what PRAGMA synchronous returns for NORMAL.
 	if synchronous != 1 {
 		t.Errorf("synchronous = %d, want 1", synchronous)
 	}

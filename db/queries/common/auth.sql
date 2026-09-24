@@ -15,6 +15,8 @@ LEFT JOIN password_credentials AS c ON c.user_id = u.id
 WHERE u.email = sqlc.arg(email);
 
 -- name: CreateSession :exec
+-- NULLIF stores a blank optional string as NULL.
+-- A caller cannot persist an empty string for those columns.
 INSERT INTO sessions (
     id, user_id, device_id, device_name, ip, user_agent, active_key,
     last_seen_at, expires_at, created_at, updated_at

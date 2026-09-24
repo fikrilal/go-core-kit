@@ -44,6 +44,10 @@ Readability note 03 starts with comments. The auth bugs wait for a yes.
 
 - [x] N3 auth comments — `completed/n3-auth-comments.md`
 
+Readability note 04 starts with comments. The zero-time write waits for a yes.
+
+- [x] N4 db comments — `completed/n4-db-comments.md`
+
 ## Phase 0 — Foundation (complete, 2026-10-10)
 
 - [x] Toolchain: Go 1.27.2 + golangci-lint v2.14.0 (user-local; lint version pinned in CI)

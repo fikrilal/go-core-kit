@@ -1,12 +1,12 @@
 # Section note: `internal/platform/db`
 
-- Status: Draft, waiting for acceptance
+- Status: Comments shipped in N4. B1 still needs a yes. B2 stays with the Postgres engine task.
 - Date: 2026-10-11
 - Scope: `internal/platform/db` (including `utctime`), hand-written `db/migrations`, hand-written `db/queries`. `sqlc.yaml` only where it decides the Go type of a column.
 - Out of scope: line-by-line review of `internal/db/gen`. One generated struct was opened to see how a nullable timestamp is declared.
 - Ruler: `_WIP/go-core-kit-readability-proposal.md`
-- Code changes: none in this pass
-- Earlier notes stay unapplied
+- Code changes: comments applied 2026-10-11. See `docs/exec-plans/completed/n4-db-comments.md`.
+- Earlier notes 01 through 03 are applied.
 
 ## Verdict
 
@@ -202,7 +202,7 @@ Not in this acceptance:
 
 ## Verification
 
-No production edit. `make verify` was not run.
+The audit probe below ran before any edit. N4 then landed the comments. Evidence is in `docs/exec-plans/completed/n4-db-comments.md`. sqlc copied the `CreateSession` comment into the generated query docs, and those files are in the same change.
 
 Probe, deleted afterward (`internal/platform/db/utctime/probe_audit_test.go` is not in the tree):
 

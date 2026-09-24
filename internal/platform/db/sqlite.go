@@ -21,6 +21,8 @@ type Database struct {
 }
 
 // Open opens the SQLite database at path with the platform's pragmas and write policy.
+// One connection is the write lock. busy_timeout helps another process, not a
+// second connection here. _txlock=immediate makes BeginTx with nil options BEGIN IMMEDIATE.
 func Open(path string) (*Database, error) {
 	dsn := "file:" + path +
 		"?_pragma=busy_timeout(5000)" +
@@ -103,7 +105,8 @@ func (d *Database) InTx(ctx context.Context, fn func(tx Tx) error) error {
 	return nil
 }
 
-// Migrate applies the embedded goose migration set.
+// Migrate applies the sqlite directory in fsys. This build always reads that
+// directory. The build tag selects the engine.
 func (d *Database) Migrate(ctx context.Context, fsys fs.FS) error {
 	sub, err := fs.Sub(fsys, "sqlite")
 	if err != nil {

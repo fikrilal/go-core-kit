@@ -159,6 +159,8 @@ type CreateSessionParams struct {
 	UpdatedAt  utctime.Time
 }
 
+// NULLIF stores a blank optional string as NULL.
+// A caller cannot persist an empty string for those columns.
 func (q *Queries) CreateSession(ctx context.Context, arg CreateSessionParams) error {
 	_, err := q.db.ExecContext(ctx, createSession,
 		arg.ID,
