@@ -65,6 +65,7 @@ func (h *Hasher) Hash(password string) (string, error) {
 const maxSegmentLength = 1 << 20
 
 // Verify reports whether password matches the encoded argon2id hash.
+// The argon2 cost comes from the encoded hash, not from Hasher.params.
 func (h *Hasher) Verify(encoded, password string) (bool, error) {
 	params, salt, key, err := decode(encoded)
 	if err != nil {

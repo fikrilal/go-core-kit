@@ -1,12 +1,12 @@
 # Section note: `internal/platform/redis` and `internal/platform/password`
 
-- Status: Draft, waiting for acceptance
+- Status: Comments shipped in N5.
 - Date: 2026-10-11
 - Scope: `internal/platform/redis` and `internal/platform/password`, including their tests
 - Out of scope: the login limiter and the dummy-hash login path. Those are auth-feature policy. This note only records how they call these two packages.
 - Ruler: `_WIP/go-core-kit-readability-proposal.md`
-- Code changes: none in this pass
-- Earlier notes stay unapplied
+- Code changes: comments applied 2026-10-11. See `docs/exec-plans/completed/n5-redis-password-comments.md`.
+- Earlier notes 01 through 04 are applied.
 
 ## Verdict
 
@@ -163,7 +163,7 @@ Not in this acceptance:
 
 ## Verification
 
-No production edit. `make verify` was not run.
+Comments applied 2026-10-11. See `docs/exec-plans/completed/n5-redis-password-comments.md`.
 
 Probes, deleted afterward (not in the tree):
 

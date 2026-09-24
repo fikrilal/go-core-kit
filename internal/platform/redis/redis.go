@@ -16,7 +16,8 @@ type Client struct {
 	rdb *goredis.Client
 }
 
-// Open connects to Redis using the configured URL.
+// Open parses the Redis URL and does not dial.
+// SetLogger replaces the process-wide driver logger.
 func Open(url string) (*Client, error) {
 	opts, err := goredis.ParseURL(url)
 	if err != nil {
@@ -61,7 +62,7 @@ func (c *Client) Get(ctx context.Context, key string) (string, bool, error) {
 	return value, true, nil
 }
 
-// Set stores value under key with a TTL.
+// Set stores value under key. Only ttl > 0 attaches an expiry.
 func (c *Client) Set(ctx context.Context, key, value string, ttl time.Duration) error {
 	if err := c.rdb.Set(ctx, key, value, ttl).Err(); err != nil {
 		return fmt.Errorf("set redis key: %w", err)
@@ -70,6 +71,7 @@ func (c *Client) Set(ctx context.Context, key, value string, ttl time.Duration) 
 }
 
 // SetNX stores value under key only when the key does not exist.
+// Only ttl > 0 attaches an expiry.
 func (c *Client) SetNX(ctx context.Context, key, value string, ttl time.Duration) (bool, error) {
 	stored, err := c.rdb.SetNX(ctx, key, value, ttl).Result()
 	if err != nil {
@@ -95,7 +97,7 @@ func (c *Client) Incr(ctx context.Context, key string) (int64, error) {
 	return value, nil
 }
 
-// Expire sets a TTL on key.
+// Expire sets a TTL on key. A missing key returns nil.
 func (c *Client) Expire(ctx context.Context, key string, ttl time.Duration) error {
 	if err := c.rdb.Expire(ctx, key, ttl).Err(); err != nil {
 		return fmt.Errorf("expire redis key: %w", err)
@@ -103,7 +105,8 @@ func (c *Client) Expire(ctx context.Context, key string, ttl time.Duration) erro
 	return nil
 }
 
-// TTL reports the remaining TTL of key; missing or persistent keys report 0.
+// TTL reports the remaining TTL of key.
+// 0 means missing, no expiry, or under one second.
 func (c *Client) TTL(ctx context.Context, key string) (time.Duration, error) {
 	ttl, err := c.rdb.TTL(ctx, key).Result()
 	if err != nil {
