@@ -1,6 +1,7 @@
 //go:build !pg
 
 // Package auth implements the auth feature's HTTP surface and wiring.
+// This build is SQLite until a pg repository exists.
 package auth
 
 import (
@@ -195,6 +196,7 @@ func (h *handlers) exchangeOidc(w http.ResponseWriter, r *http.Request) {
 	h.respondAuth(w, r, result)
 }
 
+// respondAuth writes the token pair. The second read is the Me profile and auth methods.
 func (h *handlers) respondAuth(w http.ResponseWriter, r *http.Request, result app.Result) {
 	me, err := h.service.MeView(r.Context(), result.User.ID)
 	if err != nil {

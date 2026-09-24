@@ -1,12 +1,12 @@
 # Section note: `internal/features/auth`
 
-- Status: Draft, waiting for acceptance
+- Status: Taste shipped in N6. Problem helpers live in `app/problems.go`. The OIDC kind switch has a default.
 - Date: 2026-10-11
 - Scope: the auth feature. `app` against the thin use case, `infra` against repository orchestration, `domain` against an exhaustive outcome switch. `auth.go` is the HTTP edge and the wiring.
 - Out of scope: `internal/platform/auth`, `password`, `redis`, `httpx`, and the SQL text. Those notes already stand. This note only records how the feature calls them.
 - Ruler: `_WIP/go-core-kit-readability-proposal.md`
-- Code changes: none in this pass
-- Earlier notes stay unapplied
+- Code changes: taste applied 2026-10-11. See `docs/exec-plans/completed/n6-auth-feature-taste.md`.
+- Earlier notes 01 through 05 are applied.
 
 ## Verdict
 
@@ -192,4 +192,4 @@ Not in this acceptance:
 
 ## Verification
 
-No production edit. `make verify` was not run. No probe. The outcome claims above are the existing unit tests and the reference services, not a new run.
+Taste applied 2026-10-11. See `docs/exec-plans/completed/n6-auth-feature-taste.md`.

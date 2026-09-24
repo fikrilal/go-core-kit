@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"strings"
 	"testing"
 	"time"
 
@@ -763,6 +764,21 @@ func TestExchangeOidcKindMapping(t *testing.T) {
 				t.Fatalf("kind %q mapped to %d/%s, want %d/%s", kind, problem.Status, problem.Code, want.status, want.code)
 			}
 		})
+	}
+}
+
+func TestExchangeOidcUnexpectedKind(t *testing.T) {
+	f := exchangeFixture(t)
+	f.oidc.verification = domain.OidcVerification{Kind: "mystery"}
+	_, err := f.service.ExchangeOidc(context.Background(), app.OidcExchangeInput{
+		Provider: domain.AuthMethodGoogle, IDToken: "id-token",
+	})
+	if err == nil || !strings.Contains(err.Error(), "mystery") {
+		t.Fatalf("ExchangeOidc() error = %v, want the unexpected kind", err)
+	}
+	var problem *httpx.ProblemError
+	if errors.As(err, &problem) {
+		t.Fatalf("unexpected kind became a problem: %+v", problem)
 	}
 }
 

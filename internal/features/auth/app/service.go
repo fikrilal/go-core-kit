@@ -5,7 +5,6 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"net/http"
 	"time"
 	"unicode/utf8"
 
@@ -14,7 +13,6 @@ import (
 	"github.com/fikrilal/go-core-kit/internal/features/auth/domain"
 	"github.com/fikrilal/go-core-kit/internal/features/auth/ports"
 	"github.com/fikrilal/go-core-kit/internal/platform/clock"
-	"github.com/fikrilal/go-core-kit/internal/platform/httpx"
 )
 
 // Config carries the auth policy knobs.
@@ -107,11 +105,7 @@ func (s *Service) Register(ctx context.Context, in Input) (Result, error) {
 		Now:          now,
 	})
 	if errors.Is(err, domain.ErrEmailExists) {
-		return Result{}, &httpx.ProblemError{
-			Status: http.StatusConflict,
-			Code:   httpx.CodeAuthEmailAlreadyExists,
-			Detail: "Email already exists",
-		}
+		return Result{}, emailAlreadyExistsError()
 	}
 	if err != nil {
 		return Result{}, fmt.Errorf("auth register: create user: %w", err)
@@ -124,6 +118,7 @@ func sessionParams(in Input) SessionParams {
 }
 
 // Login verifies credentials and issues tokens.
+// A deleted user shares the invalid-credentials path on purpose.
 func (s *Service) Login(ctx context.Context, in Input) (Result, error) {
 	email := domain.NormalizeEmail(in.Email)
 	if err := s.limiter.AssertAllowed(ctx, email, in.IP); err != nil {
@@ -164,6 +159,7 @@ type RefreshInput struct {
 }
 
 // Refresh rotates a refresh token and issues a new token pair.
+// The first checks and rotateExisting are the same outcomes. The transaction wins a race.
 func (s *Service) Refresh(ctx context.Context, in RefreshInput) (Result, error) {
 	now := s.clock.Now()
 	currentHash := domain.HashRefreshToken(in.RefreshToken)
@@ -262,6 +258,7 @@ type OidcExchangeInput struct {
 }
 
 // ExchangeOidc verifies an OIDC id token and issues a session for the resolved user.
+// A deleted OIDC user uses that same invalid-credentials path on purpose.
 func (s *Service) ExchangeOidc(ctx context.Context, in OidcExchangeInput) (Result, error) {
 	verification, err := s.oidc.VerifyIDToken(ctx, in.Provider, in.IDToken)
 	if err != nil {
@@ -273,6 +270,9 @@ func (s *Service) ExchangeOidc(ctx context.Context, in OidcExchangeInput) (Resul
 	case domain.OidcVerifyInvalid:
 		return Result{}, oidcTokenInvalidError()
 	case domain.OidcVerifyVerified:
+		// Verified continues into the identity checks.
+	default:
+		return Result{}, fmt.Errorf("auth oidc: unexpected verification kind %q", verification.Kind)
 	}
 	identity := verification.Identity
 	if !identity.EmailVerified {
@@ -365,11 +365,7 @@ func (s *Service) ChangePassword(ctx context.Context, in ChangePasswordInput) er
 		return err
 	}
 	if in.CurrentPassword == in.NewPassword {
-		return &httpx.ProblemError{
-			Status: http.StatusBadRequest,
-			Code:   httpx.CodeValidationFailed,
-			Issues: []httpx.FieldIssue{{Field: "newPassword", Message: "New password must be different"}},
-		}
+		return newPasswordMustDifferError()
 	}
 	existingHash, found, err := s.repo.FindPasswordCredential(ctx, in.UserID)
 	if err != nil {
@@ -412,6 +408,7 @@ func (s *Service) ChangePassword(ctx context.Context, in ChangePasswordInput) er
 	return fmt.Errorf("auth change password: unexpected result %q", kind)
 }
 
+// issueSession stores the session, then signs. SessionTTL is both the session expiry and the refresh-token expiry.
 func (s *Service) issueSession(ctx context.Context, user domain.User, session SessionParams, now time.Time) (Result, error) {
 	refreshToken, err := domain.NewRefreshToken()
 	if err != nil {
@@ -457,115 +454,5 @@ func (s *Service) checkPasswordPolicy(password, field string) error {
 	if utf8.RuneCountInString(password) >= s.config.PasswordMinLength {
 		return nil
 	}
-	return &httpx.ProblemError{
-		Status: http.StatusBadRequest,
-		Code:   httpx.CodeValidationFailed,
-		Issues: []httpx.FieldIssue{{
-			Field:   field,
-			Message: fmt.Sprintf("Password must be at least %d characters", s.config.PasswordMinLength),
-		}},
-	}
-}
-
-func invalidCredentials() error {
-	return &httpx.ProblemError{
-		Status: http.StatusUnauthorized,
-		Code:   httpx.CodeAuthInvalidCredentials,
-		Detail: "Invalid credentials",
-	}
-}
-
-func invalidRefreshToken() error {
-	return &httpx.ProblemError{
-		Status: http.StatusUnauthorized,
-		Code:   httpx.CodeAuthRefreshTokenInvalid,
-		Detail: "Invalid refresh token",
-	}
-}
-
-func refreshTokenExpiredError() error {
-	return &httpx.ProblemError{
-		Status: http.StatusUnauthorized,
-		Code:   httpx.CodeAuthRefreshTokenExpired,
-		Detail: "Refresh token expired",
-	}
-}
-
-func refreshTokenReusedError() error {
-	return &httpx.ProblemError{
-		Status: http.StatusUnauthorized,
-		Code:   httpx.CodeAuthRefreshTokenReused,
-		Detail: "Refresh token reuse detected",
-	}
-}
-
-func sessionRevokedError() error {
-	return &httpx.ProblemError{
-		Status: http.StatusUnauthorized,
-		Code:   httpx.CodeAuthSessionRevoked,
-		Detail: "Session revoked",
-	}
-}
-
-func suspendedError() error {
-	return &httpx.ProblemError{
-		Status: http.StatusForbidden,
-		Code:   httpx.CodeAuthUserSuspended,
-		Detail: "User is suspended",
-	}
-}
-
-func unauthorizedError() error {
-	return &httpx.ProblemError{
-		Status: http.StatusUnauthorized,
-		Code:   httpx.CodeUnauthorized,
-	}
-}
-
-func passwordNotSetError() error {
-	return &httpx.ProblemError{
-		Status: http.StatusConflict,
-		Code:   httpx.CodeAuthPasswordNotSet,
-		Detail: "Password is not set for this account",
-	}
-}
-
-func currentPasswordInvalidError() error {
-	return &httpx.ProblemError{
-		Status: http.StatusBadRequest,
-		Code:   httpx.CodeAuthCurrentPasswordInvalid,
-		Detail: "Current password is invalid",
-	}
-}
-
-func oidcNotConfiguredError() error {
-	return &httpx.ProblemError{
-		Status: http.StatusInternalServerError,
-		Code:   httpx.CodeAuthOidcNotConfigured,
-		Detail: "OIDC is not configured",
-	}
-}
-
-func oidcTokenInvalidError() error {
-	return &httpx.ProblemError{
-		Status: http.StatusUnauthorized,
-		Code:   httpx.CodeAuthOidcTokenInvalid,
-		Detail: "Invalid OIDC token",
-	}
-}
-
-func oidcEmailNotVerifiedError() error {
-	return &httpx.ProblemError{
-		Status: http.StatusBadRequest,
-		Code:   httpx.CodeAuthOidcEmailNotVerified,
-		Detail: "Email is not verified",
-	}
-}
-
-func oidcLinkRequiredError() error {
-	return &httpx.ProblemError{
-		Status: http.StatusConflict,
-		Code:   httpx.CodeAuthOidcLinkRequired,
-		Detail: "We found an existing account for this email. Sign in with your password to link Google sign-in.",
-	}
+	return passwordTooShortError(field, s.config.PasswordMinLength)
 }

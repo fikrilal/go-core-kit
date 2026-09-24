@@ -1,6 +1,7 @@
 //go:build !pg
 
 // Package infra implements the auth feature's adapters.
+// This build is SQLite until a pg repository exists.
 package infra
 
 import (
@@ -31,6 +32,7 @@ func NewRepository(database *db.Database) *Repository {
 }
 
 // CreateUserWithPassword creates the user and credential atomically.
+// The returned user is constructed. The token uses it. The HTTP body uses MeView.
 func (r *Repository) CreateUserWithPassword(ctx context.Context, in ports.CreateUserInput) (domain.User, error) {
 	now := utctime.Time{Time: in.Now}
 	err := r.database.InTx(ctx, func(tx db.Tx) error {
@@ -422,6 +424,7 @@ func (r *Repository) GetMeView(ctx context.Context, userID string) (domain.MeVie
 	return view, true, nil
 }
 
+// orderAuthMethods sorts PASSWORD then GOOGLE. UNION does not order rows.
 func orderAuthMethods(methods []string) []string {
 	precedence := map[string]int{
 		domain.AuthMethodPassword: 0,

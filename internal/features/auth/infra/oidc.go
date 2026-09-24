@@ -53,6 +53,8 @@ func NewGoogleIDTokenVerifier(clientIDs, jwksURL string, clk clock.Clock) *Googl
 }
 
 // VerifyIDToken verifies a Google ID token's signature, issuer, audience, and expiry.
+// A failure, including a JWKS outage, is the invalid kind.
+// A string email_verified is intentional and is not how access tokens work.
 func (v *GoogleIDTokenVerifier) VerifyIDToken(ctx context.Context, provider, idToken string) (domain.OidcVerification, error) {
 	if provider != domain.AuthMethodGoogle {
 		return domain.OidcVerification{Kind: domain.OidcVerifyInvalid}, nil
@@ -119,6 +121,7 @@ func (v *GoogleIDTokenVerifier) VerifyIDToken(ctx context.Context, provider, idT
 	}, nil
 }
 
+// keySet returns the cached JWKS. The mutex is held across the fetch.
 func (v *GoogleIDTokenVerifier) keySet(ctx context.Context) (jwk.Set, error) {
 	v.mu.Lock()
 	defer v.mu.Unlock()
