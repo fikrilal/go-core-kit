@@ -56,6 +56,17 @@ func TestLinkIssues(t *testing.T) {
 	}
 }
 
+func TestPlannedPathsLeaveShippedFeaturesChecked(t *testing.T) {
+	if slices.Contains(plannedPaths, "internal/features/") {
+		t.Fatal("internal/features/ is still exempt after the feature shipped")
+	}
+	for _, path := range []string{"cmd/worker/", "internal/shared/"} {
+		if !slices.Contains(plannedPaths, path) {
+			t.Errorf("plannedPaths missing %s", path)
+		}
+	}
+}
+
 func TestKnowledgeCheckOnRepository(t *testing.T) {
 	chdirRepoRoot(t)
 	if err := runKnowledgeCheck(); err != nil {

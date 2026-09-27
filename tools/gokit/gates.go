@@ -198,6 +198,7 @@ func verifyCoverageHonesty(ctx context.Context) error {
 	if err != nil {
 		return fmt.Errorf("read snapshot: %w", err)
 	}
+	// The fake path is inserted before the root info: key.
 	doctored := strings.Replace(string(snapshot), "\ninfo:", "\n"+honestyFakeOperation+"info:", 1)
 	if doctored == string(snapshot) {
 		return fmt.Errorf("coverage injection anchor not found in the snapshot")

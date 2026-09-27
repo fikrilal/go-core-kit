@@ -10,6 +10,7 @@ import (
 	"syscall"
 )
 
+// os.Exit skips defers, so runMain returns the status.
 func main() {
 	os.Exit(runMain())
 }

@@ -1,13 +1,13 @@
 # Section note: contracts allowlist and `tools/gokit`
 
-- Status: Draft, waiting for acceptance
+- Status: Comments shipped in N8. `internal/features/` is no longer a planned-path exemption. `cmd/worker/` and `internal/shared/` stay exempt.
 - Date: 2026-10-11
 - Scope: `contracts/allowlist.go`, `allowlist.yaml`, `allowlist_test.go`, `provenance.json`, `vacuum.yaml`, `contracts/README.md`, and the hand-written `tools/gokit` commands.
 - Out of scope: `contracts/generated.go` and the body of `contracts/backend.openapi.yaml`. Those are generated and pinned. This note reads them only as inputs to the gates.
 - Ruler: `_WIP/go-core-kit-readability-proposal.md`
-- Code changes: none in this pass
-- Earlier notes stay unapplied
-- This is the last section in the proposal. The notes are the investigation. Applying them is a later yes.
+- Code changes: comments and the planned-path edit applied 2026-10-11. See `docs/exec-plans/completed/n8-contract-comments.md`.
+- Earlier notes 01 through 07 are applied.
+- This is the last section in the proposal. The notes are applied.
 
 ## Verdict
 
@@ -15,7 +15,7 @@ The reader here is the person running the kit, not the person adding a feature. 
 
 Two things read wrong. `ParseAllowlist` is not a YAML parser. The contract-check line "not allowlisted" is not "implemented".
 
-One gate is stale. `plannedPaths` still exempts `internal/features/` after that tree exists.
+`plannedPaths` no longer exempts `internal/features/`. `cmd/worker/` and `internal/shared/` stay exempt.
 
 ## What was read
 
@@ -90,7 +90,9 @@ Reword the line so the middle count is "snapshot ids outside the allowlist". One
 
 ## Real bugs
 
-### B1. `internal/features/` is still exempt
+### B1. `internal/features/` was exempt
+
+Shipped in `docs/exec-plans/completed/n8-contract-comments.md`. `plannedPaths` is `cmd/worker/` and `internal/shared/`. The slice quoted below is the pre-fix list.
 
 ```go
 var plannedPaths = []string{"cmd/worker/", "internal/features/", "internal/shared/"}
@@ -165,7 +167,7 @@ Not in this acceptance:
 
 ## Verification
 
-No production edit. `make verify` was not run.
+Comments and the planned-path edit applied 2026-10-11. See `docs/exec-plans/completed/n8-contract-comments.md`.
 
 Probe, deleted afterward (`tools/gokit/probe_audit_test.go` is not in the tree):
 

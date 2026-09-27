@@ -116,7 +116,8 @@ func runContractCheck() error {
 		return err
 	}
 	fmt.Printf("ok    snapshot digest matches provenance (%s from %s)\n", shortCommit(pinned.SourceCommit), pinned.SourceRepository)
-	fmt.Printf("ok    allowlist: %d pending, %d not allowlisted, %d declared\n", len(declared.pending), len(declared.operations)-len(declared.pending), len(declared.operations))
+	// Route coverage is TestContractCoverage. This count is snapshot ids minus allowlist ids.
+	fmt.Printf("ok    allowlist: %d pending, %d snapshot ids outside the allowlist, %d declared\n", len(declared.pending), len(declared.operations)-len(declared.pending), len(declared.operations))
 	return nil
 }
 
@@ -150,6 +151,7 @@ func checkAllowlist(snapshot []byte) (allowlistState, error) {
 	return allowlistState{operations: operations, pending: pending}, nil
 }
 
+// snapshotOperationIDs scans the snapshot text. It matched the OpenAPI loader on this snapshot (34 ids).
 func snapshotOperationIDs(snapshot []byte) []string {
 	var ids []string
 	for _, match := range operationIDPattern.FindAllStringSubmatch(string(snapshot), -1) {

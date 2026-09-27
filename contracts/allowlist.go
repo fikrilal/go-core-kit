@@ -3,7 +3,7 @@ package contracts
 
 import "strings"
 
-// ParseAllowlist returns the operation ids listed in an allowlist document.
+// ParseAllowlist scans lines. Any "- " item is an id. "#" starts a comment. There are no YAML types.
 func ParseAllowlist(contents []byte) []string {
 	var ids []string
 	for line := range strings.Lines(string(contents)) {

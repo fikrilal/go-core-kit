@@ -12,7 +12,8 @@ import (
 const defaultStepBudget = 2 * time.Minute
 
 type step struct {
-	id     string
+	id string
+	// budget is advisory and does not cancel the step.
 	budget time.Duration
 	run    func(ctx context.Context) error
 }
