@@ -61,11 +61,64 @@ func slogLevel(l config.LogLevel) slog.Level {
 	return slog.LevelInfo
 }
 
-// redact covers the attribute key only. A nested map, a slog.Any value,
-// message text, and a camelCase key such as accessToken are left as written.
+// redact covers attribute keys, including a key inside a group.
+// slog.Any is walked only for map[string]any, map[string]string, and []any.
+// Structs, http.Header, and other typed maps or slices are not scanned.
+// Message text is not scanned. A camelCase key such as accessToken is left as written.
 func redact(_ []string, a slog.Attr) slog.Attr {
-	if _, ok := sensitiveKeys[strings.ToLower(a.Key)]; ok {
-		a.Value = slog.StringValue(redactedMarker)
-	}
+	a.Value = redactValue(a.Key, a.Value)
 	return a
+}
+
+func redactValue(key string, value slog.Value) slog.Value {
+	value = value.Resolve()
+	if _, ok := sensitiveKeys[strings.ToLower(key)]; ok {
+		return slog.StringValue(redactedMarker)
+	}
+	switch value.Kind() {
+	case slog.KindGroup:
+		attrs := value.Group()
+		redacted := make([]slog.Attr, len(attrs))
+		for i, attr := range attrs {
+			redacted[i] = slog.Attr{Key: attr.Key, Value: redactValue(attr.Key, attr.Value)}
+		}
+		return slog.GroupValue(redacted...)
+	case slog.KindAny:
+		return slog.AnyValue(redactAny(value.Any()))
+	default:
+		return value
+	}
+}
+
+func redactAny(value any) any {
+	switch typed := value.(type) {
+	case map[string]any:
+		out := make(map[string]any, len(typed))
+		for key, nested := range typed {
+			if _, ok := sensitiveKeys[strings.ToLower(key)]; ok {
+				out[key] = redactedMarker
+				continue
+			}
+			out[key] = redactAny(nested)
+		}
+		return out
+	case map[string]string:
+		out := make(map[string]string, len(typed))
+		for key, nested := range typed {
+			if _, ok := sensitiveKeys[strings.ToLower(key)]; ok {
+				out[key] = redactedMarker
+				continue
+			}
+			out[key] = nested
+		}
+		return out
+	case []any:
+		out := make([]any, len(typed))
+		for i, nested := range typed {
+			out[i] = redactAny(nested)
+		}
+		return out
+	default:
+		return value
+	}
 }

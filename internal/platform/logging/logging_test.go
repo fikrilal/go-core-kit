@@ -92,6 +92,34 @@ func TestRedaction(t *testing.T) {
 	}
 }
 
+func TestRedactionWalksNestedValues(t *testing.T) {
+	var buf bytes.Buffer
+	logger := testLogger(&buf, config.LogFormatJSON, config.LogLevelDebug)
+
+	logger.Info("login",
+		slog.Any("payload", map[string]any{"password": "hunter2"}),
+		slog.Any("wrapped", map[string]string{"token": "hunter2"}),
+	)
+	logger.Info("see hunter2 in the message")
+
+	out := buf.String()
+	lines := strings.Split(strings.TrimSpace(out), "\n")
+	if len(lines) != 2 {
+		t.Fatalf("log lines = %d, want 2\n%s", len(lines), out)
+	}
+	t.Logf("nested log: %s", lines[0])
+	if strings.Contains(lines[0], "hunter2") {
+		t.Fatalf("nested secret leaked: %s", lines[0])
+	}
+	if !strings.Contains(lines[0], "[REDACTED]") {
+		t.Fatalf("nested redaction marker missing: %s", lines[0])
+	}
+	t.Logf("message log: %s", lines[1])
+	if !strings.Contains(lines[1], "hunter2") {
+		t.Fatalf("message text was scanned: %s", lines[1])
+	}
+}
+
 func TestRequestBoundFields(t *testing.T) {
 	var buf bytes.Buffer
 	logger := testLogger(&buf, config.LogFormatJSON, config.LogLevelDebug)
