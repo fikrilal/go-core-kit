@@ -1,12 +1,12 @@
 # Section note: `cmd/api`
 
-- Status: Draft, waiting for acceptance
+- Status: Taste shipped in N7. `headerTimeout` is 5 seconds. `auth.Deps.Logger` is gone.
 - Date: 2026-10-11
 - Scope: the composition root. `main.go`, `server.go`, `server_test.go`, `helpers_test.go`.
 - Out of scope: the contract suites (`contract_*.go`, `coverage_test.go`). They call `newServer` and then assert wire shapes. They do not block reading boot, so they are not a second note. The allowlist reader is section 8.
 - Ruler: `_WIP/go-core-kit-readability-proposal.md`
-- Code changes: none in this pass
-- Earlier notes stay unapplied
+- Code changes: taste applied 2026-10-11. See `docs/exec-plans/completed/n7-api-boot-comments.md`.
+- Earlier notes 01 through 06 are applied.
 
 ## Verdict
 
@@ -14,7 +14,7 @@ Boot is already a composition root. `main` loads config and installs the signal.
 
 The hard lines are the ones a new Go reader cannot see from the names: why `main` calls `os.Exit`, why shutdown uses `context.WithoutCancel`, why the shutdown budget is 10 seconds and the header timeout is 5, and why `SessionTTL` is filled from `AuthRefreshTokenTTLSeconds`.
 
-One wire is dead. `auth.Deps.Logger` is set here and never read. The feature does not log.
+The unused `auth.Deps.Logger` field and its assignment were removed in N7. The feature does not log.
 
 No live bug.
 
@@ -67,9 +67,7 @@ The other integer-to-duration lines are what they say (`LoginWindow`, `LoginBloc
 
 ### 4. `auth.Deps.Logger` is never read
 
-`newServer` passes `logger` into `auth.Deps`. The field is the only `slog` use in `internal/features/auth`. No function reads it. Access logs come from `httpx.NewRouter(logger)`. Readiness logs come from `health.New(logger)`. A reader of this wiring thinks the feature logs with that logger.
-
-Delete the field and the assignment. That is the whole change. `Register` does not gain a log call in this pass.
+Removed in N7. `newServer` no longer passes a logger into `auth.Deps`, and the feature no longer imports `log/slog`. Access logs come from `httpx.NewRouter(logger)`. Readiness logs come from `health.New(logger)`. `Register` did not gain a log call.
 
 ## Correct Go that should stay
 
@@ -141,4 +139,4 @@ Not in this acceptance:
 
 ## Verification
 
-No production edit. `make verify` was not run. No probe. Shutdown behavior is the existing `TestServeServesProbesAndShutsDown` and plan 1.10, not a new run.
+Taste applied 2026-10-11. See `docs/exec-plans/completed/n7-api-boot-comments.md`. Shutdown behavior is the existing `TestServeServesProbesAndShutsDown`.

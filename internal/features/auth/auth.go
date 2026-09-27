@@ -7,7 +7,6 @@ package auth
 import (
 	"context"
 	"fmt"
-	"log/slog"
 	"net"
 	"net/http"
 	"time"
@@ -47,7 +46,6 @@ type Config struct {
 type Deps struct {
 	Database *db.Database
 	Redis    *redis.Client
-	Logger   *slog.Logger
 	Clock    clock.Clock
 	Config   Config
 }

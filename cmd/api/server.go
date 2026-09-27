@@ -20,7 +20,10 @@ import (
 	"github.com/fikrilal/go-core-kit/internal/platform/redis"
 )
 
-const shutdownTimeout = 10 * time.Second
+const (
+	shutdownTimeout = 10 * time.Second
+	headerTimeout   = 5 * time.Second
+)
 
 func newServer(cfg config.Config, logger *slog.Logger, database *db.Database, rdb *redis.Client) (*http.Server, error) {
 	router := httpx.NewRouter(logger, httpx.WithIdempotency(rdb))
@@ -31,10 +34,10 @@ func newServer(cfg config.Config, logger *slog.Logger, database *db.Database, rd
 	err := auth.Register(router, auth.Deps{
 		Database: database,
 		Redis:    rdb,
-		Logger:   logger,
 		Clock:    clock.System{},
 		Config: auth.Config{
-			AccessTokenTTL:        time.Duration(cfg.AuthAccessTokenTTLSeconds) * time.Second,
+			AccessTokenTTL: time.Duration(cfg.AuthAccessTokenTTLSeconds) * time.Second,
+			// SessionTTL is AUTH_REFRESH_TOKEN_TTL_SECONDS. The feature uses it for the session and the refresh token.
 			SessionTTL:            time.Duration(cfg.AuthRefreshTokenTTLSeconds) * time.Second,
 			PasswordMinLength:     cfg.AuthPasswordMinLength,
 			LoginMaxAttempts:      cfg.AuthLoginMaxAttempts,
@@ -55,10 +58,12 @@ func newServer(cfg config.Config, logger *slog.Logger, database *db.Database, rd
 	return &http.Server{
 		Addr:              fmt.Sprintf(":%d", cfg.HTTPPort),
 		Handler:           router,
-		ReadHeaderTimeout: 5 * time.Second,
+		ReadHeaderTimeout: headerTimeout,
 	}, nil
 }
 
+// serve drains on cancel. WithoutCancel is required because ctx is already canceled.
+// The header timeout holds Shutdown, so the drain is longer than headerTimeout.
 func serve(ctx context.Context, server *http.Server, listener net.Listener, logger *slog.Logger) error {
 	errCh := make(chan error, 1)
 	go func() {

@@ -13,6 +13,7 @@ import (
 	"github.com/fikrilal/go-core-kit/internal/platform/config"
 )
 
+// testConfig is not Load. An empty issuer is valid for EnvTest.
 func testConfig(t *testing.T) config.Config {
 	t.Helper()
 	return config.Config{

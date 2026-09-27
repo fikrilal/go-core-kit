@@ -1,6 +1,7 @@
 //go:build !pg
 
 // Command api is the HTTP process bootstrap.
+// This build is SQLite until a pg process exists.
 package main
 
 import (
@@ -19,6 +20,7 @@ import (
 	"github.com/fikrilal/go-core-kit/internal/platform/redis"
 )
 
+// os.Exit skips defers, so runMain returns the status.
 func main() {
 	os.Exit(runMain())
 }
@@ -41,6 +43,7 @@ func runMain() int {
 	return 0
 }
 
+// run migrates before listen. Redis Open does not dial. /ready is the connectivity check.
 func run(ctx context.Context, cfg config.Config, logger *slog.Logger) error {
 	database, err := db.Open(cfg.DatabasePath)
 	if err != nil {
@@ -62,6 +65,7 @@ func run(ctx context.Context, cfg config.Config, logger *slog.Logger) error {
 	if err != nil {
 		return err
 	}
+	// A canceled context aborts the bind.
 	lc := net.ListenConfig{}
 	listener, err := lc.Listen(ctx, "tcp", httpServer.Addr)
 	if err != nil {

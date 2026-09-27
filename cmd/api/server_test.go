@@ -117,6 +117,7 @@ func assertProbe(t *testing.T, client *http.Client, url string, wantStatus int, 
 	if err := json.Unmarshal(body, &probe); err != nil {
 		t.Fatalf("decode %s body: %v", url, err)
 	}
+	t.Logf("%s %d body status %s", url, resp.StatusCode, probe.Status)
 	if probe.Status != wantState {
 		t.Errorf("%s status field = %q, want %q", url, probe.Status, wantState)
 	}
