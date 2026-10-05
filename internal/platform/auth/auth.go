@@ -65,8 +65,12 @@ func NewKeyRing(opts KeyRingOptions) (*KeyRing, error) {
 	}
 	ring := &KeyRing{keysByKid: map[string]jwk.Key{}}
 	for i := range set.Len() {
-		if key, ok := set.Key(i); ok {
-			ring.addKey(key)
+		key, ok := set.Key(i)
+		if !ok {
+			continue
+		}
+		if err := ring.addKey(key); err != nil {
+			return nil, err
 		}
 	}
 	if ring.signingKey == nil {
@@ -80,40 +84,57 @@ func NewKeyRing(opts KeyRingOptions) (*KeyRing, error) {
 	return ring, nil
 }
 
-// addKey publishes a usable key. The first private key signs. Later private
+// addKey publishes an Ed25519 key. The first private key signs. Later private
 // keys are published and can verify, and they do not sign. A public-only key
-// is published when some other key signs. A bad key returns without an error.
-func (k *KeyRing) addKey(key jwk.Key) {
+// is published when some other key signs. A key that cannot sign EdDSA fails
+// NewKeyRing and is not published. A key with no kid is skipped.
+func (k *KeyRing) addKey(key jwk.Key) error {
 	kid, ok := key.KeyID()
 	if !ok || strings.TrimSpace(kid) == "" {
-		return
+		return nil
+	}
+	if err := requireEd25519(key); err != nil {
+		return fmt.Errorf("auth: signing key %q cannot sign EdDSA: %w", kid, err)
 	}
 	isPrivate, err := jwk.IsPrivateKey(key)
 	if err != nil {
-		return
+		return fmt.Errorf("auth: inspect signing key %q: %w", kid, err)
 	}
 	publicKey := key
 	if isPrivate {
 		derived, err := key.PublicKey()
 		if err != nil {
-			return
+			return fmt.Errorf("auth: derive public key %q: %w", kid, err)
 		}
 		publicKey = derived
 	}
 	if err := publicKey.Set(jwk.KeyIDKey, kid); err != nil {
-		return
+		return fmt.Errorf("auth: publish key %q: %w", kid, err)
 	}
 	if err := publicKey.Set(jwk.KeyUsageKey, "sig"); err != nil {
-		return
+		return fmt.Errorf("auth: publish key %q: %w", kid, err)
 	}
 	if err := publicKey.Set(jwk.AlgorithmKey, jwa.EdDSA()); err != nil {
-		return
+		return fmt.Errorf("auth: publish key %q: %w", kid, err)
 	}
 	k.publicKeys = append(k.publicKeys, publicKey)
 	k.keysByKid[kid] = publicKey
 	if isPrivate && k.signingKey == nil {
 		k.signingKey = key
 	}
+	return nil
+}
+
+func requireEd25519(key jwk.Key) error {
+	var privateKey ed25519.PrivateKey
+	if err := jwk.Export(key, &privateKey); err == nil {
+		return nil
+	}
+	var publicKey ed25519.PublicKey
+	if err := jwk.Export(key, &publicKey); err == nil {
+		return nil
+	}
+	return fmt.Errorf("kty %s", key.KeyType())
 }
 
 func ephemeralKeyRing() (*KeyRing, error) {

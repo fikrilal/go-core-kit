@@ -3,6 +3,7 @@ package auth_test
 import (
 	"crypto/ed25519"
 	"crypto/rand"
+	"crypto/rsa"
 	"encoding/base64"
 	"encoding/json"
 	"testing"
@@ -156,6 +157,38 @@ func TestSignAccessTokenOmitsEmptyIssuerAndAudience(t *testing.T) {
 	}
 	if _, ok := payload["aud"]; ok {
 		t.Error("aud present, want omitted")
+	}
+}
+
+func TestKeyRingRejectsRSAPrivateKey(t *testing.T) {
+	privateKey, err := rsa.GenerateKey(rand.Reader, 2048)
+	if err != nil {
+		t.Fatalf("generate rsa key: %v", err)
+	}
+	key, err := jwk.Import(privateKey)
+	if err != nil {
+		t.Fatalf("import rsa key: %v", err)
+	}
+	if err := key.Set(jwk.KeyIDKey, "rsa-kid"); err != nil {
+		t.Fatalf("set kid: %v", err)
+	}
+	set := jwk.NewSet()
+	if err := set.AddKey(key); err != nil {
+		t.Fatalf("add key: %v", err)
+	}
+	raw, err := json.Marshal(set)
+	if err != nil {
+		t.Fatalf("marshal set: %v", err)
+	}
+	ring, err := platformauth.NewKeyRing(platformauth.KeyRingOptions{KeysJSON: string(raw), ProductionLike: true})
+	t.Logf("NewKeyRing error: %v", err)
+	if err == nil {
+		document, marshalErr := json.Marshal(ring.PublicJWKS())
+		t.Fatalf("NewKeyRing(RSA, production-like) = nil error, JWKS %s (marshal %v)", document, marshalErr)
+	}
+	if ring != nil {
+		document, marshalErr := json.Marshal(ring.PublicJWKS())
+		t.Fatalf("RSA ring published JWKS %s (marshal %v)", document, marshalErr)
 	}
 }
 
