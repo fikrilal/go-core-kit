@@ -208,6 +208,39 @@ func TestVerifyAccessTokenAcceptsArrayAudienceAndSanitizesRoles(t *testing.T) {
 	}
 }
 
+func TestNewVerifierTrimsIssuerAndAudience(t *testing.T) {
+	keysJSON, privateKey := testKeyPair(t)
+	ring := testVerifierRing(t, keysJSON)
+	if _, err := platformauth.NewVerifier(ring, clock.Fixed{Moment: fixedMoment}, " ", "\t", true); err == nil {
+		t.Fatal("NewVerifier(production-like, whitespace issuer and audience) = nil error, want error")
+	}
+
+	blank, err := platformauth.NewVerifier(ring, clock.Fixed{Moment: fixedMoment}, "  ", "", false)
+	if err != nil {
+		t.Fatalf("NewVerifier(non-production, blank issuer) error = %v", err)
+	}
+	claims := baseClaims()
+	claims["iss"] = "https://other.example"
+	token := signRaw(t, privateKey, baseHeader(), claims)
+	if _, err := blank.VerifyAccessToken(token); err != nil {
+		t.Fatalf("VerifyAccessToken() error = %v, want the blank issuer to skip the iss check", err)
+	}
+
+	signed, err := platformauth.NewIssuer(ring, clock.Fixed{Moment: fixedMoment}, "  https://issuer.test  ", "  api  ", time.Minute).SignAccessToken(platformauth.AccessClaims{
+		UserID: "user-1", SessionID: "session-1", Roles: []string{"USER"},
+	})
+	if err != nil {
+		t.Fatalf("SignAccessToken() error = %v", err)
+	}
+	verifier, err := platformauth.NewVerifier(ring, clock.Fixed{Moment: fixedMoment}, " https://issuer.test ", " api ", false)
+	if err != nil {
+		t.Fatalf("NewVerifier(padded) error = %v", err)
+	}
+	if _, err := verifier.VerifyAccessToken(signed); err != nil {
+		t.Fatalf("VerifyAccessToken(trimmed) error = %v", err)
+	}
+}
+
 func TestNewVerifierRequiresIssuerAndAudienceInProductionLike(t *testing.T) {
 	keysJSON, _ := testKeyPair(t)
 	ring := testVerifierRing(t, keysJSON)

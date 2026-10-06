@@ -203,7 +203,13 @@ type Issuer struct {
 
 // NewIssuer builds an access-token issuer.
 func NewIssuer(ring *KeyRing, clk clock.Clock, issuer, audience string, ttl time.Duration) *Issuer {
-	return &Issuer{ring: ring, clock: clk, issuer: issuer, audience: audience, ttl: ttl}
+	return &Issuer{
+		ring:     ring,
+		clock:    clk,
+		issuer:   strings.TrimSpace(issuer),
+		audience: strings.TrimSpace(audience),
+		ttl:      ttl,
+	}
 }
 
 // AccessClaims are the client-visible claims of an access token.

@@ -41,6 +41,8 @@ type Verifier struct {
 // NewVerifier builds an access-token verifier; production-like environments
 // require the issuer and audience claims to be configured.
 func NewVerifier(ring *KeyRing, clk clock.Clock, issuer, audience string, productionLike bool) (*Verifier, error) {
+	issuer = strings.TrimSpace(issuer)
+	audience = strings.TrimSpace(audience)
 	if productionLike && (issuer == "" || audience == "") {
 		return nil, fmt.Errorf("auth: AUTH_ISSUER and AUTH_AUDIENCE are required when APP_ENV is staging or production")
 	}
