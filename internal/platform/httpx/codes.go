@@ -30,4 +30,6 @@ const (
 	CodeAuthOidcTokenInvalid       Code = "AUTH_OIDC_TOKEN_INVALID" //nolint:gosec // wire error code, not a credential
 	CodeAuthOidcEmailNotVerified   Code = "AUTH_OIDC_EMAIL_NOT_VERIFIED"
 	CodeAuthOidcLinkRequired       Code = "AUTH_OIDC_LINK_REQUIRED"
+	CodeAuthOidcIdentityLinked     Code = "AUTH_OIDC_IDENTITY_ALREADY_LINKED"
+	CodeAuthOidcProviderLinked     Code = "AUTH_OIDC_PROVIDER_ALREADY_LINKED"
 )

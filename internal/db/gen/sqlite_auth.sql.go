@@ -240,6 +240,40 @@ func (q *Queries) GetAuthMethods(ctx context.Context, userID string) ([]string, 
 	return items, nil
 }
 
+const getExternalIdentityIDByUserAndProvider = `-- name: GetExternalIdentityIDByUserAndProvider :one
+SELECT id FROM external_identities
+WHERE user_id = ?1 AND provider = ?2
+`
+
+type GetExternalIdentityIDByUserAndProviderParams struct {
+	UserID   string
+	Provider string
+}
+
+func (q *Queries) GetExternalIdentityIDByUserAndProvider(ctx context.Context, arg GetExternalIdentityIDByUserAndProviderParams) (string, error) {
+	row := q.db.QueryRowContext(ctx, getExternalIdentityIDByUserAndProvider, arg.UserID, arg.Provider)
+	var id string
+	err := row.Scan(&id)
+	return id, err
+}
+
+const getExternalIdentityUserID = `-- name: GetExternalIdentityUserID :one
+SELECT user_id FROM external_identities
+WHERE provider = ?1 AND subject = ?2
+`
+
+type GetExternalIdentityUserIDParams struct {
+	Provider string
+	Subject  string
+}
+
+func (q *Queries) GetExternalIdentityUserID(ctx context.Context, arg GetExternalIdentityUserIDParams) (string, error) {
+	row := q.db.QueryRowContext(ctx, getExternalIdentityUserID, arg.Provider, arg.Subject)
+	var user_id string
+	err := row.Scan(&user_id)
+	return user_id, err
+}
+
 const getMeView = `-- name: GetMeView :one
 SELECT
     u.id AS user_id,
@@ -665,4 +699,24 @@ type UpdatePasswordCredentialHashParams struct {
 func (q *Queries) UpdatePasswordCredentialHash(ctx context.Context, arg UpdatePasswordCredentialHashParams) error {
 	_, err := q.db.ExecContext(ctx, updatePasswordCredentialHash, arg.PasswordHash, arg.UpdatedAt, arg.UserID)
 	return err
+}
+
+const verifyUserEmailIfUnset = `-- name: VerifyUserEmailIfUnset :execrows
+UPDATE users
+SET email_verified_at = ?1, updated_at = ?2
+WHERE id = ?3 AND email_verified_at IS NULL
+`
+
+type VerifyUserEmailIfUnsetParams struct {
+	EmailVerifiedAt utctime.Time
+	UpdatedAt       utctime.Time
+	ID              string
+}
+
+func (q *Queries) VerifyUserEmailIfUnset(ctx context.Context, arg VerifyUserEmailIfUnsetParams) (int64, error) {
+	result, err := q.db.ExecContext(ctx, verifyUserEmailIfUnset, arg.EmailVerifiedAt, arg.UpdatedAt, arg.ID)
+	if err != nil {
+		return 0, err
+	}
+	return result.RowsAffected()
 }

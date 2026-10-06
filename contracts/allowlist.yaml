@@ -2,7 +2,6 @@
 # Grouped by the phase that lands them. The coverage test fails when this drifts.
 operations:
   # Phase 3 — auth slice
-  - auth.oidc.connect
   - auth.email.verify
   - auth.email.verification.resend
   - auth.password.reset.request

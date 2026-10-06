@@ -260,23 +260,9 @@ type OidcExchangeInput struct {
 // ExchangeOidc verifies an OIDC id token and issues a session for the resolved user.
 // A deleted OIDC user uses that same invalid-credentials path on purpose.
 func (s *Service) ExchangeOidc(ctx context.Context, in OidcExchangeInput) (Result, error) {
-	verification, err := s.oidc.VerifyIDToken(ctx, in.Provider, in.IDToken)
+	identity, err := s.verifyOidcIdentity(ctx, in.Provider, in.IDToken)
 	if err != nil {
-		return Result{}, fmt.Errorf("auth oidc: verify token: %w", err)
-	}
-	switch verification.Kind {
-	case domain.OidcVerifyNotConfigured:
-		return Result{}, oidcNotConfiguredError()
-	case domain.OidcVerifyInvalid:
-		return Result{}, oidcTokenInvalidError()
-	case domain.OidcVerifyVerified:
-		// Verified continues into the identity checks.
-	default:
-		return Result{}, fmt.Errorf("auth oidc: unexpected verification kind %q", verification.Kind)
-	}
-	identity := verification.Identity
-	if !identity.EmailVerified {
-		return Result{}, oidcEmailNotVerifiedError()
+		return Result{}, err
 	}
 	now := s.clock.Now()
 	email := domain.NormalizeEmail(identity.Email)
@@ -302,6 +288,73 @@ func (s *Service) ExchangeOidc(ctx context.Context, in OidcExchangeInput) (Resul
 		IP:         in.IP,
 		UserAgent:  in.UserAgent,
 	}, now)
+}
+
+// verifyOidcIdentity verifies an id_token and maps the three failures both
+// OIDC flows return. Verified continues into the caller's own checks.
+func (s *Service) verifyOidcIdentity(ctx context.Context, provider, idToken string) (domain.OidcIdentity, error) {
+	verification, err := s.oidc.VerifyIDToken(ctx, provider, idToken)
+	if err != nil {
+		return domain.OidcIdentity{}, fmt.Errorf("auth oidc: verify token: %w", err)
+	}
+	switch verification.Kind {
+	case domain.OidcVerifyNotConfigured:
+		return domain.OidcIdentity{}, oidcNotConfiguredError()
+	case domain.OidcVerifyInvalid:
+		return domain.OidcIdentity{}, oidcTokenInvalidError()
+	case domain.OidcVerifyVerified:
+		// Verified continues into the caller's checks.
+	default:
+		return domain.OidcIdentity{}, fmt.Errorf("auth oidc: unexpected verification kind %q", verification.Kind)
+	}
+	if !verification.Identity.EmailVerified {
+		return domain.OidcIdentity{}, oidcEmailNotVerifiedError()
+	}
+	return verification.Identity, nil
+}
+
+// OidcConnectInput carries an identity link for the authenticated user.
+type OidcConnectInput struct {
+	UserID   string
+	Provider string
+	IDToken  string
+}
+
+// ConnectOidc links a verified OIDC identity to the authenticated user.
+// Only a deleted account is rejected up front; suspended accounts may connect.
+func (s *Service) ConnectOidc(ctx context.Context, in OidcConnectInput) error {
+	status, found, err := s.repo.FindUserStatus(ctx, in.UserID)
+	if err != nil {
+		return fmt.Errorf("auth oidc connect: find user: %w", err)
+	}
+	if !found || status == domain.StatusDeleted {
+		return unauthorizedError()
+	}
+	identity, err := s.verifyOidcIdentity(ctx, in.Provider, in.IDToken)
+	if err != nil {
+		return err
+	}
+	kind, err := s.repo.LinkExternalIdentityToUser(ctx, ports.LinkExternalIdentityInput{
+		UserID:   in.UserID,
+		Provider: identity.Provider,
+		Subject:  identity.Subject,
+		Email:    domain.NormalizeEmail(identity.Email),
+		Now:      s.clock.Now(),
+	})
+	if err != nil {
+		return fmt.Errorf("auth oidc connect: link identity: %w", err)
+	}
+	switch kind {
+	case domain.LinkIdentityOK, domain.LinkIdentityAlreadyLinked:
+		return nil
+	case domain.LinkIdentityUserNotFound:
+		return unauthorizedError()
+	case domain.LinkIdentityOwnedByOtherUser:
+		return oidcIdentityAlreadyLinkedError()
+	case domain.LinkIdentityProviderAlreadyLinked:
+		return oidcProviderAlreadyLinkedError()
+	}
+	return fmt.Errorf("auth oidc connect: unexpected link result %q", kind)
 }
 
 func (s *Service) createOidcUser(ctx context.Context, identity domain.OidcIdentity, email string, now time.Time) (domain.User, error) {

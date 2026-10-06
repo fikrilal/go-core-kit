@@ -56,6 +56,12 @@ type fakeRepository struct {
 	createOidcUser   domain.User
 	createOidcErr    error
 	createOidcInputs []ports.CreateOidcUserInput
+	userStatus       string
+	userStatusFound  bool
+	userStatusErr    error
+	linkKind         domain.LinkIdentityKind
+	linkErr          error
+	links            []ports.LinkExternalIdentityInput
 	meView           domain.MeView
 	meViewFound      bool
 	meViewErr        error
@@ -124,6 +130,18 @@ func (f *fakeRepository) CreateUserWithExternalIdentity(_ context.Context, in po
 		return domain.User{}, f.createOidcErr
 	}
 	return f.createOidcUser, nil
+}
+
+func (f *fakeRepository) FindUserStatus(context.Context, string) (string, bool, error) {
+	return f.userStatus, f.userStatusFound, f.userStatusErr
+}
+
+func (f *fakeRepository) LinkExternalIdentityToUser(_ context.Context, in ports.LinkExternalIdentityInput) (domain.LinkIdentityKind, error) {
+	if f.linkErr != nil {
+		return "", f.linkErr
+	}
+	f.links = append(f.links, in)
+	return f.linkKind, nil
 }
 
 func (f *fakeRepository) GetMeView(context.Context, string) (domain.MeView, bool, error) {
@@ -807,6 +825,148 @@ func TestExchangeOidcDeletedAndSuspended(t *testing.T) {
 	if code := problemError(t, mustError(t, suspendedResult, suspendedCallErr)).Code; code != httpx.CodeAuthUserSuspended {
 		t.Fatalf("suspended exchange code = %q, want AUTH_USER_SUSPENDED", code)
 	}
+}
+
+func connectFixture(t *testing.T) *fixture {
+	t.Helper()
+	f := exchangeFixture(t)
+	f.repo.userStatusFound = true
+	f.repo.userStatus = domain.StatusActive
+	f.repo.linkKind = domain.LinkIdentityOK
+	return f
+}
+
+func (f *fixture) connect() error {
+	err := f.service.ConnectOidc(context.Background(), app.OidcConnectInput{
+		UserID: "user-1", Provider: domain.AuthMethodGoogle, IDToken: "id-token",
+	})
+	if err != nil {
+		return fmt.Errorf("connect: %w", err)
+	}
+	return nil
+}
+
+func TestConnectOidcLinksIdentity(t *testing.T) {
+	f := connectFixture(t)
+	if err := f.connect(); err != nil {
+		t.Fatalf("ConnectOidc() error = %v", err)
+	}
+	if len(f.repo.links) != 1 {
+		t.Fatalf("links = %d, want 1", len(f.repo.links))
+	}
+	link := f.repo.links[0]
+	if link.UserID != "user-1" || link.Provider != domain.AuthMethodGoogle || link.Subject != "google-sub-1" {
+		t.Errorf("link = %+v, want the verified identity for the principal", link)
+	}
+	if link.Email != "dante@example.com" {
+		t.Errorf("link email = %q, want the normalized identity email", link.Email)
+	}
+	if !link.Now.Equal(moment) {
+		t.Errorf("link now = %v, want the injected clock", link.Now)
+	}
+}
+
+func TestConnectOidcAlreadyLinkedIsOK(t *testing.T) {
+	f := connectFixture(t)
+	f.repo.linkKind = domain.LinkIdentityAlreadyLinked
+	if err := f.connect(); err != nil {
+		t.Fatalf("ConnectOidc() error = %v, want nil for already_linked", err)
+	}
+}
+
+func TestConnectOidcKindMapping(t *testing.T) {
+	cases := map[domain.LinkIdentityKind]struct {
+		status int
+		code   httpx.Code
+	}{
+		domain.LinkIdentityUserNotFound:          {status: 401, code: httpx.CodeUnauthorized},
+		domain.LinkIdentityOwnedByOtherUser:      {status: 409, code: httpx.CodeAuthOidcIdentityLinked},
+		domain.LinkIdentityProviderAlreadyLinked: {status: 409, code: httpx.CodeAuthOidcProviderLinked},
+	}
+	for kind, want := range cases {
+		t.Run(string(kind), func(t *testing.T) {
+			f := connectFixture(t)
+			f.repo.linkKind = kind
+			problem := problemError(t, f.connect())
+			if problem.Status != want.status || problem.Code != want.code {
+				t.Fatalf("kind %q mapped to %d/%s, want %d/%s", kind, problem.Status, problem.Code, want.status, want.code)
+			}
+		})
+	}
+}
+
+func TestConnectOidcUnexpectedLinkKind(t *testing.T) {
+	f := connectFixture(t)
+	f.repo.linkKind = "mystery"
+	err := f.connect()
+	if err == nil || !strings.Contains(err.Error(), "mystery") {
+		t.Fatalf("ConnectOidc() error = %v, want the unexpected kind", err)
+	}
+	var problem *httpx.ProblemError
+	if errors.As(err, &problem) {
+		t.Fatalf("unexpected kind became a problem: %+v", problem)
+	}
+}
+
+func TestConnectOidcMissingAndDeletedUsersAreUnauthorized(t *testing.T) {
+	missing := connectFixture(t)
+	missing.repo.userStatusFound = false
+	problem := problemError(t, missing.connect())
+	if problem.Status != 401 || problem.Code != httpx.CodeUnauthorized {
+		t.Fatalf("missing user mapped to %d/%s, want 401 UNAUTHORIZED", problem.Status, problem.Code)
+	}
+	if missing.oidc.token != "" {
+		t.Error("token verified for a missing user; the status check must come first")
+	}
+
+	deleted := connectFixture(t)
+	deleted.repo.userStatus = domain.StatusDeleted
+	problem = problemError(t, deleted.connect())
+	if problem.Status != 401 || problem.Code != httpx.CodeUnauthorized {
+		t.Fatalf("deleted user mapped to %d/%s, want 401 UNAUTHORIZED", problem.Status, problem.Code)
+	}
+	if deleted.oidc.token != "" {
+		t.Error("token verified for a deleted user; the status check must come first")
+	}
+}
+
+func TestConnectOidcSuspendedUserProceeds(t *testing.T) {
+	f := connectFixture(t)
+	f.repo.userStatus = domain.StatusSuspended
+	if err := f.connect(); err != nil {
+		t.Fatalf("ConnectOidc() error = %v, want a suspended user to connect (reference parity)", err)
+	}
+	if len(f.repo.links) != 1 {
+		t.Error("identity not linked for the suspended user")
+	}
+}
+
+func TestConnectOidcVerifierKindMapping(t *testing.T) {
+	cases := map[domain.OidcVerifyKind]struct {
+		status int
+		code   httpx.Code
+	}{
+		domain.OidcVerifyNotConfigured: {status: 500, code: httpx.CodeAuthOidcNotConfigured},
+		domain.OidcVerifyInvalid:       {status: 401, code: httpx.CodeAuthOidcTokenInvalid},
+	}
+	for kind, want := range cases {
+		t.Run(string(kind), func(t *testing.T) {
+			f := connectFixture(t)
+			f.oidc.verification = domain.OidcVerification{Kind: kind}
+			problem := problemError(t, f.connect())
+			if problem.Status != want.status || problem.Code != want.code {
+				t.Fatalf("kind %q mapped to %d/%s, want %d/%s", kind, problem.Status, problem.Code, want.status, want.code)
+			}
+		})
+	}
+	t.Run("email not verified", func(t *testing.T) {
+		f := connectFixture(t)
+		f.oidc.verification.Identity.EmailVerified = false
+		problem := problemError(t, f.connect())
+		if problem.Status != 400 || problem.Code != httpx.CodeAuthOidcEmailNotVerified {
+			t.Fatalf("unverified email mapped to %d/%s, want 400 AUTH_OIDC_EMAIL_NOT_VERIFIED", problem.Status, problem.Code)
+		}
+	})
 }
 
 func TestMeViewPassesThroughRepository(t *testing.T) {

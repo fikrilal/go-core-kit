@@ -182,6 +182,19 @@ VALUES (
     sqlc.arg(updated_at)
 );
 
+-- name: GetExternalIdentityUserID :one
+SELECT user_id FROM external_identities
+WHERE provider = sqlc.arg(provider) AND subject = sqlc.arg(subject);
+
+-- name: GetExternalIdentityIDByUserAndProvider :one
+SELECT id FROM external_identities
+WHERE user_id = sqlc.arg(user_id) AND provider = sqlc.arg(provider);
+
+-- name: VerifyUserEmailIfUnset :execrows
+UPDATE users
+SET email_verified_at = sqlc.arg(email_verified_at), updated_at = sqlc.arg(updated_at)
+WHERE id = sqlc.arg(id) AND email_verified_at IS NULL;
+
 -- name: CreateUserProfile :exec
 INSERT INTO user_profiles (user_id, display_name, given_name, family_name, created_at, updated_at)
 VALUES (

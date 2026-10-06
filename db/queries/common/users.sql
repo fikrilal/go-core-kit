@@ -7,3 +7,11 @@ RETURNING id, email, created_at, updated_at;
 SELECT id, email, created_at, updated_at
 FROM users
 WHERE id = sqlc.arg(id);
+
+-- name: GetUserStatus :one
+SELECT status FROM users WHERE id = sqlc.arg(id);
+
+-- name: GetUserForIdentityLink :one
+SELECT id, email, email_verified_at
+FROM users
+WHERE id = sqlc.arg(id);

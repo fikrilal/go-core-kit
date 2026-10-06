@@ -99,6 +99,18 @@ const (
 	ChangePasswordCurrentPasswordMismatch ChangePasswordKind = "current_password_mismatch"
 )
 
+// LinkIdentityKind reports how linking an OIDC identity ended.
+type LinkIdentityKind string
+
+// Identity link outcomes.
+const (
+	LinkIdentityOK                    LinkIdentityKind = "ok"
+	LinkIdentityAlreadyLinked         LinkIdentityKind = "already_linked"
+	LinkIdentityUserNotFound          LinkIdentityKind = "user_not_found"
+	LinkIdentityOwnedByOtherUser      LinkIdentityKind = "owned_by_other_user"
+	LinkIdentityProviderAlreadyLinked LinkIdentityKind = "provider_already_linked"
+)
+
 // Profile is the display profile attached to a user.
 type Profile struct {
 	DisplayName string

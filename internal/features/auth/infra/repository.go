@@ -307,6 +307,18 @@ func (r *Repository) FindUserIDByEmail(ctx context.Context, email string) (strin
 	return id, true, nil
 }
 
+// FindUserStatus returns the account status, reporting whether the user exists.
+func (r *Repository) FindUserStatus(ctx context.Context, userID string) (string, bool, error) {
+	status, err := r.queries.GetUserStatus(ctx, userID)
+	if errors.Is(err, db.ErrNoRows) {
+		return "", false, nil
+	}
+	if err != nil {
+		return "", false, fmt.Errorf("find user status: %w", err)
+	}
+	return status, true, nil
+}
+
 // FindUserByExternalIdentity resolves the user behind a provider identity.
 func (r *Repository) FindUserByExternalIdentity(ctx context.Context, provider, subject string) (domain.User, bool, error) {
 	row, err := r.queries.GetUserByExternalIdentity(ctx, gen.GetUserByExternalIdentityParams{
@@ -391,6 +403,147 @@ func (r *Repository) CreateUserWithExternalIdentity(ctx context.Context, in port
 		Role:          domain.RoleUser,
 		Status:        domain.StatusActive,
 	}, nil
+}
+
+// LinkExternalIdentityToUser links a verified identity to the current user in
+// one transaction. Conflicts come back as kinds, not errors.
+func (r *Repository) LinkExternalIdentityToUser(ctx context.Context, in ports.LinkExternalIdentityInput) (domain.LinkIdentityKind, error) {
+	kind := domain.LinkIdentityOK
+	err := r.database.InTx(ctx, func(tx db.Tx) error {
+		var err error
+		kind, err = linkIdentity(ctx, gen.New(tx), in)
+		return err
+	})
+	if err != nil {
+		return "", fmt.Errorf("link external identity: %w", err)
+	}
+	return kind, nil
+}
+
+// linkIdentity is the transaction body: user, existing identity, provider
+// check, create, and the conditional email verification.
+func linkIdentity(ctx context.Context, queries *gen.Queries, in ports.LinkExternalIdentityInput) (domain.LinkIdentityKind, error) {
+	now := utctime.Time{Time: in.Now}
+	user, err := queries.GetUserForIdentityLink(ctx, in.UserID)
+	if errors.Is(err, db.ErrNoRows) {
+		return domain.LinkIdentityUserNotFound, nil
+	}
+	if err != nil {
+		return "", fmt.Errorf("find user: %w", err)
+	}
+	owner, found, err := identityOwner(ctx, queries, in.Provider, in.Subject)
+	if err != nil {
+		return "", err
+	}
+	if found {
+		return settleOwnedIdentity(ctx, queries, user, owner, in, now)
+	}
+	hasProvider, err := hasProviderLink(ctx, queries, in.UserID, in.Provider)
+	if err != nil {
+		return "", err
+	}
+	if hasProvider {
+		return domain.LinkIdentityProviderAlreadyLinked, nil
+	}
+	identityID, err := uuid.NewV7()
+	if err != nil {
+		return "", fmt.Errorf("generate identity id: %w", err)
+	}
+	if err := queries.CreateExternalIdentity(ctx, gen.CreateExternalIdentityParams{
+		ID:        identityID.String(),
+		Provider:  in.Provider,
+		Subject:   in.Subject,
+		Email:     in.Email,
+		UserID:    in.UserID,
+		CreatedAt: now,
+		UpdatedAt: now,
+	}); err != nil {
+		if !db.IsUniqueViolation(err) {
+			return "", fmt.Errorf("create external identity: %w", err)
+		}
+		return resolveIdentityRace(ctx, queries, user, in, now)
+	}
+	if err := verifyEmailIfMatching(ctx, queries, user, in.Email, now); err != nil {
+		return "", err
+	}
+	return domain.LinkIdentityOK, nil
+}
+
+// identityOwner resolves which user owns a provider identity.
+func identityOwner(ctx context.Context, queries *gen.Queries, provider, subject string) (string, bool, error) {
+	owner, err := queries.GetExternalIdentityUserID(ctx, gen.GetExternalIdentityUserIDParams{
+		Provider: provider,
+		Subject:  subject,
+	})
+	if errors.Is(err, db.ErrNoRows) {
+		return "", false, nil
+	}
+	if err != nil {
+		return "", false, fmt.Errorf("find identity owner: %w", err)
+	}
+	return owner, true, nil
+}
+
+// hasProviderLink reports whether the user already linked this provider.
+func hasProviderLink(ctx context.Context, queries *gen.Queries, userID, provider string) (bool, error) {
+	_, err := queries.GetExternalIdentityIDByUserAndProvider(ctx, gen.GetExternalIdentityIDByUserAndProviderParams{
+		UserID:   userID,
+		Provider: provider,
+	})
+	if errors.Is(err, db.ErrNoRows) {
+		return false, nil
+	}
+	if err != nil {
+		return false, fmt.Errorf("find provider link: %w", err)
+	}
+	return true, nil
+}
+
+// settleOwnedIdentity handles an identity that already exists: another owner
+// is a conflict, the same owner verifies the email and reports already linked.
+func settleOwnedIdentity(ctx context.Context, queries *gen.Queries, user gen.GetUserForIdentityLinkRow, owner string, in ports.LinkExternalIdentityInput, now utctime.Time) (domain.LinkIdentityKind, error) {
+	if owner != in.UserID {
+		return domain.LinkIdentityOwnedByOtherUser, nil
+	}
+	if err := verifyEmailIfMatching(ctx, queries, user, in.Email, now); err != nil {
+		return "", err
+	}
+	return domain.LinkIdentityAlreadyLinked, nil
+}
+
+// resolveIdentityRace re-reads which unique key lost after a create race.
+func resolveIdentityRace(ctx context.Context, queries *gen.Queries, user gen.GetUserForIdentityLinkRow, in ports.LinkExternalIdentityInput, now utctime.Time) (domain.LinkIdentityKind, error) {
+	owner, found, err := identityOwner(ctx, queries, in.Provider, in.Subject)
+	if err != nil {
+		return "", err
+	}
+	if found {
+		return settleOwnedIdentity(ctx, queries, user, owner, in, now)
+	}
+	hasProvider, err := hasProviderLink(ctx, queries, in.UserID, in.Provider)
+	if err != nil {
+		return "", err
+	}
+	if hasProvider {
+		return domain.LinkIdentityProviderAlreadyLinked, nil
+	}
+	return "", fmt.Errorf("identity create failed without a conflicting row")
+}
+
+// verifyEmailIfMatching marks the account verified when the identity email
+// equals the account email and the account is still unverified.
+func verifyEmailIfMatching(ctx context.Context, queries *gen.Queries, user gen.GetUserForIdentityLinkRow, email string, now utctime.Time) error {
+	if email == "" || !user.EmailVerifiedAt.IsZero() || email != user.Email {
+		return nil
+	}
+	if _, err := queries.VerifyUserEmailIfUnset(ctx, gen.VerifyUserEmailIfUnsetParams{
+		EmailVerifiedAt: now,
+		UpdatedAt:       now,
+		ID:              user.ID,
+	}); err != nil {
+		return fmt.Errorf("verify user email: %w", err)
+	}
+	return nil
 }
 
 // GetMeView composes the user, profile, and auth methods for Me responses.

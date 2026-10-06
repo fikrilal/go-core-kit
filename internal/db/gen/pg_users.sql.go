@@ -9,6 +9,7 @@ package gen
 
 import (
 	"context"
+	"database/sql"
 
 	utctime "github.com/fikrilal/go-core-kit/internal/platform/db/utctime"
 )
@@ -73,4 +74,34 @@ func (q *Queries) GetUserByID(ctx context.Context, id string) (GetUserByIDRow, e
 		&i.UpdatedAt,
 	)
 	return i, err
+}
+
+const getUserForIdentityLink = `-- name: GetUserForIdentityLink :one
+SELECT id, email, email_verified_at
+FROM users
+WHERE id = $1
+`
+
+type GetUserForIdentityLinkRow struct {
+	ID              string
+	Email           string
+	EmailVerifiedAt sql.NullTime
+}
+
+func (q *Queries) GetUserForIdentityLink(ctx context.Context, id string) (GetUserForIdentityLinkRow, error) {
+	row := q.db.QueryRowContext(ctx, getUserForIdentityLink, id)
+	var i GetUserForIdentityLinkRow
+	err := row.Scan(&i.ID, &i.Email, &i.EmailVerifiedAt)
+	return i, err
+}
+
+const getUserStatus = `-- name: GetUserStatus :one
+SELECT status FROM users WHERE id = $1
+`
+
+func (q *Queries) GetUserStatus(ctx context.Context, id string) (string, error) {
+	row := q.db.QueryRowContext(ctx, getUserStatus, id)
+	var status string
+	err := row.Scan(&status)
+	return status, err
 }

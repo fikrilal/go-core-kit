@@ -60,6 +60,15 @@ type CreateOidcUserInput struct {
 	Now      time.Time
 }
 
+// LinkExternalIdentityInput carries an OIDC identity link for the current user.
+type LinkExternalIdentityInput struct {
+	UserID   string
+	Provider string
+	Subject  string
+	Email    string
+	Now      time.Time
+}
+
 // Repository is the auth feature's persistence boundary.
 type Repository interface {
 	CreateUserWithPassword(ctx context.Context, in CreateUserInput) (domain.User, error)
@@ -71,8 +80,10 @@ type Repository interface {
 	FindPasswordCredential(ctx context.Context, userID string) (string, bool, error)
 	ChangePasswordAndRevokeOtherSessions(ctx context.Context, in ChangePasswordInput) (domain.ChangePasswordKind, error)
 	FindUserIDByEmail(ctx context.Context, email string) (string, bool, error)
+	FindUserStatus(ctx context.Context, userID string) (string, bool, error)
 	FindUserByExternalIdentity(ctx context.Context, provider, subject string) (domain.User, bool, error)
 	CreateUserWithExternalIdentity(ctx context.Context, in CreateOidcUserInput) (domain.User, error)
+	LinkExternalIdentityToUser(ctx context.Context, in LinkExternalIdentityInput) (domain.LinkIdentityKind, error)
 	GetMeView(ctx context.Context, userID string) (domain.MeView, bool, error)
 }
 

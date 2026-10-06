@@ -136,3 +136,19 @@ func oidcLinkRequiredError() error {
 		Detail: "We found an existing account for this email. Sign in with your password to link Google sign-in.",
 	}
 }
+
+func oidcIdentityAlreadyLinkedError() error {
+	return &httpx.ProblemError{
+		Status: http.StatusConflict,
+		Code:   httpx.CodeAuthOidcIdentityLinked,
+		Detail: "This OIDC identity is already linked to another account",
+	}
+}
+
+func oidcProviderAlreadyLinkedError() error {
+	return &httpx.ProblemError{
+		Status: http.StatusConflict,
+		Code:   httpx.CodeAuthOidcProviderLinked,
+		Detail: "This provider is already linked to your account",
+	}
+}

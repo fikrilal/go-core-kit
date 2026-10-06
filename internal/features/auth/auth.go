@@ -97,6 +97,8 @@ func Register(router *httpx.Router, deps Deps) error {
 	router.HandleFunc(httpx.Operation{Method: http.MethodPost, Path: "/v1/auth/oidc/exchange", ID: "auth.oidc.exchange"}, handlers.exchangeOidc)
 	changePassword := httpx.Operation{Method: http.MethodPost, Path: "/v1/auth/password/change", ID: "auth.password.change"}
 	router.Handle(changePassword, guard.Require(router.Idempotent(changePassword, handlers.changePassword)))
+	connectOidc := httpx.Operation{Method: http.MethodPost, Path: "/v1/auth/oidc/connect", ID: "auth.oidc.connect"}
+	router.Handle(connectOidc, guard.Require(router.Idempotent(connectOidc, handlers.connectOidc)))
 	return nil
 }
 
@@ -192,6 +194,33 @@ func (h *handlers) exchangeOidc(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	h.respondAuth(w, r, result)
+}
+
+type oidcConnectRequest struct {
+	Provider string `json:"provider" validate:"required,oneof=GOOGLE"`
+	IDToken  string `json:"idToken" validate:"required"`
+}
+
+func (h *handlers) connectOidc(w http.ResponseWriter, r *http.Request) {
+	principal, ok := platformauth.PrincipalFrom(r.Context())
+	if !ok {
+		httpx.WriteError(w, r, &httpx.ProblemError{Status: http.StatusUnauthorized, Code: httpx.CodeUnauthorized})
+		return
+	}
+	var body oidcConnectRequest
+	if err := httpx.Decode(r, &body); err != nil {
+		httpx.WriteError(w, r, err)
+		return
+	}
+	if err := h.service.ConnectOidc(r.Context(), app.OidcConnectInput{
+		UserID:   principal.UserID,
+		Provider: body.Provider,
+		IDToken:  body.IDToken,
+	}); err != nil {
+		httpx.WriteError(w, r, err)
+		return
+	}
+	httpx.NoContent(w)
 }
 
 // respondAuth writes the token pair. The second read is the Me profile and auth methods.
