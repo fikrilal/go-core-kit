@@ -65,5 +65,5 @@ Outcome (2026-10-11): both commands passed. `make verify` full profile passed in
 
 ## Follow-Ups
 
-- [ ] Nested redaction, after an explicit yes
-- [ ] `version` comment, ldflags, or package deletion, after an explicit yes
+- [x] Nested redaction — `n2-nested-redact.md`
+- [x] `version` claim removed — `n2-version-claim.md`

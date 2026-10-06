@@ -63,6 +63,6 @@ Outcome (2026-10-11): both commands passed. `make verify` full profile passed in
 
 ## Follow-Ups
 
-- [ ] B1 reject a private key that cannot sign EdDSA, after an explicit yes
-- [ ] B3 trim issuer and audience, after an explicit yes
-- [ ] B2 stack sentence or an RS256 project, after an explicit choice
+- [x] B1 reject a private key that cannot sign EdDSA — `n3-reject-non-eddsa.md`
+- [x] B3 trim issuer and audience — `n3-trim-issuer.md`
+- [x] B2 stack sentence says EdDSA only — `n3-stack-eddsa.md`

@@ -1,10 +1,10 @@
 # Section note: `internal/platform/auth`
 
-- Status: Comments shipped in N3. B1, B2, and B3 still need a yes.
+- Status: Comments shipped in N3. B1, B2, and B3 shipped. Verification stays EdDSA only.
 - Date: 2026-10-11
 - Scope: `auth.go`, `verifier.go`, `guard.go`, and their three test files
 - Ruler: `_WIP/go-core-kit-readability-proposal.md`
-- Code changes: comments applied 2026-10-11. See `docs/exec-plans/completed/n3-auth-comments.md`.
+- Code changes: comments applied 2026-10-11. B1, B2, and B3 landed the same day. See `docs/exec-plans/completed/n3-auth-comments.md`, `docs/exec-plans/completed/n3-reject-non-eddsa.md`, `docs/exec-plans/completed/n3-trim-issuer.md`, and `docs/exec-plans/completed/n3-stack-eddsa.md`.
 - Earlier notes 01 and 02 are applied.
 
 ## Verdict
@@ -84,6 +84,8 @@ Leave the branch. It is the seam between a bad token and a broken verifier. A co
 
 ### B1. A non-Ed25519 private key boots, and the JWKS lies
 
+Shipped in `docs/exec-plans/completed/n3-reject-non-eddsa.md`. `NewKeyRing` rejects a key that cannot sign EdDSA.
+
 Probed 2026-10-11 with a 2048-bit RSA private JWK, `kid` `rsa-kid`, `ProductionLike: true`.
 
 `NewKeyRing` returned a ring. `Kid()` was `rsa-kid`. The published document was `kty: RSA` with `alg: EdDSA` and `use: sig`. No private field. The first `SignAccessToken` then failed:
@@ -92,25 +94,23 @@ Probed 2026-10-11 with a 2048-bit RSA private JWK, `kid` `rsa-kid`, `ProductionL
 auth: sign access token: jws.Sign: algorithm "EdDSA" is not compatible with key type *jwk.rsaPrivateKey
 ```
 
-Startup does not fail. `/.well-known/jwks.json` would advertise a key that cannot verify an EdDSA token and is not an EdDSA key. The first login or register fails inside token issuance, after the user and session work, unless the caller notices the sign error.
+Before the fix, startup did not fail. `/.well-known/jwks.json` would advertise a key that cannot verify an EdDSA token and is not an EdDSA key. The first login or register fails inside token issuance, after the user and session work, unless the caller notices the sign error.
 
 `addKey` writes `jwa.EdDSA()` onto every key and never reads `kty`. Backend infers `OKP` as EdDSA and `RSA` as RS256, and signs with that algorithm. This probe is not that feature. It is fail-open loading plus a false `alg`.
 
-When accepted as a bug: `NewKeyRing` should reject a private key that cannot sign EdDSA, before the process serves traffic. The JWKS must not label another key type as EdDSA. A test with an RSA JWK belongs next to `TestKeyRingRequiresKeysInProductionLike`.
+`NewKeyRing` now returns that error and does not publish the key. `TestKeyRingRejectsRSAPrivateKey` locks the RSA case. The paragraphs above are the pre-fix probe.
 
 ### B2. RS256 is advertised and not implemented
 
-`docs/core/project-stack.md` says the auth stack is "EdDSA default, RS256 supported". Backend verifies both. A compact RS256 access token is `ErrInvalidToken` here, and `TestVerifyAccessTokenRejections` calls that case "alg mismatch" on purpose.
+Shipped as the stack sentence in `docs/exec-plans/completed/n3-stack-eddsa.md`. Verification stays EdDSA only.
 
-Plan 3.4 shipped EdDSA only. The code and the tests agree with the plan. The stack doc and the backend verifier do not. A client holding a backend RS256 access token cannot call this process. A key set that is legal on backend (B1) does not sign here.
-
-Do not add RS256 inside a readability edit. Either correct the stack sentence to "EdDSA only", or schedule RS256 as its own change with a verifier switch and a keyring that keeps the key's real algorithm. B1 should be fixed even if RS256 stays unsupported. A rejected key must fail `NewKeyRing`, not the first request.
+Before the fix, `docs/core/project-stack.md` said "EdDSA default, RS256 supported". The stack sentence now says EdDSA only. Backend still verifies both. A compact RS256 access token is `ErrInvalidToken` here, and `TestVerifyAccessTokenRejections` calls that case "alg mismatch" on purpose. RS256 was not added.
 
 ### B3. Whitespace counts as a configured issuer
 
-`NewVerifier` treats `""` as missing and `" "` as present. Production with `AUTH_ISSUER=" "` boots. Every real token then fails `iss`, because the claim is compared to a space. Backend uses a trim-and-reject helper, so a blank value is the same as unset and production refuses to start.
+Shipped in `docs/exec-plans/completed/n3-trim-issuer.md`. Issuer and audience are trimmed before the empty check and before they are stored.
 
-`NewKeyRing` already trims the key JSON. The issuer and audience strings should get the same trim before the production check and before they are stored. Small, and it changes which process starts.
+Before the fix, `NewVerifier` treated `""` as missing and `" "` as present. `NewVerifier` and `NewIssuer` now trim both strings before the production-empty check and before they are stored. A whitespace-only value is empty. A non-production empty issuer still skips the `iss` check.
 
 ## Design question
 

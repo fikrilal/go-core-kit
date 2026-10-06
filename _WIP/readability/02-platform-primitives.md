@@ -1,10 +1,10 @@
 # Section note: platform primitives
 
-- Status: Both N2 plans shipped. Nested redaction and `version` still need a yes.
+- Status: Both N2 plans shipped. Nested redaction shipped. The version package remains and no longer claims build-time injection.
 - Date: 2026-10-11
 - Scope: `internal/platform/config`, `logging`, `clock`, `health`, `version`
 - Ruler: `_WIP/go-core-kit-readability-proposal.md`
-- Code changes: both N2 plans applied 2026-10-11. See `docs/exec-plans/completed/n2-config-redact.md` and `docs/exec-plans/completed/n2-health-probes.md`.
+- Code changes: both N2 plans applied 2026-10-11. Nested redaction and the version wording landed the same day. See `docs/exec-plans/completed/n2-config-redact.md`, `docs/exec-plans/completed/n2-health-probes.md`, `docs/exec-plans/completed/n2-nested-redact.md`, and `docs/exec-plans/completed/n2-version-claim.md`.
 - Previous note: `_WIP/readability/01-platform-httpx.md` is applied.
 
 ## Verdict
@@ -13,7 +13,7 @@ This set is already close to the mobile bar. Each package has one job. `clock` i
 
 Features do not read the environment and do not call `time.Now()`. `config.Load` is the only `env.Parse`. Service and domain code take a `clock.Clock`. That is the shared-core habit working.
 
-No client-visible bug of the kind in the `httpx` note. Two traps are real and should be fixed only when this note is accepted. Neither is a rewrite.
+No client-visible bug of the kind in the `httpx` note. The two traps below shipped the same day as the comment plans. Neither was a rewrite.
 
 ## What was read
 
@@ -87,6 +87,8 @@ The body must stay unenveloped. The pinned contract for `GET /health` and `GET /
 
 ### B1. Redaction does not look inside a value
 
+Shipped in `docs/exec-plans/completed/n2-nested-redact.md`. Message text is still not scanned.
+
 Probed 2026-10-11. This log:
 
 ```go
@@ -103,13 +105,15 @@ emitted:
 
 No current production log does this. Call sites pass strings or `slog.Any("error", err)`. The tests only prove top-level and group keys, so they read as "secrets are redacted" without stating the limit.
 
-This becomes a secret leak on the first nested payload. When accepted: document the limit on `redact`, and reject or walk `KindAny` maps before a feature logs a body. Do not pretend the current key list covers it. A message string that contains a password is also not scanned. Say that in the same comment.
+Before the fix, the first nested payload would leak. `redact` walks a group. `slog.Any` is walked only for `map[string]any`, `map[string]string`, and `[]any`. Structs, `http.Header`, and other typed maps or slices are not scanned. The comment on `redact` states that limit, and that message text is not scanned. A camelCase key such as `accessToken` is still left as written.
 
 ### B2. `version` says the build injects it. Nothing does
 
-`version.go` documents build-time injection. Nothing in the module reads `Version` or `Commit`. The `Makefile` and Go files have no `-X` ldflags. The running binary cannot report a revision because nothing asks.
+Shipped in `docs/exec-plans/completed/n2-version-claim.md`. The package remains. The injection sentence is gone.
 
-Not a behavior bug in the two assignments. The comment is false today. When accepted, either wire ldflags and log the pair from `cmd/api`, or drop the "injected at build time" sentence until a caller exists. Deleting the package is a separate yes. Do not delete it inside a comment fix.
+Before the fix, `version.go` documented build-time injection. Nothing in the module reads `Version` or `Commit`. The `Makefile` and Go files have no `-X` ldflags.
+
+The injection sentence is gone. The package remains. Wiring `-X` ldflags is a later change, and only when a caller exists.
 
 ## Design question
 

@@ -67,5 +67,5 @@ Outcome (2026-10-11): `go test ./internal/platform/db/... -count=1` passed. `mak
 
 ## Follow-Ups
 
-- [ ] B1 `Value` returns nil when `IsZero`, after an explicit yes
-- [ ] B2 schema-inventory checker, with the Postgres engine task
+- [x] B1 `Value` returns nil when `IsZero` — `n4-zero-time-null.md`
+- [x] Schema name comparison — `n4-schema-inventory.md`. The Postgres CI matrix stays task 7.2.

@@ -1,6 +1,6 @@
 # Section note: `internal/platform/httpx`
 
-- Status: Taste, B4, B3, and B2 shipped. B1 blocked on the contract.
+- Status: Taste, B4, B3, and B2 shipped. B1 stays blocked: method mismatch is HTTP 404 with code `NOT_FOUND` and an empty `Allow`. The pinned snapshot has no 405 response and no method-not-allowed code.
 - Date: 2026-10-11
 - Scope: every hand-written file in `internal/platform/httpx` (8 production files, 8 test files)
 - Ruler: `_WIP/go-core-kit-readability-proposal.md`
@@ -137,11 +137,13 @@ Cause: `NewRouter` registers `mux.HandleFunc("/", notFound)`. That pattern match
 
 Plan 1.3 follow-up says 405 still returns stdlib plain text. That note is stale. The catch-all now swallows the method mismatch, so the client cannot tell "no such route" from "wrong verb".
 
-Fix, when accepted as a bug: if the path is registered for another method, write a 405 problem with `Allow`. Leave unknown paths on the current 404 problem. Add a test next to `TestNotFoundUsesProblemDetails`.
+Blocked: `contracts/backend.openapi.yaml` has no 405 response and no method-not-allowed code. Method mismatch stays HTTP 404 with code `NOT_FOUND` and an empty `Allow`. Adding a problem code or a 405 response to the pinned snapshot is out of scope. An unknown path stays HTTP 404 with code `NOT_FOUND`.
 
 ### B2. Idempotency cache is not scoped to the caller
 
-`Idempotent` uses `op.ID` plus the raw header as the Redis key (`idempotency:<operation id>:<header>`). It does not include the authenticated user, and it does not hash the body.
+Shipped in `docs/exec-plans/completed/r3-httpx-idempotency-scope.md`. The key includes the caller. Payload fingerprint stays a follow-up. The paragraphs below are the pre-fix finding.
+
+`Idempotent` used `op.ID` plus the raw header as the Redis key (`idempotency:<operation id>:<header>`). It did not include the authenticated user, and it does not hash the body.
 
 The only production use is change-password:
 
@@ -161,7 +163,9 @@ Do not copy `HandleIdempotent` onto another route until user scope is decided. P
 
 ### B3. A too-large body is reported as bad JSON
 
-`bodyLimit` wraps the body with `http.MaxBytesReader` at 1 MiB. `Decode` turns every decoder error into `invalidBody()`, detail `"invalid JSON body"`.
+Shipped in `docs/exec-plans/completed/r2-httpx-problem-details.md`. An oversized body is `400` `VALIDATION_FAILED` with detail `request body is too large`. Empty and malformed JSON stay `invalid JSON body`. The paragraphs below are the pre-fix finding.
+
+`bodyLimit` wraps the body with `http.MaxBytesReader` at 1 MiB. `Decode` used to turn every decoder error into `invalidBody()`, detail `"invalid JSON body"`.
 
 Probed with a JSON object whose `name` is `1 << 20` bytes:
 
@@ -173,7 +177,9 @@ Probed with a JSON object whose `name` is `1 << 20` bytes:
 
 ### B4. The lock-release test checks a key that is never written
 
-`TestIdempotencyReleasesLock` builds:
+Shipped in `docs/exec-plans/completed/r1-httpx-taste.md`. The assertion now uses the key the handler writes. The paragraphs below are the pre-fix finding.
+
+`TestIdempotencyReleasesLock` used to build:
 
 ```go
 redis.Key("idempotency", "POST /v1/things", "key-1") + ":lock"

@@ -1,11 +1,11 @@
 # Section note: `internal/platform/db`
 
-- Status: Comments shipped in N4. B1 still needs a yes. B2 stays with the Postgres engine task.
+- Status: Comments shipped in N4. B1 shipped: zero time writes SQL NULL. The schema name comparison shipped. The Postgres CI matrix stays task 7.2.
 - Date: 2026-10-11
 - Scope: `internal/platform/db` (including `utctime`), hand-written `db/migrations`, hand-written `db/queries`. `sqlc.yaml` only where it decides the Go type of a column.
 - Out of scope: line-by-line review of `internal/db/gen`. One generated struct was opened to see how a nullable timestamp is declared.
 - Ruler: `_WIP/go-core-kit-readability-proposal.md`
-- Code changes: comments applied 2026-10-11. See `docs/exec-plans/completed/n4-db-comments.md`.
+- Code changes: comments applied 2026-10-11. The NULL write and the schema name comparison landed the same day. See `docs/exec-plans/completed/n4-db-comments.md`, `docs/exec-plans/completed/n4-zero-time-null.md`, and `docs/exec-plans/completed/n4-schema-inventory.md`.
 - Earlier notes 01 through 03 are applied.
 
 ## Verdict
@@ -85,7 +85,7 @@ null Scan IsZero=true
 
 `internal/features/auth/infra/repository.go` uses `!timestamp.IsZero()` for email verification and for revoked session and refresh rows. That matches a NULL read. It does not match a row whose column holds year 1.
 
-`auth.sql` treats "not revoked" as `revoked_at IS NULL`. An update that binds a zero `utctime.Time` stores year 1. Go still says `IsZero`. The `IS NULL` predicate skips the row, so the revoke statements do not touch it. No current query does that write. Inserts omit `revoked_at`. Updates pass `now` from the injected clock.
+`auth.sql` treats "not revoked" as `revoked_at IS NULL`. `Value` of a zero `utctime.Time` is SQL NULL, so that write agrees with `IsZero`. No current query binds a zero time. Inserts omit `revoked_at`. Updates pass `now` from the injected clock.
 
 sqlc is why this is easy to miss. Nullable strings become `sql.NullString` (`GetMeView` profile names). Nullable timestamps are overridden in `sqlc.yaml` to `utctime.Time`, not a pointer. Every `TEXT` time column in the sqlite migrations is listed there. A new `TEXT` timestamp that is missing from that list becomes a plain string, and the repository grows a second time type.
 
@@ -121,13 +121,15 @@ The revoke statements repeat the same column list: clear `active_key`, `push_pla
 
 ### B1. `Value` of the zero time is not NULL
 
-Quoted above. Live rows are not wrong today. The next statement that binds a zero `utctime.Time` into `revoked_at`, `email_verified_at`, or `suspended_at` stores year 1, and the `IS NULL` queries disagree with `IsZero`.
+Shipped in `docs/exec-plans/completed/n4-zero-time-null.md`. `Value` of zero is SQL NULL. Scan of NULL and of the year-1 UTC string is still zero.
 
-When accepted: `Value` returns `nil` for `IsZero`, and a test locks both directions. Scan of NULL stays zero. Scan of the year-1 string can keep meaning zero so old rows, if any were written, still read as empty. A `NOT NULL` column given a zero time should fail the insert.
+`Value` returns nil for `IsZero`. Scan of NULL stays zero. Scan of the year-1 UTC string stays zero. A NOT NULL column given a zero time fails the insert. The type comment agrees with the NULL write.
 
-### B2. There is no schema-parity check yet
+### B2. Schema name comparison
 
-ADR 0005 says CI compares the table and column inventory of the two migration trees. Roadmap 7.2 is unchecked. I compared the current three files by hand and they match. Nothing fails the build if the next migration edits sqlite and forgets pg. That is a process bug, not a bad row. Do not hand-write a checker inside a readability pass. Record it so the pg engine work does not start by assuming the guard exists.
+The name comparison shipped in `docs/exec-plans/completed/n4-schema-inventory.md`. The Postgres CI matrix stays task 7.2.
+
+ADR 0005 says CI compares the table and column inventory of the two migration trees. The name comparison now runs in `go test ./db/migrations` and ignores Down sections. Roadmap 7.2's Postgres CI matrix stays unchecked. Types are not compared.
 
 ## Design question
 

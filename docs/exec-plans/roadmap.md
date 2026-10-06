@@ -40,13 +40,30 @@ Readability note 02 is in two plans.
 - [x] N2 config order and redact limit — `completed/n2-config-redact.md`
 - [x] N2 health probes — `completed/n2-health-probes.md`
 
-Readability note 03 starts with comments. The auth bugs wait for a yes.
+Readability note 03 comments and the three auth bugs have landed. Verification stays EdDSA only.
 
 - [x] N3 auth comments — `completed/n3-auth-comments.md`
 
-Readability note 04 starts with comments. The zero-time write waits for a yes.
+Readability note 04 starts with comments. The zero-time write and the schema name comparison have landed. The Postgres CI matrix stays task 7.2.
 
 - [x] N4 db comments — `completed/n4-db-comments.md`
+- [x] N4 zero time writes NULL — `completed/n4-zero-time-null.md`
+- [x] N4 schema name inventory — `completed/n4-schema-inventory.md`
+
+Readability notes 05 through 08 are applied.
+
+- [x] N5 redis and password comments — `completed/n5-redis-password-comments.md`
+- [x] N6 auth feature taste — `completed/n6-auth-feature-taste.md`
+- [x] N7 api boot comments — `completed/n7-api-boot-comments.md`
+- [x] N8 contract comments and feature map — `completed/n8-contract-comments.md`
+
+Held bugs from notes 02 and 03 are fixed. Method mismatch stays 404: the pinned snapshot has no 405 response and no method-not-allowed code.
+
+- [x] N2 nested redaction — `completed/n2-nested-redact.md`
+- [x] N2 version claim — `completed/n2-version-claim.md`
+- [x] N3 reject non-EdDSA keys — `completed/n3-reject-non-eddsa.md`
+- [x] N3 trim issuer and audience — `completed/n3-trim-issuer.md`
+- [x] N3 stack sentence is EdDSA only — `completed/n3-stack-eddsa.md`
 
 ## Phase 0 — Foundation (complete, 2026-10-10)
 
