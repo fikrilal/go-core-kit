@@ -27,6 +27,17 @@ func testDatabase(t *testing.T) *db.Database {
 	return database
 }
 
+func TestZeroTimeInsertFailsNotNull(t *testing.T) {
+	database := testDatabase(t)
+	ctx := t.Context()
+	if _, err := database.SQL().ExecContext(ctx, `CREATE TABLE stamps (created_at TEXT NOT NULL)`); err != nil {
+		t.Fatalf("create table: %v", err)
+	}
+	if _, err := database.SQL().ExecContext(ctx, `INSERT INTO stamps (created_at) VALUES (?)`, utctime.Time{}); err == nil {
+		t.Fatal("insert of zero time succeeded, want a NOT NULL failure")
+	}
+}
+
 func TestOpenAppliesPragmas(t *testing.T) {
 	database := testDatabase(t)
 	ctx := t.Context()

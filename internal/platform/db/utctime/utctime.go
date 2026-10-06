@@ -9,7 +9,7 @@ import (
 
 // Time is a timestamp stored and loaded as UTC.
 // Scan of NULL is the zero time, so IsZero means a NULL read.
-// Value of the zero time still writes year 1, not SQL NULL.
+// Value of the zero time writes SQL NULL. Scan of the year-1 UTC string is also zero.
 type Time struct {
 	time.Time
 }
@@ -35,8 +35,11 @@ func (t *Time) Scan(value any) error {
 // valueLayout is fixed-width so TEXT comparisons in SQLite stay chronological.
 const valueLayout = "2006-01-02T15:04:05.000000000Z07:00"
 
-// Value implements driver.Valuer.
+// Value implements driver.Valuer. The zero time is SQL NULL.
 func (t Time) Value() (driver.Value, error) {
+	if t.IsZero() {
+		return nil, nil
+	}
 	return t.UTC().Format(valueLayout), nil
 }
 

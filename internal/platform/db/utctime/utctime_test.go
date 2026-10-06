@@ -33,6 +33,31 @@ func TestScanNormalizesToUTC(t *testing.T) {
 	}
 }
 
+func TestZeroValueIsNullAndYearOneScanIsZero(t *testing.T) {
+	value, err := utctime.Time{}.Value()
+	if err != nil {
+		t.Fatalf("Value() error = %v", err)
+	}
+	t.Logf("Value(zero) = %#v", value)
+	if value != nil {
+		t.Fatalf("Value(zero) = %#v, want SQL NULL", value)
+	}
+
+	var scanned utctime.Time
+	if err := scanned.Scan(nil); err != nil {
+		t.Fatalf("Scan(nil) error = %v", err)
+	}
+	if !scanned.IsZero() {
+		t.Fatalf("Scan(nil) = %v, want zero", scanned.Time)
+	}
+	if err := scanned.Scan("0001-01-01T00:00:00.000000000Z"); err != nil {
+		t.Fatalf("Scan(year 1) error = %v", err)
+	}
+	if !scanned.IsZero() {
+		t.Fatalf("Scan(year 1) = %v, want zero", scanned.Time)
+	}
+}
+
 func TestScanNilIsZero(t *testing.T) {
 	got := utctime.Time{Time: time.Now()}
 	if err := got.Scan(nil); err != nil {
