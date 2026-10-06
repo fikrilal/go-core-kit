@@ -7,7 +7,7 @@ Decided 2026-10-10 and recorded per-topic in `docs/adr/`. Changing a decision re
 - **Data layer**: SQLite first (`modernc.org/sqlite`, pure Go); opt-in Postgres build (`-tags pg`, `pgx/v5`). See ADR-0004.
 - **DB access**: `sqlc` with the portable SQL subset; `goose` per-engine migrations; generated code committed and drift-gated. See ADR-0005.
 - **Cache / queue**: Redis (`go-redis/v9`) — `asynq` queue, idempotency, rate limits. See ADR-0006.
-- **Auth**: `lestrrat-go/jwx/v3` — multi-`kid` keyring, EdDSA default, RS256 supported, JWKS endpoint; opaque refresh tokens with rotation and reuse detection; `x/crypto/argon2` (argon2id, PHC format) for passwords.
+- **Auth**: `lestrrat-go/jwx/v3` — multi-`kid` keyring, EdDSA only, JWKS endpoint; opaque refresh tokens with rotation and reuse detection; `x/crypto/argon2` (argon2id, PHC format) for passwords.
 - **Validation**: `go-playground/validator/v10` behind a small `httpx` wrapper producing `errors[] {field, message}` with `VALIDATION_FAILED`.
 - **Config**: `caarlos0/env` + explicit `Validate()` invariants. See ADR-0007.
 - **Logging**: `log/slog` JSON handler + redaction. See ADR-0009.
