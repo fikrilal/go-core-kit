@@ -12,6 +12,7 @@ import (
 	"time"
 
 	"github.com/fikrilal/go-core-kit/internal/features/auth"
+	"github.com/fikrilal/go-core-kit/internal/features/me"
 	"github.com/fikrilal/go-core-kit/internal/platform/clock"
 	"github.com/fikrilal/go-core-kit/internal/platform/config"
 	"github.com/fikrilal/go-core-kit/internal/platform/db"
@@ -31,7 +32,7 @@ func newServer(cfg config.Config, logger *slog.Logger, database *db.Database, rd
 		health.Check{Name: "database", Verify: database.Ping},
 		health.Check{Name: "redis", Verify: rdb.Ping},
 	).Register(router)
-	err := auth.Register(router, auth.Deps{
+	guard, err := auth.Register(router, auth.Deps{
 		Database: database,
 		Redis:    rdb,
 		Clock:    clock.System{},
@@ -55,6 +56,7 @@ func newServer(cfg config.Config, logger *slog.Logger, database *db.Database, rd
 	if err != nil {
 		return nil, fmt.Errorf("register auth: %w", err)
 	}
+	me.Register(router, me.Deps{Database: database, Clock: clock.System{}, Guard: guard})
 	return &http.Server{
 		Addr:              fmt.Sprintf(":%d", cfg.HTTPPort),
 		Handler:           router,

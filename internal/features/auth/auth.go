@@ -50,20 +50,21 @@ type Deps struct {
 	Config   Config
 }
 
-// Register mounts the auth feature on the router.
-func Register(router *httpx.Router, deps Deps) error {
+// Register mounts the auth feature on the router and returns the guard that
+// later features reuse for protected routes.
+func Register(router *httpx.Router, deps Deps) (*platformauth.Guard, error) {
 	keyRing, err := platformauth.NewKeyRing(platformauth.KeyRingOptions{
 		KeysJSON:       deps.Config.SigningKeysJSON,
 		KeysJSONBase64: deps.Config.SigningKeysJSONBase64,
 		ProductionLike: deps.Config.ProductionLike,
 	})
 	if err != nil {
-		return fmt.Errorf("auth: %w", err)
+		return nil, fmt.Errorf("auth: %w", err)
 	}
 	hasher := password.New()
 	dummyHash, err := hasher.Hash(dummyPassword)
 	if err != nil {
-		return fmt.Errorf("auth: build dummy hash: %w", err)
+		return nil, fmt.Errorf("auth: build dummy hash: %w", err)
 	}
 	service := app.New(
 		app.Config{
@@ -84,10 +85,10 @@ func Register(router *httpx.Router, deps Deps) error {
 	)
 	verifier, err := platformauth.NewVerifier(keyRing, deps.Clock, deps.Config.Issuer, deps.Config.Audience, deps.Config.ProductionLike)
 	if err != nil {
-		return fmt.Errorf("auth: %w", err)
+		return nil, fmt.Errorf("auth: %w", err)
 	}
 	guard := platformauth.NewGuard(verifier)
-	router.SetIdempotencyCaller(idempotencyCaller)
+	router.SetIdempotencyCaller(platformauth.IdempotencyCaller)
 	handlers := &handlers{service: service, keys: keyRing}
 	router.HandleFunc(httpx.Operation{Method: http.MethodPost, Path: "/v1/auth/password/register", ID: "auth.password.register"}, handlers.register)
 	router.HandleFunc(httpx.Operation{Method: http.MethodPost, Path: "/v1/auth/password/login", ID: "auth.password.login"}, handlers.login)
@@ -99,15 +100,7 @@ func Register(router *httpx.Router, deps Deps) error {
 	router.Handle(changePassword, guard.Require(router.Idempotent(changePassword, handlers.changePassword)))
 	connectOidc := httpx.Operation{Method: http.MethodPost, Path: "/v1/auth/oidc/connect", ID: "auth.oidc.connect"}
 	router.Handle(connectOidc, guard.Require(router.Idempotent(connectOidc, handlers.connectOidc)))
-	return nil
-}
-
-func idempotencyCaller(r *http.Request) (string, bool) {
-	principal, ok := platformauth.PrincipalFrom(r.Context())
-	if !ok || principal.UserID == "" {
-		return "", false
-	}
-	return principal.UserID, true
+	return guard, nil
 }
 
 type issuerAdapter struct {

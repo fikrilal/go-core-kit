@@ -27,7 +27,7 @@ Rules: findings gate on **new vs baseline**, and updating a baseline requires ex
 
 ## Current Focus
 
-**Phase 3 essential tasks landed (3.1–3.5, 3.8–3.10).** 3.6/3.7 await the 5.2 worker; next product work: **Phase 4 — me slice**.
+**Phase 4 in progress: 4.1 landed.** 3.6/3.7 await the 5.2 worker; next: **4.2 sessions list/revoke**.
 
 Readability note 01 has landed.
 
@@ -125,7 +125,7 @@ Exit gate: contract suite green for all auth operations; rotation/reuse parity a
 
 ## Phase 4 — Me slice
 
-- [ ] 4.1 `/v1/me` GET/PATCH
+- [x] 4.1 `/v1/me` GET/PATCH — landed 2026-10-12; new `internal/features/me` slice (guarded, patch idempotent), tri-state patch decode (`httpx.OptionalString`), reference set/clear patch semantics and profile-row upsert; `auth.Register` now returns the shared guard; allowlist 24 → 22
 - [ ] 4.2 Sessions list/revoke
 - [ ] 4.3 Push token upsert/revoke
 - [ ] 4.4 Profile image flow (presign → complete → url → clear)

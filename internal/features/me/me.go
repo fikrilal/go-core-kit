@@ -1,0 +1,121 @@
+//go:build !pg
+
+// Package me implements the me feature's HTTP surface and wiring.
+// This build is SQLite until a pg repository exists.
+package me
+
+import (
+	"net/http"
+
+	"github.com/fikrilal/go-core-kit/contracts"
+	"github.com/fikrilal/go-core-kit/internal/features/me/app"
+	"github.com/fikrilal/go-core-kit/internal/features/me/domain"
+	"github.com/fikrilal/go-core-kit/internal/features/me/infra"
+	platformauth "github.com/fikrilal/go-core-kit/internal/platform/auth"
+	"github.com/fikrilal/go-core-kit/internal/platform/clock"
+	"github.com/fikrilal/go-core-kit/internal/platform/db"
+	"github.com/fikrilal/go-core-kit/internal/platform/httpx"
+)
+
+// Deps are the me feature's dependencies.
+type Deps struct {
+	Database *db.Database
+	Clock    clock.Clock
+	Guard    *platformauth.Guard
+}
+
+// Register mounts the me feature on the router.
+func Register(router *httpx.Router, deps Deps) {
+	service := app.New(app.Deps{Repository: infra.NewRepository(deps.Database), Clock: deps.Clock})
+	router.SetIdempotencyCaller(platformauth.IdempotencyCaller)
+	handlers := &handlers{service: service}
+	getMe := httpx.Operation{Method: http.MethodGet, Path: "/v1/me", ID: "users.me.get"}
+	router.Handle(getMe, deps.Guard.Require(http.HandlerFunc(handlers.getMe)))
+	patchMe := httpx.Operation{Method: http.MethodPatch, Path: "/v1/me", ID: "users.me.patch"}
+	router.Handle(patchMe, deps.Guard.Require(router.Idempotent(patchMe, handlers.patchMe)))
+}
+
+type handlers struct {
+	service *app.Service
+}
+
+func (h *handlers) getMe(w http.ResponseWriter, r *http.Request) {
+	principal, ok := platformauth.PrincipalFrom(r.Context())
+	if !ok {
+		httpx.WriteError(w, r, &httpx.ProblemError{Status: http.StatusUnauthorized, Code: httpx.CodeUnauthorized})
+		return
+	}
+	view, err := h.service.GetMe(r.Context(), principal.UserID)
+	if err != nil {
+		httpx.WriteError(w, r, err)
+		return
+	}
+	httpx.Data(w, r, meDto(view))
+}
+
+type patchMeRequest struct {
+	Profile *patchMeProfile `json:"profile" validate:"required"`
+}
+
+type patchMeProfile struct {
+	DisplayName httpx.OptionalString `json:"displayName"`
+	GivenName   httpx.OptionalString `json:"givenName"`
+	FamilyName  httpx.OptionalString `json:"familyName"`
+}
+
+func (h *handlers) patchMe(w http.ResponseWriter, r *http.Request) {
+	principal, ok := platformauth.PrincipalFrom(r.Context())
+	if !ok {
+		httpx.WriteError(w, r, &httpx.ProblemError{Status: http.StatusUnauthorized, Code: httpx.CodeUnauthorized})
+		return
+	}
+	var body patchMeRequest
+	if err := httpx.Decode(r, &body); err != nil {
+		httpx.WriteError(w, r, err)
+		return
+	}
+	view, err := h.service.PatchMe(r.Context(), app.PatchMeInput{
+		UserID: principal.UserID,
+		Profile: domain.ProfilePatch{
+			DisplayName: profileField(body.Profile.DisplayName),
+			GivenName:   profileField(body.Profile.GivenName),
+			FamilyName:  profileField(body.Profile.FamilyName),
+		},
+	})
+	if err != nil {
+		httpx.WriteError(w, r, err)
+		return
+	}
+	httpx.Data(w, r, meDto(view))
+}
+
+// profileField converts a decoded wire field into the domain patch field.
+func profileField(optional httpx.OptionalString) domain.Field {
+	return domain.Field{Present: optional.Present(), Null: optional.Null(), Value: optional.Value()}
+}
+
+func meDto(view domain.MeView) contracts.MeDto {
+	methods := make([]contracts.MeDtoAuthMethods, 0, len(view.AuthMethods))
+	for _, method := range view.AuthMethods {
+		methods = append(methods, contracts.MeDtoAuthMethods(method))
+	}
+	return contracts.MeDto{
+		Id:            view.User.ID,
+		Email:         view.User.Email,
+		EmailVerified: view.User.EmailVerified,
+		Roles:         []string{view.User.Role},
+		AuthMethods:   methods,
+		Profile: contracts.MeProfileDto{
+			DisplayName: nullableString(view.Profile.DisplayName),
+			GivenName:   nullableString(view.Profile.GivenName),
+			FamilyName:  nullableString(view.Profile.FamilyName),
+		},
+	}
+}
+
+func nullableString(value string) *string {
+	if value == "" {
+		return nil
+	}
+	return &value
+}

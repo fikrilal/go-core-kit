@@ -33,6 +33,15 @@ func NewGuard(verifier *Verifier) *Guard {
 	return &Guard{verifier: verifier}
 }
 
+// IdempotencyCaller scopes idempotency keys to the authenticated principal.
+func IdempotencyCaller(r *http.Request) (string, bool) {
+	principal, ok := PrincipalFrom(r.Context())
+	if !ok || principal.UserID == "" {
+		return "", false
+	}
+	return principal.UserID, true
+}
+
 // Require wraps next, rejecting requests without a valid access token.
 func (g *Guard) Require(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
