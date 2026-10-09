@@ -9,12 +9,15 @@ import (
 	"errors"
 	"fmt"
 	"slices"
+	"strings"
+	"time"
 
 	"github.com/fikrilal/go-core-kit/internal/db/gen"
 	"github.com/fikrilal/go-core-kit/internal/features/me/domain"
 	"github.com/fikrilal/go-core-kit/internal/features/me/ports"
 	"github.com/fikrilal/go-core-kit/internal/platform/db"
 	"github.com/fikrilal/go-core-kit/internal/platform/db/utctime"
+	"github.com/fikrilal/go-core-kit/internal/platform/httpx"
 )
 
 // Repository is the sqlc-backed me repository.
@@ -26,6 +29,272 @@ type Repository struct {
 // NewRepository builds the repository.
 func NewRepository(database *db.Database) *Repository {
 	return &Repository{database: database, queries: gen.New(database.SQL())}
+}
+
+// FindUserStatus returns the account status, reporting whether the user exists.
+func (r *Repository) FindUserStatus(ctx context.Context, userID string) (string, bool, error) {
+	status, err := r.queries.GetUserStatus(ctx, userID)
+	if errors.Is(err, db.ErrNoRows) {
+		return "", false, nil
+	}
+	if err != nil {
+		return "", false, fmt.Errorf("find user status: %w", err)
+	}
+	return status, true, nil
+}
+
+// RevokeSession revokes one of the user's sessions and its refresh tokens.
+// An already-revoked session still reports found.
+func (r *Repository) RevokeSession(ctx context.Context, userID, sessionID string, now time.Time) (bool, error) {
+	nowStamp := utctime.Time{Time: now}
+	found := false
+	err := r.database.InTx(ctx, func(tx db.Tx) error {
+		queries := gen.New(tx)
+		session, err := queries.GetUserSession(ctx, sessionID)
+		if errors.Is(err, db.ErrNoRows) {
+			return nil
+		}
+		if err != nil {
+			return fmt.Errorf("find session: %w", err)
+		}
+		if session.UserID != userID {
+			return nil
+		}
+		found = true
+		if session.RevokedAt.IsZero() {
+			if _, err := queries.RevokeSession(ctx, gen.RevokeSessionParams{RevokedAt: nowStamp, ID: sessionID}); err != nil {
+				return fmt.Errorf("revoke session: %w", err)
+			}
+		}
+		if err := queries.ClearSessionDeviceState(ctx, gen.ClearSessionDeviceStateParams{Now: nowStamp, ID: sessionID}); err != nil {
+			return fmt.Errorf("clear session device state: %w", err)
+		}
+		if _, err := queries.RevokeSessionRefreshTokens(ctx, gen.RevokeSessionRefreshTokensParams{RevokedAt: nowStamp, SessionID: sessionID}); err != nil {
+			return fmt.Errorf("revoke session refresh tokens: %w", err)
+		}
+		return nil
+	})
+	if err != nil {
+		return false, fmt.Errorf("revoke session: %w", err)
+	}
+	return found, nil
+}
+
+// sessionSortCreatedAt and sessionSortID are the cursor sort names.
+const (
+	sessionSortCreatedAt = "createdAt"
+	sessionSortID        = "id"
+)
+
+// sessionColumns maps the allowed sort fields to their columns.
+var sessionColumns = map[string]string{
+	sessionSortCreatedAt: "created_at",
+	sessionSortID:        "id",
+}
+
+// sessionPageSelect is the projection shared by every page. sqlc does not
+// express the keyset variants, so this list SQL is hand-written here.
+const sessionPageSelect = `SELECT id, device_id, device_name, ip, user_agent, last_seen_at, created_at, expires_at, revoked_at
+FROM sessions
+WHERE user_id = ?`
+
+// sessionRow is one scanned session; nullable columns scan into pointers and
+// a NULL timestamp scans as the zero time.
+type sessionRow struct {
+	ID         string
+	DeviceID   *string
+	DeviceName *string
+	IP         *string
+	UserAgent  *string
+	LastSeenAt utctime.Time
+	CreatedAt  utctime.Time
+	ExpiresAt  utctime.Time
+	RevokedAt  utctime.Time
+}
+
+func (r sessionRow) toDomain() domain.Session {
+	return domain.Session{
+		ID:         r.ID,
+		DeviceID:   derefString(r.DeviceID),
+		DeviceName: derefString(r.DeviceName),
+		IP:         derefString(r.IP),
+		UserAgent:  derefString(r.UserAgent),
+		LastSeenAt: r.LastSeenAt.Time,
+		CreatedAt:  r.CreatedAt.Time,
+		ExpiresAt:  r.ExpiresAt.Time,
+		RevokedAt:  r.RevokedAt.Time,
+	}
+}
+
+// derefString flattens a scanned nullable column.
+func derefString(value *string) string {
+	if value == nil {
+		return ""
+	}
+	return *value
+}
+
+// ListSessions reads one keyset page: limit + 1 rows, then the extra row
+// decides hasMore and the next cursor.
+func (r *Repository) ListSessions(ctx context.Context, in ports.ListSessionsInput) (ports.SessionPage, error) {
+	sort := effectiveSessionSort(in.Sort)
+	queryText, args, err := sessionPageQuery(in, sort)
+	if err != nil {
+		return ports.SessionPage{}, err
+	}
+	rows, err := r.database.SQL().QueryContext(ctx, queryText, args...)
+	if err != nil {
+		return ports.SessionPage{}, fmt.Errorf("list sessions: %w", err)
+	}
+	defer func() { _ = rows.Close() }()
+
+	sessions := make([]domain.Session, 0, in.Limit+1)
+	for rows.Next() {
+		var row sessionRow
+		if err := rows.Scan(&row.ID, &row.DeviceID, &row.DeviceName, &row.IP, &row.UserAgent,
+			&row.LastSeenAt, &row.CreatedAt, &row.ExpiresAt, &row.RevokedAt); err != nil {
+			return ports.SessionPage{}, fmt.Errorf("scan session: %w", err)
+		}
+		sessions = append(sessions, row.toDomain())
+	}
+	if err := rows.Err(); err != nil {
+		return ports.SessionPage{}, fmt.Errorf("iterate sessions: %w", err)
+	}
+
+	page := ports.SessionPage{Sessions: sessions}
+	if len(sessions) > in.Limit {
+		page.Sessions = sessions[:in.Limit]
+		page.HasMore = true
+		page.NextCursor = encodeSessionCursor(sort, page.Sessions[len(page.Sessions)-1])
+	}
+	return page, nil
+}
+
+// effectiveSessionSort appends the id tie-breaker the reference config uses.
+func effectiveSessionSort(fields []ports.SortField) []ports.SortField {
+	if len(fields) == 0 {
+		return []ports.SortField{{Field: sessionSortCreatedAt, Desc: true}, {Field: sessionSortID, Desc: true}}
+	}
+	sort := slices.Clone(fields)
+	for _, field := range sort {
+		if field.Field == sessionSortID {
+			return sort
+		}
+	}
+	return append(sort, ports.SortField{Field: sessionSortID, Desc: true})
+}
+
+// sessionPageQuery builds the keyset query for the effective sort.
+func sessionPageQuery(in ports.ListSessionsInput, sort []ports.SortField) (string, []any, error) {
+	args := []any{in.UserID}
+	var cursor httpx.Cursor
+	if in.Cursor != "" {
+		decoded, err := httpx.DecodeCursor(in.Cursor, sessionSortKey(sort), sessionSortNames(sort))
+		if err != nil {
+			return "", nil, fmt.Errorf("decode cursor: %w", err)
+		}
+		cursor = decoded
+	}
+	where, cursorArgs, err := sessionKeyset(sort, cursor)
+	if err != nil {
+		return "", nil, err
+	}
+	args = append(args, cursorArgs...)
+	args = append(args, in.Limit+1)
+	return sessionPageSelect + where + " ORDER BY " + sessionOrderBy(sort) + " LIMIT ?", args, nil
+}
+
+// sessionKeyset builds the keyset predicate: for each sort field, a lexicographic
+// comparison expanded as (f1 cmp v1) OR (f1 = v1 AND f2 cmp v2) OR ...
+func sessionKeyset(sort []ports.SortField, cursor httpx.Cursor) (string, []any, error) {
+	if cursor.After == nil {
+		return "", nil, nil
+	}
+	clauses := make([]string, 0, len(sort))
+	args := make([]any, 0, len(sort)*(len(sort)+1)/2)
+	for i, field := range sort {
+		parts := make([]string, 0, i+1)
+		for j := 0; j <= i; j++ {
+			column, err := sessionColumn(sort[j].Field)
+			if err != nil {
+				return "", nil, err
+			}
+			value, ok := cursor.After[sort[j].Field]
+			if !ok {
+				return "", nil, fmt.Errorf("cursor misses sort field %q", sort[j].Field)
+			}
+			if j < i {
+				parts = append(parts, column+" = ?")
+			} else {
+				comparison := ">"
+				if field.Desc {
+					comparison = "<"
+				}
+				parts = append(parts, column+" "+comparison+" ?")
+			}
+			args = append(args, value)
+		}
+		clauses = append(clauses, "("+strings.Join(parts, " AND ")+")")
+	}
+	return " AND (" + strings.Join(clauses, " OR ") + ")", args, nil
+}
+
+// sessionOrderBy renders the ORDER BY for the effective sort.
+func sessionOrderBy(sort []ports.SortField) string {
+	parts := make([]string, 0, len(sort))
+	for _, field := range sort {
+		direction := "ASC"
+		if field.Desc {
+			direction = "DESC"
+		}
+		parts = append(parts, sessionColumns[field.Field]+" "+direction)
+	}
+	return strings.Join(parts, ", ")
+}
+
+// sessionSortKey renders the effective sort as the cursor's normalized form.
+func sessionSortKey(sort []ports.SortField) string {
+	parts := make([]string, 0, len(sort))
+	for _, field := range sort {
+		prefix := ""
+		if field.Desc {
+			prefix = "-"
+		}
+		parts = append(parts, prefix+field.Field)
+	}
+	return strings.Join(parts, ",")
+}
+
+// sessionSortNames lists the effective sort fields for cursor validation.
+func sessionSortNames(sort []ports.SortField) []string {
+	names := make([]string, 0, len(sort))
+	for _, field := range sort {
+		names = append(names, field.Field)
+	}
+	return names
+}
+
+// sessionColumn resolves an allowed sort field to its column.
+func sessionColumn(field string) (string, error) {
+	column, ok := sessionColumns[field]
+	if !ok {
+		return "", fmt.Errorf("unknown session sort field %q", field)
+	}
+	return column, nil
+}
+
+// encodeSessionCursor stores the kept row's sort values for the next page.
+func encodeSessionCursor(sort []ports.SortField, last domain.Session) string {
+	after := make(map[string]string, len(sort))
+	for _, field := range sort {
+		switch field.Field {
+		case sessionSortCreatedAt:
+			after[field.Field] = utctime.Time{Time: last.CreatedAt}.Stored()
+		case sessionSortID:
+			after[field.Field] = last.ID
+		}
+	}
+	return httpx.EncodeCursor(sessionSortKey(sort), after)
 }
 
 // GetMe composes the user, profile, and auth methods.

@@ -25,6 +25,40 @@ type fakeRepository struct {
 	updateFound bool
 	updateErr   error
 	updates     []ports.UpdateProfileInput
+
+	statusValue string
+	statusFound bool
+	statusErr   error
+
+	listPage ports.SessionPage
+	listErr  error
+	lists    []ports.ListSessionsInput
+
+	revokeOK    bool
+	revokeErr   error
+	revokeNow   time.Time
+	revocations []string
+}
+
+func (f *fakeRepository) FindUserStatus(context.Context, string) (string, bool, error) {
+	return f.statusValue, f.statusFound, f.statusErr
+}
+
+func (f *fakeRepository) ListSessions(_ context.Context, in ports.ListSessionsInput) (ports.SessionPage, error) {
+	f.lists = append(f.lists, in)
+	if f.listErr != nil {
+		return ports.SessionPage{}, f.listErr
+	}
+	return f.listPage, nil
+}
+
+func (f *fakeRepository) RevokeSession(_ context.Context, _, sessionID string, now time.Time) (bool, error) {
+	f.revocations = append(f.revocations, sessionID)
+	f.revokeNow = now
+	if f.revokeErr != nil {
+		return false, f.revokeErr
+	}
+	return f.revokeOK, nil
 }
 
 func (f *fakeRepository) GetMe(context.Context, string) (domain.MeView, bool, error) {
@@ -194,4 +228,119 @@ func TestPatchMeMissingUserIsUnauthorized(t *testing.T) {
 
 func mustError(_ domain.MeView, err error) error {
 	return fmt.Errorf("call: %w", err)
+}
+
+func sessionsFixture() (*app.Service, *fakeRepository) {
+	service, repo := newFixture()
+	repo.statusFound = true
+	repo.statusValue = domain.StatusActive
+	return service, repo
+}
+
+func mustSessionsError(_ app.SessionPage, err error) error {
+	return fmt.Errorf("call: %w", err)
+}
+
+func TestListSessionsComputesStatusAndCurrent(t *testing.T) {
+	service, repo := sessionsFixture()
+	repo.listPage = ports.SessionPage{
+		Sessions: []domain.Session{
+			{ID: "current", ExpiresAt: moment.Add(time.Hour)},
+			{ID: "expired", ExpiresAt: moment.Add(-time.Minute)},
+			{ID: "revoked", ExpiresAt: moment.Add(time.Hour), RevokedAt: moment.Add(-time.Hour)},
+			{ID: "revoked-expired", ExpiresAt: moment.Add(-time.Hour), RevokedAt: moment.Add(-2 * time.Hour)},
+		},
+		HasMore:    true,
+		NextCursor: "cursor-1",
+	}
+	page, err := service.ListSessions(context.Background(), app.ListSessionsInput{
+		UserID: "user-1", SessionID: "current",
+		Query: httpx.ListQuery{Limit: 2, Sort: []httpx.SortField{{Field: "createdAt", Desc: true}}},
+	})
+	if err != nil {
+		t.Fatalf("ListSessions() error = %v", err)
+	}
+	if len(page.Views) != 4 {
+		t.Fatalf("views = %d, want 4", len(page.Views))
+	}
+	want := map[string]struct {
+		status  string
+		current bool
+	}{
+		"current":         {status: domain.SessionActive, current: true},
+		"expired":         {status: domain.SessionExpired},
+		"revoked":         {status: domain.SessionRevoked},
+		"revoked-expired": {status: domain.SessionRevoked},
+	}
+	for _, view := range page.Views {
+		expected := want[view.ID]
+		if view.Status != expected.status || view.Current != expected.current {
+			t.Errorf("view %s = %s/current %t, want %s/current %t", view.ID, view.Status, view.Current, expected.status, expected.current)
+		}
+	}
+	if !page.HasMore || page.NextCursor != "cursor-1" {
+		t.Errorf("page meta = hasMore %t cursor %q, want the repository page", page.HasMore, page.NextCursor)
+	}
+	if len(repo.lists) != 1 || repo.lists[0].Limit != 2 || repo.lists[0].Sort[0].Field != "createdAt" {
+		t.Errorf("repo input = %+v, want the parsed query", repo.lists)
+	}
+}
+
+func TestListSessionsRejectsMissingAndDeletedUsers(t *testing.T) {
+	missing, missingRepo := sessionsFixture()
+	missingRepo.statusFound = false
+	problem := problemError(t, mustSessionsError(missing.ListSessions(context.Background(), app.ListSessionsInput{UserID: "missing"})))
+	if problem.Status != http.StatusUnauthorized || problem.Code != httpx.CodeUnauthorized {
+		t.Fatalf("missing user mapped to %d/%s, want 401 UNAUTHORIZED", problem.Status, problem.Code)
+	}
+	if len(missingRepo.lists) != 0 {
+		t.Error("sessions listed for a missing user")
+	}
+
+	deleted, deletedRepo := sessionsFixture()
+	deletedRepo.statusValue = domain.StatusDeleted
+	problem = problemError(t, mustSessionsError(deleted.ListSessions(context.Background(), app.ListSessionsInput{UserID: "deleted"})))
+	if problem.Status != http.StatusUnauthorized || problem.Code != httpx.CodeUnauthorized {
+		t.Fatalf("deleted user mapped to %d/%s, want 401 UNAUTHORIZED", problem.Status, problem.Code)
+	}
+	if len(deletedRepo.lists) != 0 {
+		t.Error("sessions listed for a deleted user")
+	}
+}
+
+func TestRevokeSessionOutcomes(t *testing.T) {
+	t.Run("revokes", func(t *testing.T) {
+		service, repo := sessionsFixture()
+		repo.revokeOK = true
+		if err := service.RevokeSession(context.Background(), app.RevokeSessionInput{UserID: "user-1", SessionID: "session-1"}); err != nil {
+			t.Fatalf("RevokeSession() error = %v", err)
+		}
+		if len(repo.revocations) != 1 || repo.revocations[0] != "session-1" {
+			t.Errorf("revocations = %v, want session-1", repo.revocations)
+		}
+		if !repo.revokeNow.Equal(moment) {
+			t.Errorf("now = %v, want the injected clock", repo.revokeNow)
+		}
+	})
+
+	t.Run("unknown session is not found", func(t *testing.T) {
+		service, repo := sessionsFixture()
+		repo.revokeOK = false
+		problem := problemError(t, service.RevokeSession(context.Background(), app.RevokeSessionInput{UserID: "user-1", SessionID: "missing"}))
+		if problem.Status != http.StatusNotFound || problem.Code != httpx.CodeNotFound {
+			t.Fatalf("problem = %+v, want 404 NOT_FOUND", problem)
+		}
+	})
+
+	t.Run("deleted user is unauthorized", func(t *testing.T) {
+		service, repo := sessionsFixture()
+		repo.statusValue = domain.StatusDeleted
+		problem := problemError(t, service.RevokeSession(context.Background(), app.RevokeSessionInput{UserID: "deleted", SessionID: "session-1"}))
+		if problem.Status != http.StatusUnauthorized || problem.Code != httpx.CodeUnauthorized {
+			t.Fatalf("problem = %+v, want 401 UNAUTHORIZED", problem)
+		}
+		if len(repo.revocations) != 0 {
+			t.Error("revoke attempted for a deleted user")
+		}
+	})
 }

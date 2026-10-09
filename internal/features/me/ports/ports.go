@@ -15,8 +15,32 @@ type UpdateProfileInput struct {
 	Now     time.Time
 }
 
+// SortField is one ordered sort key for a list request.
+type SortField struct {
+	Field string
+	Desc  bool
+}
+
+// ListSessionsInput carries a keyset page request for one user.
+type ListSessionsInput struct {
+	UserID string
+	Limit  int
+	Sort   []SortField
+	Cursor string
+}
+
+// SessionPage is one page of stored sessions.
+type SessionPage struct {
+	Sessions   []domain.Session
+	HasMore    bool
+	NextCursor string
+}
+
 // Repository is the me feature's persistence boundary.
 type Repository interface {
 	GetMe(ctx context.Context, userID string) (domain.MeView, bool, error)
 	UpdateProfile(ctx context.Context, in UpdateProfileInput) (domain.MeView, bool, error)
+	FindUserStatus(ctx context.Context, userID string) (string, bool, error)
+	ListSessions(ctx context.Context, in ListSessionsInput) (SessionPage, error)
+	RevokeSession(ctx context.Context, userID, sessionID string, now time.Time) (bool, error)
 }

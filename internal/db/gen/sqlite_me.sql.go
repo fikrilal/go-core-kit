@@ -33,6 +33,25 @@ func (q *Queries) GetUserProfile(ctx context.Context, userID string) (GetUserPro
 	return i, err
 }
 
+const getUserSession = `-- name: GetUserSession :one
+SELECT id, user_id, revoked_at
+FROM sessions
+WHERE id = ?1
+`
+
+type GetUserSessionRow struct {
+	ID        string
+	UserID    string
+	RevokedAt utctime.Time
+}
+
+func (q *Queries) GetUserSession(ctx context.Context, id string) (GetUserSessionRow, error) {
+	row := q.db.QueryRowContext(ctx, getUserSession, id)
+	var i GetUserSessionRow
+	err := row.Scan(&i.ID, &i.UserID, &i.RevokedAt)
+	return i, err
+}
+
 const touchUser = `-- name: TouchUser :execrows
 UPDATE users
 SET updated_at = ?1

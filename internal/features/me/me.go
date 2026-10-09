@@ -7,6 +7,8 @@ package me
 import (
 	"net/http"
 
+	"github.com/google/uuid"
+
 	"github.com/fikrilal/go-core-kit/contracts"
 	"github.com/fikrilal/go-core-kit/internal/features/me/app"
 	"github.com/fikrilal/go-core-kit/internal/features/me/domain"
@@ -33,6 +35,20 @@ func Register(router *httpx.Router, deps Deps) {
 	router.Handle(getMe, deps.Guard.Require(http.HandlerFunc(handlers.getMe)))
 	patchMe := httpx.Operation{Method: http.MethodPatch, Path: "/v1/me", ID: "users.me.patch"}
 	router.Handle(patchMe, deps.Guard.Require(router.Idempotent(patchMe, handlers.patchMe)))
+	listSessions := httpx.Operation{Method: http.MethodGet, Path: "/v1/me/sessions", ID: "users.me.sessions.list"}
+	router.Handle(listSessions, deps.Guard.Require(http.HandlerFunc(handlers.listSessions)))
+	revokeSession := httpx.Operation{Method: http.MethodPost, Path: "/v1/me/sessions/{sessionId}/revoke", ID: "users.me.sessions.revoke"}
+	router.Handle(revokeSession, deps.Guard.Require(http.HandlerFunc(handlers.revokeSession)))
+}
+
+// sessionsListConfig is the list contract for the sessions endpoint.
+var sessionsListConfig = httpx.ListQueryConfig{
+	DefaultLimit: 25,
+	MaxLimit:     100,
+	Sort: httpx.SortConfig{
+		Allowed: []string{"createdAt", "id"},
+		Default: []httpx.SortField{{Field: "createdAt", Desc: true}},
+	},
 }
 
 type handlers struct {
@@ -92,6 +108,83 @@ func (h *handlers) patchMe(w http.ResponseWriter, r *http.Request) {
 // profileField converts a decoded wire field into the domain patch field.
 func profileField(optional httpx.OptionalString) domain.Field {
 	return domain.Field{Present: optional.Present(), Null: optional.Null(), Value: optional.Value()}
+}
+
+func (h *handlers) listSessions(w http.ResponseWriter, r *http.Request) {
+	principal, ok := platformauth.PrincipalFrom(r.Context())
+	if !ok {
+		httpx.WriteError(w, r, &httpx.ProblemError{Status: http.StatusUnauthorized, Code: httpx.CodeUnauthorized})
+		return
+	}
+	query, err := httpx.ParseListQuery(r, sessionsListConfig)
+	if err != nil {
+		httpx.WriteError(w, r, err)
+		return
+	}
+	page, err := h.service.ListSessions(r.Context(), app.ListSessionsInput{
+		UserID:    principal.UserID,
+		SessionID: principal.SessionID,
+		Query:     query,
+	})
+	if err != nil {
+		httpx.WriteError(w, r, err)
+		return
+	}
+	items := make([]contracts.MeSessionDto, 0, len(page.Views))
+	for _, view := range page.Views {
+		items = append(items, sessionDto(view))
+	}
+	httpx.List(w, r, items, httpx.ListMeta{Limit: query.Limit, HasMore: page.HasMore, NextCursor: page.NextCursor})
+}
+
+func (h *handlers) revokeSession(w http.ResponseWriter, r *http.Request) {
+	principal, ok := platformauth.PrincipalFrom(r.Context())
+	if !ok {
+		httpx.WriteError(w, r, &httpx.ProblemError{Status: http.StatusUnauthorized, Code: httpx.CodeUnauthorized})
+		return
+	}
+	sessionID := r.PathValue("sessionId")
+	if _, err := uuid.Parse(sessionID); err != nil {
+		httpx.WriteError(w, r, invalidSessionID())
+		return
+	}
+	if err := h.service.RevokeSession(r.Context(), app.RevokeSessionInput{
+		UserID:    principal.UserID,
+		SessionID: sessionID,
+	}); err != nil {
+		httpx.WriteError(w, r, err)
+		return
+	}
+	httpx.NoContent(w)
+}
+
+// invalidSessionID reports a path parameter that is not a UUID.
+func invalidSessionID() error {
+	return &httpx.ProblemError{
+		Status: http.StatusBadRequest,
+		Code:   httpx.CodeValidationFailed,
+		Issues: []httpx.FieldIssue{{Field: "sessionId", Message: "must be a valid UUID"}},
+	}
+}
+
+func sessionDto(view domain.SessionView) contracts.MeSessionDto {
+	dto := contracts.MeSessionDto{
+		Id:         view.ID,
+		DeviceId:   nullableString(view.DeviceID),
+		DeviceName: nullableString(view.DeviceName),
+		Ip:         nullableString(view.IP),
+		UserAgent:  nullableString(view.UserAgent),
+		LastSeenAt: view.LastSeenAt,
+		CreatedAt:  view.CreatedAt,
+		ExpiresAt:  view.ExpiresAt,
+		Current:    view.Current,
+		Status:     contracts.MeSessionDtoStatus(view.Status),
+	}
+	if !view.RevokedAt.IsZero() {
+		revokedAt := view.RevokedAt
+		dto.RevokedAt = &revokedAt
+	}
+	return dto
 }
 
 func meDto(view domain.MeView) contracts.MeDto {

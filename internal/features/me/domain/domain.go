@@ -1,6 +1,8 @@
 // Package domain holds the me feature's framework-free types.
 package domain
 
+import "time"
+
 // Roles.
 const (
 	RoleUser  = "USER"
@@ -41,6 +43,33 @@ type MeView struct {
 	User        User
 	Profile     Profile
 	AuthMethods []string
+}
+
+// Session statuses.
+const (
+	SessionActive  = "active"
+	SessionRevoked = "revoked"
+	SessionExpired = "expired"
+)
+
+// Session is the stored session core. RevokedAt is zero when not revoked.
+type Session struct {
+	ID         string
+	DeviceID   string
+	DeviceName string
+	IP         string
+	UserAgent  string
+	LastSeenAt time.Time
+	CreatedAt  time.Time
+	ExpiresAt  time.Time
+	RevokedAt  time.Time
+}
+
+// SessionView adds the computed status and the current-session flag.
+type SessionView struct {
+	Session
+	Current bool
+	Status  string
 }
 
 // Field is a patch field that can be absent, cleared (null), or set.

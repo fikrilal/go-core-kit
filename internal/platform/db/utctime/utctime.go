@@ -40,7 +40,13 @@ func (t Time) Value() (driver.Value, error) {
 	if t.IsZero() {
 		return nil, nil
 	}
-	return t.UTC().Format(valueLayout), nil
+	return t.Stored(), nil
+}
+
+// Stored returns the database text for the timestamp, the same form Value
+// writes. A cursor carries it so keyset comparisons stay byte-wise.
+func (t Time) Stored() string {
+	return t.UTC().Format(valueLayout)
 }
 
 func (t *Time) parse(raw string) error {

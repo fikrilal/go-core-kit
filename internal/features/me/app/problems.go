@@ -24,3 +24,8 @@ func profilePatchRequiredError() error {
 func validationFailedError(issues []httpx.FieldIssue) error {
 	return &httpx.ProblemError{Status: http.StatusBadRequest, Code: httpx.CodeValidationFailed, Issues: issues}
 }
+
+// sessionNotFoundError reports an unknown or foreign session.
+func sessionNotFoundError() error {
+	return &httpx.ProblemError{Status: http.StatusNotFound, Code: httpx.CodeNotFound, Detail: "Session not found"}
+}

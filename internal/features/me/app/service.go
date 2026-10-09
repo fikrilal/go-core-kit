@@ -4,6 +4,7 @@ package app
 import (
 	"context"
 	"fmt"
+	"time"
 	"unicode/utf8"
 
 	"github.com/fikrilal/go-core-kit/internal/features/me/domain"
@@ -67,6 +68,96 @@ func (s *Service) PatchMe(ctx context.Context, in PatchMeInput) (domain.MeView, 
 		return domain.MeView{}, unauthorizedError()
 	}
 	return view, nil
+}
+
+// ListSessionsInput carries a parsed list request.
+type ListSessionsInput struct {
+	UserID    string
+	SessionID string
+	Query     httpx.ListQuery
+}
+
+// SessionPage is one page of session views with its cursor metadata.
+type SessionPage struct {
+	Views      []domain.SessionView
+	HasMore    bool
+	NextCursor string
+}
+
+// ListSessions loads the user's sessions and computes their status.
+func (s *Service) ListSessions(ctx context.Context, in ListSessionsInput) (SessionPage, error) {
+	if err := s.requireUser(ctx, in.UserID); err != nil {
+		return SessionPage{}, err
+	}
+	page, err := s.repo.ListSessions(ctx, ports.ListSessionsInput{
+		UserID: in.UserID,
+		Limit:  in.Query.Limit,
+		Sort:   sortFields(in.Query.Sort),
+		Cursor: in.Query.Cursor,
+	})
+	if err != nil {
+		return SessionPage{}, fmt.Errorf("me: list sessions: %w", err)
+	}
+	now := s.clock.Now()
+	views := make([]domain.SessionView, 0, len(page.Sessions))
+	for _, session := range page.Sessions {
+		views = append(views, sessionView(session, in.SessionID, now))
+	}
+	return SessionPage{Views: views, HasMore: page.HasMore, NextCursor: page.NextCursor}, nil
+}
+
+// RevokeSessionInput carries a session revocation for the authenticated user.
+type RevokeSessionInput struct {
+	UserID    string
+	SessionID string
+}
+
+// RevokeSession revokes one of the user's sessions; unknown ids are 404.
+func (s *Service) RevokeSession(ctx context.Context, in RevokeSessionInput) error {
+	if err := s.requireUser(ctx, in.UserID); err != nil {
+		return err
+	}
+	revoked, err := s.repo.RevokeSession(ctx, in.UserID, in.SessionID, s.clock.Now())
+	if err != nil {
+		return fmt.Errorf("me: revoke session: %w", err)
+	}
+	if !revoked {
+		return sessionNotFoundError()
+	}
+	return nil
+}
+
+// requireUser rejects missing or deleted accounts as unusable tokens.
+func (s *Service) requireUser(ctx context.Context, userID string) error {
+	status, found, err := s.repo.FindUserStatus(ctx, userID)
+	if err != nil {
+		return fmt.Errorf("me: find user: %w", err)
+	}
+	if !found || status == domain.StatusDeleted {
+		return unauthorizedError()
+	}
+	return nil
+}
+
+// sessionView computes the status and the current-session flag.
+func sessionView(session domain.Session, currentSessionID string, now time.Time) domain.SessionView {
+	status := domain.SessionActive
+	switch {
+	case !session.RevokedAt.IsZero():
+		status = domain.SessionRevoked
+	case !session.ExpiresAt.After(now):
+		status = domain.SessionExpired
+	}
+	return domain.SessionView{Session: session, Current: session.ID == currentSessionID, Status: status}
+}
+
+// sortFields converts the parsed wire sort into the port sort.
+func sortFields(fields []httpx.SortField) []ports.SortField {
+	sort := make([]ports.SortField, 0, len(fields))
+	for _, field := range fields {
+		sort = append(sort, ports.SortField{Field: field.Field, Desc: field.Desc})
+	}
+	return sort
 }
 
 // validateProfilePatch collects every issue in field order.
