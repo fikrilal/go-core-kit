@@ -281,6 +281,8 @@ SELECT
     u.email_verified_at AS user_email_verified_at,
     u.role AS user_role,
     u.status AS user_status,
+    u.deletion_requested_at AS user_deletion_requested_at,
+    u.deletion_scheduled_for AS user_deletion_scheduled_for,
     p.display_name AS profile_display_name,
     p.given_name AS profile_given_name,
     p.family_name AS profile_family_name
@@ -290,14 +292,16 @@ WHERE u.id = $1
 `
 
 type GetMeViewRow struct {
-	UserID              string
-	UserEmail           string
-	UserEmailVerifiedAt sql.NullTime
-	UserRole            string
-	UserStatus          string
-	ProfileDisplayName  sql.NullString
-	ProfileGivenName    sql.NullString
-	ProfileFamilyName   sql.NullString
+	UserID                   string
+	UserEmail                string
+	UserEmailVerifiedAt      sql.NullTime
+	UserRole                 string
+	UserStatus               string
+	UserDeletionRequestedAt  sql.NullTime
+	UserDeletionScheduledFor sql.NullTime
+	ProfileDisplayName       sql.NullString
+	ProfileGivenName         sql.NullString
+	ProfileFamilyName        sql.NullString
 }
 
 func (q *Queries) GetMeView(ctx context.Context, userID string) (GetMeViewRow, error) {
@@ -309,6 +313,8 @@ func (q *Queries) GetMeView(ctx context.Context, userID string) (GetMeViewRow, e
 		&i.UserEmailVerifiedAt,
 		&i.UserRole,
 		&i.UserStatus,
+		&i.UserDeletionRequestedAt,
+		&i.UserDeletionScheduledFor,
 		&i.ProfileDisplayName,
 		&i.ProfileGivenName,
 		&i.ProfileFamilyName,

@@ -143,6 +143,12 @@ func TestAuthMigrationDownRestoresSkeleton(t *testing.T) {
 		t.Fatalf("new provider: %v", err)
 	}
 	if _, err := provider.Down(ctx); err != nil {
+		t.Fatalf("Down() 0005 error = %v", err)
+	}
+	if tableExists(t, database, "user_account_deletion_audits") {
+		t.Error("deletion audit table still present after Down")
+	}
+	if _, err := provider.Down(ctx); err != nil {
 		t.Fatalf("Down() 0004 error = %v", err)
 	}
 	if tableExists(t, database, "stored_files") {
@@ -164,7 +170,7 @@ func TestAuthMigrationDownRestoresSkeleton(t *testing.T) {
 	if columns := tableColumns(t, database, "users"); !slices.Equal(columns, []string{"id", "email", "created_at", "updated_at"}) {
 		t.Errorf("users columns after Down = %v, want the 0001 shape", columns)
 	}
-	for range 3 {
+	for range 4 {
 		if _, err := provider.Up(ctx); err != nil {
 			t.Fatalf("Up() after Down error = %v", err)
 		}

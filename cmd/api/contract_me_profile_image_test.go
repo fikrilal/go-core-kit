@@ -57,13 +57,13 @@ func withObjects(t *testing.T, mutate func(cfg *config.Config)) (*authFixture, *
 
 func (f *authFixture) uploadPlan(t *testing.T, token, idempotencyKey string, contentType string, sizeBytes int64) (*http.Request, contracttest.Response) {
 	t.Helper()
-	return f.jsonRequest(t, http.MethodPost, "/v1/me/profile-image/upload", token, idempotencyKey,
+	return f.jsonRequest(t, "/v1/me/profile-image/upload", token, idempotencyKey,
 		map[string]any{"contentType": contentType, "sizeBytes": sizeBytes})
 }
 
 func (f *authFixture) completeImage(t *testing.T, token, fileID string) (*http.Request, contracttest.Response) {
 	t.Helper()
-	return f.jsonRequest(t, http.MethodPost, "/v1/me/profile-image/complete", token, "", map[string]any{"fileId": fileID})
+	return f.jsonRequest(t, "/v1/me/profile-image/complete", token, "", map[string]any{"fileId": fileID})
 }
 
 func (f *authFixture) clearImage(t *testing.T, token string) (*http.Request, contracttest.Response) {

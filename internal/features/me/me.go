@@ -5,6 +5,7 @@
 package me
 
 import (
+	"context"
 	"net"
 	"net/http"
 	"time"
@@ -80,6 +81,10 @@ func Register(router *httpx.Router, deps Deps) {
 	router.Handle(clearProfileImage, deps.Guard.Require(http.HandlerFunc(handlers.clearProfileImage)))
 	profileImageURL := httpx.Operation{Method: http.MethodGet, Path: "/v1/me/profile-image/url", ID: "users.me.profileImage.url"}
 	router.Handle(profileImageURL, deps.Guard.Require(http.HandlerFunc(handlers.profileImageURL)))
+	requestDeletion := httpx.Operation{Method: http.MethodPost, Path: "/v1/me/account-deletion/request", ID: "users.me.accountDeletion.request"}
+	router.Handle(requestDeletion, deps.Guard.Require(router.Idempotent(requestDeletion, handlers.requestAccountDeletion)))
+	cancelDeletion := httpx.Operation{Method: http.MethodPost, Path: "/v1/me/account-deletion/cancel", ID: "users.me.accountDeletion.cancel"}
+	router.Handle(cancelDeletion, deps.Guard.Require(router.Idempotent(cancelDeletion, handlers.cancelAccountDeletion)))
 }
 
 // uploadLimit converts the feature-level config into the limiter's shape.
@@ -350,6 +355,36 @@ func (h *handlers) profileImageURL(w http.ResponseWriter, r *http.Request) {
 	httpx.Data(w, r, contracts.ProfileImageUrlDto{Url: url.URL, ExpiresAt: url.ExpiresAt})
 }
 
+// accountDeletionCall runs a caller-scoped deletion action and writes 204.
+func (h *handlers) accountDeletionCall(w http.ResponseWriter, r *http.Request, call func(ctx context.Context, userID, sessionID, traceID string) error) {
+	principal, ok := platformauth.PrincipalFrom(r.Context())
+	if !ok {
+		httpx.WriteError(w, r, &httpx.ProblemError{Status: http.StatusUnauthorized, Code: httpx.CodeUnauthorized})
+		return
+	}
+	if err := call(r.Context(), principal.UserID, principal.SessionID, httpx.RequestID(r)); err != nil {
+		httpx.WriteError(w, r, err)
+		return
+	}
+	httpx.NoContent(w)
+}
+
+func (h *handlers) requestAccountDeletion(w http.ResponseWriter, r *http.Request) {
+	h.accountDeletionCall(w, r, func(ctx context.Context, userID, sessionID, traceID string) error {
+		return h.service.RequestAccountDeletion(ctx, app.RequestAccountDeletionInput{
+			UserID: userID, SessionID: sessionID, TraceID: traceID,
+		})
+	})
+}
+
+func (h *handlers) cancelAccountDeletion(w http.ResponseWriter, r *http.Request) {
+	h.accountDeletionCall(w, r, func(ctx context.Context, userID, sessionID, traceID string) error {
+		return h.service.CancelAccountDeletion(ctx, app.CancelAccountDeletionInput{
+			UserID: userID, SessionID: sessionID, TraceID: traceID,
+		})
+	})
+}
+
 // uploadHeaders renders the presigned headers for the generated DTO.
 func uploadHeaders(headers map[string]string) map[string]any {
 	rendered := make(map[string]any, len(headers))
@@ -413,6 +448,18 @@ func meDto(view domain.MeView) contracts.MeDto {
 			GivenName:   nullableString(view.Profile.GivenName),
 			FamilyName:  nullableString(view.Profile.FamilyName),
 		},
+		AccountDeletion: accountDeletionDto(view.AccountDeletion),
+	}
+}
+
+// accountDeletionDto renders the scheduled-deletion view.
+func accountDeletionDto(deletion *domain.AccountDeletion) *contracts.AccountDeletionDto {
+	if deletion == nil {
+		return nil
+	}
+	return &contracts.AccountDeletionDto{
+		RequestedAt:  deletion.RequestedAt,
+		ScheduledFor: deletion.ScheduledFor,
 	}
 }
 

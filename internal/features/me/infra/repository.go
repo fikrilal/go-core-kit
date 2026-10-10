@@ -12,6 +12,8 @@ import (
 	"strings"
 	"time"
 
+	"github.com/google/uuid"
+
 	"github.com/fikrilal/go-core-kit/internal/db/gen"
 	"github.com/fikrilal/go-core-kit/internal/features/me/domain"
 	"github.com/fikrilal/go-core-kit/internal/features/me/ports"
@@ -367,6 +369,113 @@ func (r *Repository) ClearProfileImage(ctx context.Context, userID string, now t
 	return clearedObjectKey, found, nil
 }
 
+// RequestAccountDeletion schedules the deletion and records the audit row.
+// A repeated request and the last-admin invariant both leave the row alone.
+func (r *Repository) RequestAccountDeletion(ctx context.Context, in ports.RequestAccountDeletionInput) (domain.DeletionKind, error) {
+	now := utctime.Time{Time: in.Now}
+	kind := domain.DeletionOK
+	err := r.database.InTx(ctx, func(tx db.Tx) error {
+		queries := gen.New(tx)
+		state, err := queries.GetUserDeletionState(ctx, in.UserID)
+		if errors.Is(err, db.ErrNoRows) {
+			kind = domain.DeletionNotFound
+			return nil
+		}
+		if err != nil {
+			return fmt.Errorf("find user: %w", err)
+		}
+		if state.Status == domain.StatusDeleted {
+			kind = domain.DeletionNotFound
+			return nil
+		}
+		if state.Role == domain.RoleAdmin && state.Status == domain.StatusActive && state.DeletionScheduledFor.IsZero() {
+			admins, err := queries.CountActiveAdmins(ctx)
+			if err != nil {
+				return fmt.Errorf("count active admins: %w", err)
+			}
+			if admins <= 1 {
+				kind = domain.DeletionLastAdmin
+				return nil
+			}
+		}
+		if !state.DeletionScheduledFor.IsZero() {
+			kind = domain.DeletionAlreadyRequested
+			return nil
+		}
+		if _, err := queries.SetUserDeletionRequest(ctx, gen.SetUserDeletionRequestParams{
+			RequestedAt:  now,
+			ScheduledFor: utctime.Time{Time: in.ScheduledFor},
+			SessionID:    in.SessionID,
+			TraceID:      in.TraceID,
+			UpdatedAt:    now,
+			ID:           in.UserID,
+		}); err != nil {
+			return fmt.Errorf("set deletion request: %w", err)
+		}
+		return recordDeletionAudit(ctx, queries, in.UserID, in.SessionID, in.TraceID, "REQUESTED", now)
+	})
+	if err != nil {
+		return "", fmt.Errorf("request account deletion: %w", err)
+	}
+	return kind, nil
+}
+
+// CancelAccountDeletion clears a scheduled deletion and records the audit row.
+func (r *Repository) CancelAccountDeletion(ctx context.Context, in ports.CancelAccountDeletionInput) (domain.DeletionKind, error) {
+	now := utctime.Time{Time: in.Now}
+	kind := domain.DeletionOK
+	err := r.database.InTx(ctx, func(tx db.Tx) error {
+		queries := gen.New(tx)
+		state, err := queries.GetUserDeletionState(ctx, in.UserID)
+		if errors.Is(err, db.ErrNoRows) {
+			kind = domain.DeletionNotFound
+			return nil
+		}
+		if err != nil {
+			return fmt.Errorf("find user: %w", err)
+		}
+		if state.Status == domain.StatusDeleted {
+			kind = domain.DeletionNotFound
+			return nil
+		}
+		if state.DeletionScheduledFor.IsZero() {
+			kind = domain.DeletionNotRequested
+			return nil
+		}
+		if _, err := queries.ClearUserDeletionRequest(ctx, gen.ClearUserDeletionRequestParams{
+			UpdatedAt: now,
+			ID:        in.UserID,
+		}); err != nil {
+			return fmt.Errorf("clear deletion request: %w", err)
+		}
+		return recordDeletionAudit(ctx, queries, in.UserID, in.SessionID, in.TraceID, "CANCELED", now)
+	})
+	if err != nil {
+		return "", fmt.Errorf("cancel account deletion: %w", err)
+	}
+	return kind, nil
+}
+
+// recordDeletionAudit appends one account-deletion audit row.
+func recordDeletionAudit(ctx context.Context, queries *gen.Queries, userID, sessionID, traceID, action string, now utctime.Time) error {
+	auditID, err := uuid.NewV7()
+	if err != nil {
+		return fmt.Errorf("generate audit id: %w", err)
+	}
+	if err := queries.CreateAccountDeletionAudit(ctx, gen.CreateAccountDeletionAuditParams{
+		ID:             auditID.String(),
+		ActorUserID:    userID,
+		ActorSessionID: sessionID,
+		TargetUserID:   userID,
+		Action:         action,
+		TraceID:        traceID,
+		CreatedAt:      now,
+	}); err != nil {
+		return fmt.Errorf("create deletion audit: %w", err)
+	}
+	return nil
+}
+
 // sessionSortCreatedAt and sessionSortID are the cursor sort names.
 const (
 	sessionSortCreatedAt = "createdAt"
@@ -682,8 +791,17 @@ func meView(ctx context.Context, queries *gen.Queries, userID string) (domain.Me
 			GivenName:   row.ProfileGivenName.String,
 			FamilyName:  row.ProfileFamilyName.String,
 		},
-		AuthMethods: orderAuthMethods(methods),
+		AuthMethods:     orderAuthMethods(methods),
+		AccountDeletion: accountDeletion(row.UserDeletionRequestedAt, row.UserDeletionScheduledFor),
 	}, true, nil
+}
+
+// accountDeletion reports a scheduled deletion when both stamps are set.
+func accountDeletion(requestedAt, scheduledFor utctime.Time) *domain.AccountDeletion {
+	if requestedAt.IsZero() || scheduledFor.IsZero() {
+		return nil
+	}
+	return &domain.AccountDeletion{RequestedAt: requestedAt.Time, ScheduledFor: scheduledFor.Time}
 }
 
 // orderAuthMethods sorts PASSWORD then GOOGLE. UNION does not order rows.

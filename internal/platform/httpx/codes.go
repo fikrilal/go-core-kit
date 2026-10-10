@@ -41,4 +41,5 @@ const (
 	CodeUsersProfileImageNotUploaded         Code = "USERS_PROFILE_IMAGE_NOT_UPLOADED"
 	CodeUsersProfileImageSizeMismatch        Code = "USERS_PROFILE_IMAGE_SIZE_MISMATCH"
 	CodeUsersProfileImageContentTypeMismatch Code = "USERS_PROFILE_IMAGE_CONTENT_TYPE_MISMATCH"
+	CodeUsersCannotDeleteLastAdmin           Code = "USERS_CANNOT_DELETE_LAST_ADMIN"
 )

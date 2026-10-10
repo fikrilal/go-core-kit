@@ -572,9 +572,18 @@ func (r *Repository) GetMeView(ctx context.Context, userID string) (domain.MeVie
 			GivenName:   row.ProfileGivenName.String,
 			FamilyName:  row.ProfileFamilyName.String,
 		},
-		AuthMethods: orderAuthMethods(methods),
+		AuthMethods:     orderAuthMethods(methods),
+		AccountDeletion: accountDeletion(row.UserDeletionRequestedAt, row.UserDeletionScheduledFor),
 	}
 	return view, true, nil
+}
+
+// accountDeletion reports a scheduled deletion when both stamps are set.
+func accountDeletion(requestedAt, scheduledFor utctime.Time) *domain.AccountDeletion {
+	if requestedAt.IsZero() || scheduledFor.IsZero() {
+		return nil
+	}
+	return &domain.AccountDeletion{RequestedAt: requestedAt.Time, ScheduledFor: scheduledFor.Time}
 }
 
 // orderAuthMethods sorts PASSWORD then GOOGLE. UNION does not order rows.

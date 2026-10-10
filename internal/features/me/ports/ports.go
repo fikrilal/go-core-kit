@@ -71,6 +71,23 @@ type ProfileImageState struct {
 	ObjectKey string
 }
 
+// RequestAccountDeletionInput carries a deletion request.
+type RequestAccountDeletionInput struct {
+	UserID       string
+	SessionID    string
+	TraceID      string
+	Now          time.Time
+	ScheduledFor time.Time
+}
+
+// CancelAccountDeletionInput carries a deletion cancel.
+type CancelAccountDeletionInput struct {
+	UserID    string
+	SessionID string
+	TraceID   string
+	Now       time.Time
+}
+
 // ProfileImageStorage signs client-side object access and inspects objects.
 type ProfileImageStorage interface {
 	Enabled() bool
@@ -96,4 +113,6 @@ type Repository interface {
 	ProfileImage(ctx context.Context, userID string) (ProfileImageState, bool, error)
 	AttachProfileImage(ctx context.Context, in AttachProfileImageInput) (previousObjectKey string, found bool, err error)
 	ClearProfileImage(ctx context.Context, userID string, now time.Time) (clearedObjectKey string, found bool, err error)
+	RequestAccountDeletion(ctx context.Context, in RequestAccountDeletionInput) (domain.DeletionKind, error)
+	CancelAccountDeletion(ctx context.Context, in CancelAccountDeletionInput) (domain.DeletionKind, error)
 }

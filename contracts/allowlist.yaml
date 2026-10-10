@@ -6,9 +6,6 @@ operations:
   - auth.email.verification.resend
   - auth.password.reset.request
   - auth.password.reset.confirm
-  # Phase 4 — me slice
-  - users.me.accountDeletion.request
-  - users.me.accountDeletion.cancel
   # Admin — deferred
   - admin.whoami.get
   - admin.users.list

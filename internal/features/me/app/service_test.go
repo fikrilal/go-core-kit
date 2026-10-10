@@ -64,6 +64,27 @@ type fakeRepository struct {
 	clearKey        string
 	clearFound      bool
 	clearErr        error
+
+	deletionKind     domain.DeletionKind
+	deletionErr      error
+	deletionRequests []ports.RequestAccountDeletionInput
+	deletionCancels  []ports.CancelAccountDeletionInput
+}
+
+func (f *fakeRepository) RequestAccountDeletion(_ context.Context, in ports.RequestAccountDeletionInput) (domain.DeletionKind, error) {
+	f.deletionRequests = append(f.deletionRequests, in)
+	if f.deletionErr != nil {
+		return "", f.deletionErr
+	}
+	return f.deletionKind, nil
+}
+
+func (f *fakeRepository) CancelAccountDeletion(_ context.Context, in ports.CancelAccountDeletionInput) (domain.DeletionKind, error) {
+	f.deletionCancels = append(f.deletionCancels, in)
+	if f.deletionErr != nil {
+		return "", f.deletionErr
+	}
+	return f.deletionKind, nil
 }
 
 func (f *fakeRepository) CreateProfileImageFile(_ context.Context, in ports.CreateStoredFileInput) (bool, error) {
@@ -621,6 +642,69 @@ func TestCreateUploadPlanSurfacesRepositoryFailure(t *testing.T) {
 	})))
 	if problem.Status != http.StatusUnauthorized || problem.Code != httpx.CodeUnauthorized {
 		t.Fatalf("problem = %+v, want 401 for a missing owner", problem)
+	}
+}
+
+func TestRequestAccountDeletion(t *testing.T) {
+	service, repo := newFixture()
+	repo.deletionKind = domain.DeletionOK
+	if err := service.RequestAccountDeletion(context.Background(), app.RequestAccountDeletionInput{
+		UserID: "user-1", SessionID: "session-1", TraceID: "trace-1",
+	}); err != nil {
+		t.Fatalf("RequestAccountDeletion() error = %v", err)
+	}
+	if len(repo.deletionRequests) != 1 {
+		t.Fatalf("requests = %d, want 1", len(repo.deletionRequests))
+	}
+	request := repo.deletionRequests[0]
+	if want := moment.Add(30 * 24 * time.Hour); !request.ScheduledFor.Equal(want) {
+		t.Errorf("scheduledFor = %v, want the 30-day grace period %v", request.ScheduledFor, want)
+	}
+	if request.SessionID != "session-1" || request.TraceID != "trace-1" {
+		t.Errorf("request = %+v, want the session and trace recorded", request)
+	}
+
+	repo.deletionKind = domain.DeletionAlreadyRequested
+	if err := service.RequestAccountDeletion(context.Background(), app.RequestAccountDeletionInput{UserID: "user-1"}); err != nil {
+		t.Fatalf("repeat RequestAccountDeletion() error = %v, want nil", err)
+	}
+}
+
+func TestRequestAccountDeletionFailures(t *testing.T) {
+	admin, adminRepo := newFixture()
+	adminRepo.deletionKind = domain.DeletionLastAdmin
+	problem := problemError(t, admin.RequestAccountDeletion(context.Background(), app.RequestAccountDeletionInput{UserID: "admin-1"}))
+	if problem.Status != http.StatusConflict || problem.Code != httpx.CodeUsersCannotDeleteLastAdmin {
+		t.Fatalf("problem = %+v, want 409 USERS_CANNOT_DELETE_LAST_ADMIN", problem)
+	}
+
+	missing, missingRepo := newFixture()
+	missingRepo.deletionKind = domain.DeletionNotFound
+	problem = problemError(t, missing.RequestAccountDeletion(context.Background(), app.RequestAccountDeletionInput{UserID: "missing"}))
+	if problem.Status != http.StatusUnauthorized || problem.Code != httpx.CodeUnauthorized {
+		t.Fatalf("problem = %+v, want 401 UNAUTHORIZED", problem)
+	}
+}
+
+func TestCancelAccountDeletion(t *testing.T) {
+	service, repo := newFixture()
+	repo.deletionKind = domain.DeletionOK
+	if err := service.CancelAccountDeletion(context.Background(), app.CancelAccountDeletionInput{UserID: "user-1", SessionID: "session-1"}); err != nil {
+		t.Fatalf("CancelAccountDeletion() error = %v", err)
+	}
+	if len(repo.deletionCancels) != 1 || repo.deletionCancels[0].SessionID != "session-1" {
+		t.Errorf("cancels = %+v, want the session recorded", repo.deletionCancels)
+	}
+
+	repo.deletionKind = domain.DeletionNotRequested
+	if err := service.CancelAccountDeletion(context.Background(), app.CancelAccountDeletionInput{UserID: "user-1"}); err != nil {
+		t.Fatalf("repeat CancelAccountDeletion() error = %v, want nil", err)
+	}
+
+	repo.deletionKind = domain.DeletionNotFound
+	problem := problemError(t, service.CancelAccountDeletion(context.Background(), app.CancelAccountDeletionInput{UserID: "missing"}))
+	if problem.Status != http.StatusUnauthorized || problem.Code != httpx.CodeUnauthorized {
+		t.Fatalf("problem = %+v, want 401 UNAUTHORIZED", problem)
 	}
 }
 

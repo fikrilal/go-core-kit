@@ -311,9 +311,21 @@ func authResult(result app.Result, me domain.MeView) contracts.AuthResultWithMeD
 				GivenName:   nullableString(me.Profile.GivenName),
 				FamilyName:  nullableString(me.Profile.FamilyName),
 			},
+			AccountDeletion: accountDeletionDto(me.AccountDeletion),
 		},
 		AccessToken:  result.AccessToken,
 		RefreshToken: result.RefreshToken,
+	}
+}
+
+// accountDeletionDto renders the scheduled-deletion view.
+func accountDeletionDto(deletion *domain.AccountDeletion) *contracts.AccountDeletionDto {
+	if deletion == nil {
+		return nil
+	}
+	return &contracts.AccountDeletionDto{
+		RequestedAt:  deletion.RequestedAt,
+		ScheduledFor: deletion.ScheduledFor,
 	}
 }
 

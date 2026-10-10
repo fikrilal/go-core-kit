@@ -120,9 +120,16 @@ type Profile struct {
 
 // MeView is the composed Me response core: user, profile, and auth methods.
 type MeView struct {
-	User        User
-	Profile     Profile
-	AuthMethods []string
+	User            User
+	Profile         Profile
+	AuthMethods     []string
+	AccountDeletion *AccountDeletion
+}
+
+// AccountDeletion is a scheduled account deletion.
+type AccountDeletion struct {
+	RequestedAt  time.Time
+	ScheduledFor time.Time
 }
 
 // OidcVerifyKind reports how an OIDC token verification ended.

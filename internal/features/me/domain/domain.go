@@ -47,10 +47,29 @@ type Profile struct {
 
 // MeView is the composed Me response core.
 type MeView struct {
-	User        User
-	Profile     Profile
-	AuthMethods []string
+	User            User
+	Profile         Profile
+	AuthMethods     []string
+	AccountDeletion *AccountDeletion
 }
+
+// AccountDeletion is a scheduled account deletion.
+type AccountDeletion struct {
+	RequestedAt  time.Time
+	ScheduledFor time.Time
+}
+
+// DeletionKind reports how an account deletion request or cancel ended.
+type DeletionKind string
+
+// Account deletion outcomes.
+const (
+	DeletionOK               DeletionKind = "ok"
+	DeletionAlreadyRequested DeletionKind = "already_requested"
+	DeletionNotRequested     DeletionKind = "not_requested"
+	DeletionLastAdmin        DeletionKind = "last_admin"
+	DeletionNotFound         DeletionKind = "not_found"
+)
 
 // Session statuses.
 const (

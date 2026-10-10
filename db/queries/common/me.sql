@@ -100,6 +100,44 @@ FROM user_profiles AS p
 JOIN stored_files AS f ON f.id = p.profile_image_file_id
 WHERE p.user_id = sqlc.arg(user_id);
 
+-- name: GetUserDeletionState :one
+SELECT role, status, deletion_requested_at, deletion_scheduled_for
+FROM users
+WHERE id = sqlc.arg(id);
+
+-- name: CountActiveAdmins :one
+SELECT COUNT(*) FROM users WHERE role = 'ADMIN' AND status = 'ACTIVE';
+
+-- name: SetUserDeletionRequest :execrows
+UPDATE users
+SET deletion_requested_at = sqlc.arg(requested_at),
+    deletion_scheduled_for = sqlc.arg(scheduled_for),
+    deletion_requested_session_id = NULLIF(sqlc.arg(session_id), ''),
+    deletion_requested_trace_id = NULLIF(sqlc.arg(trace_id), ''),
+    updated_at = sqlc.arg(updated_at)
+WHERE id = sqlc.arg(id) AND status != 'DELETED';
+
+-- name: ClearUserDeletionRequest :execrows
+UPDATE users
+SET deletion_requested_at = NULL,
+    deletion_scheduled_for = NULL,
+    deletion_requested_session_id = NULL,
+    deletion_requested_trace_id = NULL,
+    updated_at = sqlc.arg(updated_at)
+WHERE id = sqlc.arg(id) AND status != 'DELETED';
+
+-- name: CreateAccountDeletionAudit :exec
+INSERT INTO user_account_deletion_audits (id, actor_user_id, actor_session_id, target_user_id, action, trace_id, created_at)
+VALUES (
+    sqlc.arg(id),
+    sqlc.arg(actor_user_id),
+    sqlc.arg(actor_session_id),
+    sqlc.arg(target_user_id),
+    sqlc.arg(action),
+    NULLIF(sqlc.arg(trace_id), ''),
+    sqlc.arg(created_at)
+);
+
 -- name: UpsertUserProfile :exec
 -- NULLIF stores a blank cleared field as NULL; a caller cannot persist an empty string.
 INSERT INTO user_profiles (user_id, display_name, given_name, family_name, created_at, updated_at)

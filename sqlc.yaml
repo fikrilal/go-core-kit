@@ -28,6 +28,16 @@ sql:
               import: "github.com/fikrilal/go-core-kit/internal/platform/db/utctime"
               package: "utctime"
               type: "Time"
+          - column: "users.deletion_requested_at"
+            go_type:
+              import: "github.com/fikrilal/go-core-kit/internal/platform/db/utctime"
+              package: "utctime"
+              type: "Time"
+          - column: "users.deletion_scheduled_for"
+            go_type:
+              import: "github.com/fikrilal/go-core-kit/internal/platform/db/utctime"
+              package: "utctime"
+              type: "Time"
           - column: "password_credentials.created_at"
             go_type:
               import: "github.com/fikrilal/go-core-kit/internal/platform/db/utctime"
@@ -129,6 +139,11 @@ sql:
               package: "utctime"
               type: "Time"
           - column: "stored_files.deleted_at"
+            go_type:
+              import: "github.com/fikrilal/go-core-kit/internal/platform/db/utctime"
+              package: "utctime"
+              type: "Time"
+          - column: "user_account_deletion_audits.created_at"
             go_type:
               import: "github.com/fikrilal/go-core-kit/internal/platform/db/utctime"
               package: "utctime"

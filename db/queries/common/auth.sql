@@ -213,6 +213,8 @@ SELECT
     u.email_verified_at AS user_email_verified_at,
     u.role AS user_role,
     u.status AS user_status,
+    u.deletion_requested_at AS user_deletion_requested_at,
+    u.deletion_scheduled_for AS user_deletion_scheduled_for,
     p.display_name AS profile_display_name,
     p.given_name AS profile_given_name,
     p.family_name AS profile_family_name

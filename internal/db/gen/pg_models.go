@@ -76,15 +76,29 @@ type StoredFile struct {
 }
 
 type User struct {
-	ID              string
-	Email           string
-	CreatedAt       utctime.Time
-	UpdatedAt       utctime.Time
-	EmailVerifiedAt sql.NullTime
-	Role            string
-	Status          string
-	SuspendedAt     sql.NullTime
-	SuspendedReason sql.NullString
+	ID                         string
+	Email                      string
+	CreatedAt                  utctime.Time
+	UpdatedAt                  utctime.Time
+	EmailVerifiedAt            sql.NullTime
+	Role                       string
+	Status                     string
+	SuspendedAt                sql.NullTime
+	SuspendedReason            sql.NullString
+	DeletionRequestedAt        sql.NullTime
+	DeletionScheduledFor       sql.NullTime
+	DeletionRequestedSessionID sql.NullString
+	DeletionRequestedTraceID   sql.NullString
+}
+
+type UserAccountDeletionAudit struct {
+	ID             string
+	ActorUserID    string
+	ActorSessionID string
+	TargetUserID   string
+	Action         string
+	TraceID        sql.NullString
+	CreatedAt      utctime.Time
 }
 
 type UserProfile struct {

@@ -62,6 +62,29 @@ func (q *Queries) ClearSessionPushToken(ctx context.Context, arg ClearSessionPus
 	return result.RowsAffected()
 }
 
+const clearUserDeletionRequest = `-- name: ClearUserDeletionRequest :execrows
+UPDATE users
+SET deletion_requested_at = NULL,
+    deletion_scheduled_for = NULL,
+    deletion_requested_session_id = NULL,
+    deletion_requested_trace_id = NULL,
+    updated_at = ?1
+WHERE id = ?2 AND status != 'DELETED'
+`
+
+type ClearUserDeletionRequestParams struct {
+	UpdatedAt utctime.Time
+	ID        string
+}
+
+func (q *Queries) ClearUserDeletionRequest(ctx context.Context, arg ClearUserDeletionRequestParams) (int64, error) {
+	result, err := q.db.ExecContext(ctx, clearUserDeletionRequest, arg.UpdatedAt, arg.ID)
+	if err != nil {
+		return 0, err
+	}
+	return result.RowsAffected()
+}
+
 const clearUserProfileImageFileID = `-- name: ClearUserProfileImageFileID :execrows
 UPDATE user_profiles
 SET profile_image_file_id = NULL, updated_at = ?1
@@ -79,6 +102,53 @@ func (q *Queries) ClearUserProfileImageFileID(ctx context.Context, arg ClearUser
 		return 0, err
 	}
 	return result.RowsAffected()
+}
+
+const countActiveAdmins = `-- name: CountActiveAdmins :one
+SELECT COUNT(*) FROM users WHERE role = 'ADMIN' AND status = 'ACTIVE'
+`
+
+func (q *Queries) CountActiveAdmins(ctx context.Context) (int64, error) {
+	row := q.db.QueryRowContext(ctx, countActiveAdmins)
+	var count int64
+	err := row.Scan(&count)
+	return count, err
+}
+
+const createAccountDeletionAudit = `-- name: CreateAccountDeletionAudit :exec
+INSERT INTO user_account_deletion_audits (id, actor_user_id, actor_session_id, target_user_id, action, trace_id, created_at)
+VALUES (
+    ?1,
+    ?2,
+    ?3,
+    ?4,
+    ?5,
+    NULLIF(?6, ''),
+    ?7
+)
+`
+
+type CreateAccountDeletionAuditParams struct {
+	ID             string
+	ActorUserID    string
+	ActorSessionID string
+	TargetUserID   string
+	Action         string
+	TraceID        interface{}
+	CreatedAt      utctime.Time
+}
+
+func (q *Queries) CreateAccountDeletionAudit(ctx context.Context, arg CreateAccountDeletionAuditParams) error {
+	_, err := q.db.ExecContext(ctx, createAccountDeletionAudit,
+		arg.ID,
+		arg.ActorUserID,
+		arg.ActorSessionID,
+		arg.TargetUserID,
+		arg.Action,
+		arg.TraceID,
+		arg.CreatedAt,
+	)
+	return err
 }
 
 const createStoredFile = `-- name: CreateStoredFile :exec
@@ -172,6 +242,31 @@ func (q *Queries) GetStoredFileForOwner(ctx context.Context, arg GetStoredFileFo
 		&i.ObjectKey,
 		&i.ContentType,
 		&i.SizeBytes,
+	)
+	return i, err
+}
+
+const getUserDeletionState = `-- name: GetUserDeletionState :one
+SELECT role, status, deletion_requested_at, deletion_scheduled_for
+FROM users
+WHERE id = ?1
+`
+
+type GetUserDeletionStateRow struct {
+	Role                 string
+	Status               string
+	DeletionRequestedAt  utctime.Time
+	DeletionScheduledFor utctime.Time
+}
+
+func (q *Queries) GetUserDeletionState(ctx context.Context, id string) (GetUserDeletionStateRow, error) {
+	row := q.db.QueryRowContext(ctx, getUserDeletionState, id)
+	var i GetUserDeletionStateRow
+	err := row.Scan(
+		&i.Role,
+		&i.Status,
+		&i.DeletionRequestedAt,
+		&i.DeletionScheduledFor,
 	)
 	return i, err
 }
@@ -290,6 +385,40 @@ func (q *Queries) SetSessionPushToken(ctx context.Context, arg SetSessionPushTok
 		arg.ID,
 	)
 	return err
+}
+
+const setUserDeletionRequest = `-- name: SetUserDeletionRequest :execrows
+UPDATE users
+SET deletion_requested_at = ?1,
+    deletion_scheduled_for = ?2,
+    deletion_requested_session_id = NULLIF(?3, ''),
+    deletion_requested_trace_id = NULLIF(?4, ''),
+    updated_at = ?5
+WHERE id = ?6 AND status != 'DELETED'
+`
+
+type SetUserDeletionRequestParams struct {
+	RequestedAt  utctime.Time
+	ScheduledFor utctime.Time
+	SessionID    interface{}
+	TraceID      interface{}
+	UpdatedAt    utctime.Time
+	ID           string
+}
+
+func (q *Queries) SetUserDeletionRequest(ctx context.Context, arg SetUserDeletionRequestParams) (int64, error) {
+	result, err := q.db.ExecContext(ctx, setUserDeletionRequest,
+		arg.RequestedAt,
+		arg.ScheduledFor,
+		arg.SessionID,
+		arg.TraceID,
+		arg.UpdatedAt,
+		arg.ID,
+	)
+	if err != nil {
+		return 0, err
+	}
+	return result.RowsAffected()
 }
 
 const setUserProfileImageFileID = `-- name: SetUserProfileImageFileID :exec

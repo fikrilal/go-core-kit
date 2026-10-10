@@ -79,3 +79,12 @@ func contentTypeMismatchError() error {
 		Detail: "Uploaded file content type does not match the expected content type",
 	}
 }
+
+// cannotDeleteLastAdminError mirrors the reference's admin invariant.
+func cannotDeleteLastAdminError() error {
+	return &httpx.ProblemError{
+		Status: http.StatusConflict,
+		Code:   httpx.CodeUsersCannotDeleteLastAdmin,
+		Detail: "Cannot delete the last admin",
+	}
+}
