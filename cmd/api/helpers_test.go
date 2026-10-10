@@ -25,6 +25,14 @@ func testConfig(t *testing.T) config.Config {
 		AuthLoginWindowSeconds:     60,
 		AuthLoginBlockSeconds:      900,
 		AuthSigningKeysJSON:        testSigningKeys(t),
+		// Profile image upload limits use the production defaults; tests that
+		// need a different threshold mutate the fixture config.
+		UsersProfileImageUploadUserMaxAttempts:   20,
+		UsersProfileImageUploadUserWindowSeconds: 3600,
+		UsersProfileImageUploadUserBlockSeconds:  900,
+		UsersProfileImageUploadIPMaxAttempts:     60,
+		UsersProfileImageUploadIPWindowSeconds:   300,
+		UsersProfileImageUploadIPBlockSeconds:    900,
 	}
 }
 

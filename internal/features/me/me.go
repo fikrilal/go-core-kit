@@ -5,7 +5,9 @@
 package me
 
 import (
+	"net"
 	"net/http"
+	"time"
 
 	"github.com/google/uuid"
 
@@ -17,26 +19,47 @@ import (
 	"github.com/fikrilal/go-core-kit/internal/platform/clock"
 	"github.com/fikrilal/go-core-kit/internal/platform/db"
 	"github.com/fikrilal/go-core-kit/internal/platform/httpx"
+	"github.com/fikrilal/go-core-kit/internal/platform/redis"
+	"github.com/fikrilal/go-core-kit/internal/platform/storage"
 )
+
+// UploadLimitConfig is one upload limiter's attempts, window, and block; the
+// feature root exposes it so the composition root never imports me/infra.
+type UploadLimitConfig struct {
+	MaxAttempts int
+	Window      time.Duration
+	Block       time.Duration
+}
 
 // Deps are the me feature's dependencies.
 type Deps struct {
 	Database *db.Database
+	Redis    *redis.Client
 	Clock    clock.Clock
 	Guard    *platformauth.Guard
+	Storage  *storage.Client
 	// PushEnabled mirrors the reference's provider-configured gate until the
 	// FCM adapter lands (5.3).
-	PushEnabled bool
+	PushEnabled     bool
+	UploadUserLimit UploadLimitConfig
+	UploadIPLimit   UploadLimitConfig
 }
 
 // Register mounts the me feature on the router.
 func Register(router *httpx.Router, deps Deps) {
 	service := app.New(
 		app.Config{PushEnabled: deps.PushEnabled},
-		app.Deps{Repository: infra.NewRepository(deps.Database), Clock: deps.Clock},
+		app.Deps{
+			Repository: infra.NewRepository(deps.Database),
+			Storage:    deps.Storage,
+			Clock:      deps.Clock,
+		},
 	)
 	router.SetIdempotencyCaller(platformauth.IdempotencyCaller)
-	handlers := &handlers{service: service}
+	handlers := &handlers{
+		service: service,
+		limiter: infra.NewUploadLimiter(deps.Redis, uploadLimit(deps.UploadUserLimit), uploadLimit(deps.UploadIPLimit)),
+	}
 	getMe := httpx.Operation{Method: http.MethodGet, Path: "/v1/me", ID: "users.me.get"}
 	router.Handle(getMe, deps.Guard.Require(http.HandlerFunc(handlers.getMe)))
 	patchMe := httpx.Operation{Method: http.MethodPatch, Path: "/v1/me", ID: "users.me.patch"}
@@ -49,6 +72,23 @@ func Register(router *httpx.Router, deps Deps) {
 	router.Handle(upsertPushToken, deps.Guard.Require(http.HandlerFunc(handlers.upsertPushToken)))
 	revokePushToken := httpx.Operation{Method: http.MethodDelete, Path: "/v1/me/push-token", ID: "users.me.pushToken.revoke"}
 	router.Handle(revokePushToken, deps.Guard.Require(http.HandlerFunc(handlers.revokePushToken)))
+	uploadPlan := httpx.Operation{Method: http.MethodPost, Path: "/v1/me/profile-image/upload", ID: "users.me.profileImage.upload"}
+	router.Handle(uploadPlan, deps.Guard.Require(router.IdempotentFor(uploadPlan, app.ProfileImagePresignTTL, handlers.createUploadPlan)))
+	completeUpload := httpx.Operation{Method: http.MethodPost, Path: "/v1/me/profile-image/complete", ID: "users.me.profileImage.complete"}
+	router.Handle(completeUpload, deps.Guard.Require(http.HandlerFunc(handlers.completeUpload)))
+	clearProfileImage := httpx.Operation{Method: http.MethodDelete, Path: "/v1/me/profile-image", ID: "users.me.profileImage.clear"}
+	router.Handle(clearProfileImage, deps.Guard.Require(http.HandlerFunc(handlers.clearProfileImage)))
+	profileImageURL := httpx.Operation{Method: http.MethodGet, Path: "/v1/me/profile-image/url", ID: "users.me.profileImage.url"}
+	router.Handle(profileImageURL, deps.Guard.Require(http.HandlerFunc(handlers.profileImageURL)))
+}
+
+// uploadLimit converts the feature-level config into the limiter's shape.
+func uploadLimit(config UploadLimitConfig) infra.UploadLimitConfig {
+	return infra.UploadLimitConfig{
+		MaxAttempts: config.MaxAttempts,
+		Window:      config.Window,
+		Block:       config.Block,
+	}
 }
 
 // sessionsListConfig is the list contract for the sessions endpoint.
@@ -63,6 +103,7 @@ var sessionsListConfig = httpx.ListQueryConfig{
 
 type handlers struct {
 	service *app.Service
+	limiter *infra.UploadLimiter
 }
 
 func (h *handlers) getMe(w http.ResponseWriter, r *http.Request) {
@@ -210,6 +251,121 @@ func (h *handlers) revokePushToken(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	httpx.NoContent(w)
+}
+
+type profileImageUploadRequest struct {
+	ContentType string `json:"contentType" validate:"required"`
+	SizeBytes   int64  `json:"sizeBytes" validate:"required,gte=1,lte=5000000"`
+}
+
+func (h *handlers) createUploadPlan(w http.ResponseWriter, r *http.Request) {
+	principal, ok := platformauth.PrincipalFrom(r.Context())
+	if !ok {
+		httpx.WriteError(w, r, &httpx.ProblemError{Status: http.StatusUnauthorized, Code: httpx.CodeUnauthorized})
+		return
+	}
+	var body profileImageUploadRequest
+	if err := httpx.Decode(r, &body); err != nil {
+		httpx.WriteError(w, r, err)
+		return
+	}
+	if err := h.limiter.AssertAllowed(r.Context(), principal.UserID, clientIP(r)); err != nil {
+		httpx.WriteError(w, r, err)
+		return
+	}
+	plan, err := h.service.CreateUploadPlan(r.Context(), app.UploadPlanInput{
+		UserID:      principal.UserID,
+		ContentType: body.ContentType,
+		SizeBytes:   body.SizeBytes,
+		TraceID:     httpx.RequestID(r),
+	})
+	if err != nil {
+		httpx.WriteError(w, r, err)
+		return
+	}
+	httpx.Data(w, r, contracts.ProfileImageUploadPlanDto{
+		FileId: plan.FileID,
+		Upload: contracts.PresignedUploadDto{
+			Method:  contracts.PresignedUploadDtoMethod(plan.Upload.Method),
+			Url:     plan.Upload.URL,
+			Headers: uploadHeaders(plan.Upload.Headers),
+		},
+		ExpiresAt: plan.ExpiresAt,
+	})
+}
+
+type completeProfileImageRequest struct {
+	FileID string `json:"fileId" validate:"required,uuid"`
+}
+
+func (h *handlers) completeUpload(w http.ResponseWriter, r *http.Request) {
+	principal, ok := platformauth.PrincipalFrom(r.Context())
+	if !ok {
+		httpx.WriteError(w, r, &httpx.ProblemError{Status: http.StatusUnauthorized, Code: httpx.CodeUnauthorized})
+		return
+	}
+	var body completeProfileImageRequest
+	if err := httpx.Decode(r, &body); err != nil {
+		httpx.WriteError(w, r, err)
+		return
+	}
+	if err := h.service.CompleteUpload(r.Context(), app.CompleteUploadInput{
+		UserID: principal.UserID,
+		FileID: body.FileID,
+	}); err != nil {
+		httpx.WriteError(w, r, err)
+		return
+	}
+	httpx.NoContent(w)
+}
+
+func (h *handlers) clearProfileImage(w http.ResponseWriter, r *http.Request) {
+	principal, ok := platformauth.PrincipalFrom(r.Context())
+	if !ok {
+		httpx.WriteError(w, r, &httpx.ProblemError{Status: http.StatusUnauthorized, Code: httpx.CodeUnauthorized})
+		return
+	}
+	if err := h.service.ClearProfileImage(r.Context(), app.ClearProfileImageInput{UserID: principal.UserID}); err != nil {
+		httpx.WriteError(w, r, err)
+		return
+	}
+	httpx.NoContent(w)
+}
+
+func (h *handlers) profileImageURL(w http.ResponseWriter, r *http.Request) {
+	principal, ok := platformauth.PrincipalFrom(r.Context())
+	if !ok {
+		httpx.WriteError(w, r, &httpx.ProblemError{Status: http.StatusUnauthorized, Code: httpx.CodeUnauthorized})
+		return
+	}
+	url, hasImage, err := h.service.ProfileImageURL(r.Context(), principal.UserID)
+	if err != nil {
+		httpx.WriteError(w, r, err)
+		return
+	}
+	if !hasImage {
+		httpx.NoContent(w)
+		return
+	}
+	httpx.Data(w, r, contracts.ProfileImageUrlDto{Url: url.URL, ExpiresAt: url.ExpiresAt})
+}
+
+// uploadHeaders renders the presigned headers for the generated DTO.
+func uploadHeaders(headers map[string]string) map[string]any {
+	rendered := make(map[string]any, len(headers))
+	for name, value := range headers {
+		rendered[name] = value
+	}
+	return rendered
+}
+
+// clientIP is RemoteAddr only; forwarded headers are not trusted.
+func clientIP(r *http.Request) string {
+	host, _, err := net.SplitHostPort(r.RemoteAddr)
+	if err != nil {
+		return r.RemoteAddr
+	}
+	return host
 }
 
 // invalidSessionID reports a path parameter that is not a UUID.

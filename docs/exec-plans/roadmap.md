@@ -27,7 +27,7 @@ Rules: findings gate on **new vs baseline**, and updating a baseline requires ex
 
 ## Current Focus
 
-**Phase 4 in progress: 4.1–4.3 landed.** 3.6/3.7 await the 5.2 worker; next: **4.4 profile image flow** (needs the `platform/storage` presign seam).
+**Phase 4 in progress: 4.1–4.4 landed.** 3.6/3.7 await the 5.2 worker; next: **4.5 account deletion request/cancel**.
 
 Readability note 01 has landed.
 
@@ -128,7 +128,7 @@ Exit gate: contract suite green for all auth operations; rotation/reuse parity a
 - [x] 4.1 `/v1/me` GET/PATCH — landed 2026-10-12; new `internal/features/me` slice (guarded, patch idempotent), tri-state patch decode (`httpx.OptionalString`), reference set/clear patch semantics and profile-row upsert; `auth.Register` now returns the shared guard; allowlist 24 → 22
 - [x] 4.2 Sessions list/revoke — landed 2026-10-12; first paged endpoint: opaque versioned cursor bound to its sort, keyset pagination over `createdAt`/`id` with an `id DESC` tie-breaker, status/`current` derivation, idempotent revoke that clears device state and refresh tokens; cursor codec closes the 1.7 follow-up; allowlist 22 → 20
 - [x] 4.3 Push token upsert/revoke — landed 2026-10-12; `PUT`/`DELETE /v1/me/push-token` with the reference gate (501 `AUTH_PUSH_NOT_CONFIGURED` until `PUSH_ENABLED`), single-transaction ownership hand-off between sessions, revoke without a session-state gate for best-effort sign-out; allowlist 20 → 18
-- [ ] 4.4 Profile image flow (presign → complete → url → clear)
+- [x] 4.4 Profile image flow (presign → complete → url → clear) — landed 2026-10-12; stdlib SigV4 object-storage seam (`platform/storage` + fake S3 test server, AWS vectors), `stored_files` schema, per-route idempotency TTL, per-user/per-IP upload limiter, reference 409 mismatch codes with best-effort cleanup; allowlist 18 → 14
 - [ ] 4.5 Account deletion request/cancel
 
 Exit gate: contract suite green for users/me operations.

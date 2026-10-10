@@ -11,13 +11,14 @@ import (
 	"github.com/fikrilal/go-core-kit/internal/platform/contracttest"
 )
 
-func (f *oidcFixture) connect(t *testing.T, token, idempotencyKey, provider, idToken string) (*http.Request, contracttest.Response) {
+// jsonRequest sends a JSON body with optional bearer and idempotency headers.
+func (f *authFixture) jsonRequest(t *testing.T, method, path, token, idempotencyKey string, body any) (*http.Request, contracttest.Response) {
 	t.Helper()
-	encoded, err := json.Marshal(map[string]any{"provider": provider, "idToken": idToken})
+	encoded, err := json.Marshal(body)
 	if err != nil {
 		t.Fatalf("marshal body: %v", err)
 	}
-	req, err := http.NewRequestWithContext(t.Context(), http.MethodPost, f.baseURL+"/v1/auth/oidc/connect", bytes.NewReader(encoded))
+	req, err := http.NewRequestWithContext(t.Context(), method, f.baseURL+path, bytes.NewReader(encoded))
 	if err != nil {
 		t.Fatalf("new request: %v", err)
 	}
@@ -29,6 +30,12 @@ func (f *oidcFixture) connect(t *testing.T, token, idempotencyKey, provider, idT
 		req.Header.Set("Idempotency-Key", idempotencyKey)
 	}
 	return req, contracttest.Do(t, f.client, req)
+}
+
+func (f *oidcFixture) connect(t *testing.T, token, idempotencyKey, provider, idToken string) (*http.Request, contracttest.Response) {
+	t.Helper()
+	return f.jsonRequest(t, http.MethodPost, "/v1/auth/oidc/connect", token, idempotencyKey,
+		map[string]any{"provider": provider, "idToken": idToken})
 }
 
 func (f *oidcFixture) mustConnectOK(t *testing.T, token string) *http.Request {

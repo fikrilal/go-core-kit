@@ -34,3 +34,11 @@ const (
 	CodeAuthOidcProviderLinked     Code = "AUTH_OIDC_PROVIDER_ALREADY_LINKED"
 	CodeAuthPushNotConfigured      Code = "AUTH_PUSH_NOT_CONFIGURED"
 )
+
+// Users error codes.
+const (
+	CodeUsersObjectStorageNotConfigured      Code = "USERS_OBJECT_STORAGE_NOT_CONFIGURED"
+	CodeUsersProfileImageNotUploaded         Code = "USERS_PROFILE_IMAGE_NOT_UPLOADED"
+	CodeUsersProfileImageSizeMismatch        Code = "USERS_PROFILE_IMAGE_SIZE_MISMATCH"
+	CodeUsersProfileImageContentTypeMismatch Code = "USERS_PROFILE_IMAGE_CONTENT_TYPE_MISMATCH"
+)

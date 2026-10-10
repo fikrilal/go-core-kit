@@ -33,13 +33,19 @@ func (r *Router) SetIdempotencyCaller(caller func(*http.Request) (string, bool))
 // Idempotent wraps h with caller-scoped Idempotency-Key caching and replay.
 // Compose it inside a guard. A request with no caller fails closed.
 func (r *Router) Idempotent(op Operation, h http.HandlerFunc) http.Handler {
+	return r.IdempotentFor(op, idempotencyTTL, h)
+}
+
+// IdempotentFor is Idempotent with a custom replay TTL: a cached response must
+// not outlive what it handed out (for example a presigned upload URL).
+func (r *Router) IdempotentFor(op Operation, ttl time.Duration, h http.HandlerFunc) http.Handler {
 	if r.idempotency == nil {
 		panic("httpx: Idempotent requires WithIdempotency")
 	}
 	if r.idempotencyCaller == nil {
 		panic("httpx: Idempotent requires SetIdempotencyCaller")
 	}
-	return r.idempotency.wrap(op.ID, r.idempotencyCaller, h)
+	return r.idempotency.wrap(op.ID, r.idempotencyCaller, ttl, h)
 }
 
 // HandleIdempotent registers a contract operation with Idempotency-Key caching and replay.
@@ -58,7 +64,7 @@ type cachedResponse struct {
 	Body        []byte `json:"body"`
 }
 
-func (s *idempotencyStore) wrap(scope string, caller func(*http.Request) (string, bool), next http.HandlerFunc) http.HandlerFunc {
+func (s *idempotencyStore) wrap(scope string, caller func(*http.Request) (string, bool), ttl time.Duration, next http.HandlerFunc) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		userID, ok := caller(r)
 		if !ok || userID == "" {
@@ -70,11 +76,11 @@ func (s *idempotencyStore) wrap(scope string, caller func(*http.Request) (string
 			next(w, r)
 			return
 		}
-		s.handle(w, r, scope, userID, key, next)
+		s.handle(w, r, scope, userID, key, ttl, next)
 	}
 }
 
-func (s *idempotencyStore) handle(w http.ResponseWriter, r *http.Request, scope, userID, key string, next http.HandlerFunc) {
+func (s *idempotencyStore) handle(w http.ResponseWriter, r *http.Request, scope, userID, key string, ttl time.Duration, next http.HandlerFunc) {
 	responseKey := idempotencyKey(scope, userID, key)
 	cached, found, err := s.loadCached(r.Context(), responseKey)
 	if err != nil {
@@ -112,7 +118,7 @@ func (s *idempotencyStore) handle(w http.ResponseWriter, r *http.Request, scope,
 
 	recorder := &recordingWriter{ResponseWriter: w, status: http.StatusOK}
 	next(recorder, r)
-	s.store(r, responseKey, recorder)
+	s.store(r, responseKey, recorder, ttl)
 }
 
 // idempotencyKey is idempotency:<operation id>:<user id>:<header>.
@@ -148,7 +154,7 @@ func writeCached(w http.ResponseWriter, cached cachedResponse) {
 	_, _ = w.Write(cached.Body)
 }
 
-func (s *idempotencyStore) store(r *http.Request, responseKey string, recorder *recordingWriter) {
+func (s *idempotencyStore) store(r *http.Request, responseKey string, recorder *recordingWriter, ttl time.Duration) {
 	if recorder.status < http.StatusOK || recorder.status >= http.StatusMultipleChoices {
 		return
 	}
@@ -159,7 +165,7 @@ func (s *idempotencyStore) store(r *http.Request, responseKey string, recorder *
 		Body:        recorder.body.Bytes(),
 	}
 	payload, _ := json.Marshal(cached)
-	if err := s.client.Set(r.Context(), responseKey, string(payload), idempotencyTTL); err != nil {
+	if err := s.client.Set(r.Context(), responseKey, string(payload), ttl); err != nil {
 		Logger(r).Error("store idempotent response", slog.Any("error", err))
 	}
 }

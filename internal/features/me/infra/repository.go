@@ -137,6 +137,236 @@ func (r *Repository) RevokePushToken(ctx context.Context, userID, sessionID stri
 	return nil
 }
 
+// CreateProfileImageFile records an UPLOADING file; a missing or deleted
+// owner reports found false.
+func (r *Repository) CreateProfileImageFile(ctx context.Context, in ports.CreateStoredFileInput) (bool, error) {
+	now := utctime.Time{Time: in.Now}
+	found := false
+	err := r.database.InTx(ctx, func(tx db.Tx) error {
+		queries := gen.New(tx)
+		status, err := queries.GetUserStatus(ctx, in.OwnerUserID)
+		if errors.Is(err, db.ErrNoRows) {
+			return nil
+		}
+		if err != nil {
+			return fmt.Errorf("find user: %w", err)
+		}
+		if status == domain.StatusDeleted {
+			return nil
+		}
+		found = true
+		return queries.CreateStoredFile(ctx, gen.CreateStoredFileParams{
+			ID:          in.ID,
+			OwnerUserID: in.OwnerUserID,
+			Bucket:      in.Bucket,
+			ObjectKey:   in.ObjectKey,
+			ContentType: in.ContentType,
+			SizeBytes:   in.SizeBytes,
+			TraceID:     in.TraceID,
+			CreatedAt:   now,
+			UpdatedAt:   now,
+		})
+	})
+	if err != nil {
+		return false, fmt.Errorf("create profile image file: %w", err)
+	}
+	return found, nil
+}
+
+// FindStoredFile loads one stored file owned by the caller.
+func (r *Repository) FindStoredFile(ctx context.Context, fileID, userID string) (domain.StoredFile, bool, error) {
+	row, err := r.queries.GetStoredFileForOwner(ctx, gen.GetStoredFileForOwnerParams{ID: fileID, OwnerUserID: userID})
+	if errors.Is(err, db.ErrNoRows) {
+		return domain.StoredFile{}, false, nil
+	}
+	if err != nil {
+		return domain.StoredFile{}, false, fmt.Errorf("find stored file: %w", err)
+	}
+	return domain.StoredFile{
+		ID:          row.ID,
+		Status:      row.Status,
+		ObjectKey:   row.ObjectKey,
+		ContentType: row.ContentType,
+		SizeBytes:   row.SizeBytes,
+	}, true, nil
+}
+
+// MarkStoredFileDeleted marks one stored file deleted.
+func (r *Repository) MarkStoredFileDeleted(ctx context.Context, fileID, userID string, now time.Time) error {
+	stamp := utctime.Time{Time: now}
+	if _, err := r.queries.MarkStoredFileDeleted(ctx, gen.MarkStoredFileDeletedParams{
+		Now:         stamp,
+		ID:          fileID,
+		OwnerUserID: userID,
+	}); err != nil {
+		return fmt.Errorf("mark stored file deleted: %w", err)
+	}
+	return nil
+}
+
+// ProfileImage reads the caller's attached image; found false is a missing or
+// deleted user.
+func (r *Repository) ProfileImage(ctx context.Context, userID string) (ports.ProfileImageState, bool, error) {
+	status, err := r.queries.GetUserStatus(ctx, userID)
+	if errors.Is(err, db.ErrNoRows) {
+		return ports.ProfileImageState{}, false, nil
+	}
+	if err != nil {
+		return ports.ProfileImageState{}, false, fmt.Errorf("find user: %w", err)
+	}
+	if status == domain.StatusDeleted {
+		return ports.ProfileImageState{}, false, nil
+	}
+	fileID, err := r.queries.GetUserProfileImageFileID(ctx, userID)
+	if errors.Is(err, db.ErrNoRows) || !fileID.Valid {
+		return ports.ProfileImageState{}, true, nil
+	}
+	if err != nil {
+		return ports.ProfileImageState{}, false, fmt.Errorf("find profile image: %w", err)
+	}
+	state := ports.ProfileImageState{FileID: fileID.String}
+	current, err := r.queries.GetCurrentProfileImageFile(ctx, userID)
+	if err != nil && !errors.Is(err, db.ErrNoRows) {
+		return ports.ProfileImageState{}, false, fmt.Errorf("find profile image file: %w", err)
+	}
+	state.ObjectKey = current.ObjectKey
+	return state, true, nil
+}
+
+// requireLiveUser reports whether the user exists and is not deleted.
+func requireLiveUser(ctx context.Context, queries *gen.Queries, userID string) (bool, error) {
+	status, err := queries.GetUserStatus(ctx, userID)
+	if errors.Is(err, db.ErrNoRows) {
+		return false, nil
+	}
+	if err != nil {
+		return false, fmt.Errorf("find user: %w", err)
+	}
+	return status != domain.StatusDeleted, nil
+}
+
+// previousImage resolves the attached file and its object key, unless it is
+// the file being attached again.
+func previousImage(ctx context.Context, queries *gen.Queries, userID, keepFileID string) (string, string, error) {
+	fileID, err := queries.GetUserProfileImageFileID(ctx, userID)
+	if err != nil && !errors.Is(err, db.ErrNoRows) {
+		return "", "", fmt.Errorf("find previous image: %w", err)
+	}
+	if !fileID.Valid || fileID.String == keepFileID {
+		return "", "", nil
+	}
+	current, err := queries.GetCurrentProfileImageFile(ctx, userID)
+	if err != nil && !errors.Is(err, db.ErrNoRows) {
+		return "", "", fmt.Errorf("find previous image file: %w", err)
+	}
+	return fileID.String, current.ObjectKey, nil
+}
+
+// AttachProfileImage marks the file active, points the profile at it, and
+// marks any replaced file deleted, all in one transaction. It returns the
+// replaced object key for best-effort cleanup.
+func (r *Repository) AttachProfileImage(ctx context.Context, in ports.AttachProfileImageInput) (string, bool, error) {
+	now := utctime.Time{Time: in.Now}
+	previousObjectKey := ""
+	found := false
+	err := r.database.InTx(ctx, func(tx db.Tx) error {
+		queries := gen.New(tx)
+		live, err := requireLiveUser(ctx, queries, in.UserID)
+		if err != nil {
+			return err
+		}
+		if !live {
+			return nil
+		}
+		found = true
+		previousFileID, objectKey, err := previousImage(ctx, queries, in.UserID, in.FileID)
+		if err != nil {
+			return err
+		}
+		previousObjectKey = objectKey
+		if _, err := queries.MarkStoredFileActive(ctx, gen.MarkStoredFileActiveParams{
+			Now:         now,
+			ID:          in.FileID,
+			OwnerUserID: in.UserID,
+		}); err != nil {
+			return fmt.Errorf("mark stored file active: %w", err)
+		}
+		if err := queries.SetUserProfileImageFileID(ctx, gen.SetUserProfileImageFileIDParams{
+			UserID: in.UserID,
+			FileID: in.FileID,
+			Now:    now,
+		}); err != nil {
+			return fmt.Errorf("set profile image: %w", err)
+		}
+		if previousFileID != "" {
+			if _, err := queries.MarkStoredFileDeleted(ctx, gen.MarkStoredFileDeletedParams{
+				Now:         now,
+				ID:          previousFileID,
+				OwnerUserID: in.UserID,
+			}); err != nil {
+				return fmt.Errorf("mark previous file deleted: %w", err)
+			}
+		}
+		return nil
+	})
+	if err != nil {
+		return "", false, fmt.Errorf("attach profile image: %w", err)
+	}
+	return previousObjectKey, found, nil
+}
+
+// ClearProfileImage detaches the caller's image, marks the file deleted, and
+// returns the cleared object key for best-effort cleanup.
+func (r *Repository) ClearProfileImage(ctx context.Context, userID string, now time.Time) (string, bool, error) {
+	stamp := utctime.Time{Time: now}
+	clearedObjectKey := ""
+	found := false
+	err := r.database.InTx(ctx, func(tx db.Tx) error {
+		queries := gen.New(tx)
+		status, err := queries.GetUserStatus(ctx, userID)
+		if errors.Is(err, db.ErrNoRows) {
+			return nil
+		}
+		if err != nil {
+			return fmt.Errorf("find user: %w", err)
+		}
+		if status == domain.StatusDeleted {
+			return nil
+		}
+		found = true
+		fileID, err := queries.GetUserProfileImageFileID(ctx, userID)
+		if err != nil && !errors.Is(err, db.ErrNoRows) {
+			return fmt.Errorf("find profile image: %w", err)
+		}
+		if !fileID.Valid {
+			return nil
+		}
+		current, err := queries.GetCurrentProfileImageFile(ctx, userID)
+		if err != nil && !errors.Is(err, db.ErrNoRows) {
+			return fmt.Errorf("find profile image file: %w", err)
+		}
+		clearedObjectKey = current.ObjectKey
+		if _, err := queries.ClearUserProfileImageFileID(ctx, gen.ClearUserProfileImageFileIDParams{
+			Now:    stamp,
+			UserID: userID,
+		}); err != nil {
+			return fmt.Errorf("clear profile image: %w", err)
+		}
+		if _, err := queries.MarkStoredFileDeleted(ctx, gen.MarkStoredFileDeletedParams{
+			Now:         stamp,
+			ID:          fileID.String,
+			OwnerUserID: userID,
+		}); err != nil {
+			return fmt.Errorf("mark stored file deleted: %w", err)
+		}
+		return nil
+	})
+	if err != nil {
+		return "", false, fmt.Errorf("clear profile image: %w", err)
+	}
+	return clearedObjectKey, found, nil
+}
+
 // sessionSortCreatedAt and sessionSortID are the cursor sort names.
 const (
 	sessionSortCreatedAt = "createdAt"

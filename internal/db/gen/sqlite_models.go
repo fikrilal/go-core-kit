@@ -59,6 +59,22 @@ type Session struct {
 	UpdatedAt          utctime.Time
 }
 
+type StoredFile struct {
+	ID          string
+	OwnerUserID string
+	Purpose     string
+	Status      string
+	Bucket      string
+	ObjectKey   string
+	ContentType string
+	SizeBytes   int64
+	UploadedAt  utctime.Time
+	DeletedAt   utctime.Time
+	TraceID     sql.NullString
+	CreatedAt   utctime.Time
+	UpdatedAt   utctime.Time
+}
+
 type User struct {
 	ID              string
 	Email           string
@@ -72,10 +88,11 @@ type User struct {
 }
 
 type UserProfile struct {
-	UserID      string
-	DisplayName sql.NullString
-	GivenName   sql.NullString
-	FamilyName  sql.NullString
-	CreatedAt   utctime.Time
-	UpdatedAt   utctime.Time
+	UserID             string
+	DisplayName        sql.NullString
+	GivenName          sql.NullString
+	FamilyName         sql.NullString
+	CreatedAt          utctime.Time
+	UpdatedAt          utctime.Time
+	ProfileImageFileID sql.NullString
 }

@@ -48,6 +48,58 @@ SET push_platform = NULL,
     updated_at = sqlc.arg(now)
 WHERE id = sqlc.arg(id) AND user_id = sqlc.arg(user_id);
 
+-- name: CreateStoredFile :exec
+INSERT INTO stored_files (id, owner_user_id, purpose, status, bucket, object_key, content_type, size_bytes, trace_id, created_at, updated_at)
+VALUES (
+    sqlc.arg(id),
+    sqlc.arg(owner_user_id),
+    'PROFILE_IMAGE',
+    'UPLOADING',
+    sqlc.arg(bucket),
+    sqlc.arg(object_key),
+    sqlc.arg(content_type),
+    sqlc.arg(size_bytes),
+    NULLIF(sqlc.arg(trace_id), ''),
+    sqlc.arg(created_at),
+    sqlc.arg(updated_at)
+);
+
+-- name: GetStoredFileForOwner :one
+SELECT id, status, object_key, content_type, size_bytes
+FROM stored_files
+WHERE id = sqlc.arg(id) AND owner_user_id = sqlc.arg(owner_user_id);
+
+-- name: MarkStoredFileActive :execrows
+UPDATE stored_files
+SET status = 'ACTIVE', uploaded_at = sqlc.arg(now), updated_at = sqlc.arg(now)
+WHERE id = sqlc.arg(id) AND owner_user_id = sqlc.arg(owner_user_id);
+
+-- name: MarkStoredFileDeleted :execrows
+UPDATE stored_files
+SET status = 'DELETED', deleted_at = sqlc.arg(now), updated_at = sqlc.arg(now)
+WHERE id = sqlc.arg(id) AND owner_user_id = sqlc.arg(owner_user_id);
+
+-- name: GetUserProfileImageFileID :one
+SELECT profile_image_file_id FROM user_profiles WHERE user_id = sqlc.arg(user_id);
+
+-- name: SetUserProfileImageFileID :exec
+INSERT INTO user_profiles (user_id, profile_image_file_id, created_at, updated_at)
+VALUES (sqlc.arg(user_id), NULLIF(sqlc.arg(file_id), ''), sqlc.arg(now), sqlc.arg(now))
+ON CONFLICT (user_id) DO UPDATE SET
+    profile_image_file_id = excluded.profile_image_file_id,
+    updated_at = excluded.updated_at;
+
+-- name: ClearUserProfileImageFileID :execrows
+UPDATE user_profiles
+SET profile_image_file_id = NULL, updated_at = sqlc.arg(now)
+WHERE user_id = sqlc.arg(user_id);
+
+-- name: GetCurrentProfileImageFile :one
+SELECT f.id, f.object_key
+FROM user_profiles AS p
+JOIN stored_files AS f ON f.id = p.profile_image_file_id
+WHERE p.user_id = sqlc.arg(user_id);
+
 -- name: UpsertUserProfile :exec
 -- NULLIF stores a blank cleared field as NULL; a caller cannot persist an empty string.
 INSERT INTO user_profiles (user_id, display_name, given_name, family_name, created_at, updated_at)

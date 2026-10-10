@@ -63,6 +63,20 @@ type Config struct {
 	// PushEnabled gates push registration until the FCM adapter lands (5.3);
 	// it mirrors the reference's provider-configured check.
 	PushEnabled bool `env:"PUSH_ENABLED" envDefault:"false"`
+
+	StorageS3Endpoint        string `env:"STORAGE_S3_ENDPOINT"`
+	StorageS3Region          string `env:"STORAGE_S3_REGION"`
+	StorageS3Bucket          string `env:"STORAGE_S3_BUCKET"`
+	StorageS3AccessKeyID     string `env:"STORAGE_S3_ACCESS_KEY_ID"`
+	StorageS3SecretAccessKey string `env:"STORAGE_S3_SECRET_ACCESS_KEY"`
+	StorageS3ForcePathStyle  bool   `env:"STORAGE_S3_FORCE_PATH_STYLE" envDefault:"false"`
+
+	UsersProfileImageUploadUserMaxAttempts   int `env:"USERS_PROFILE_IMAGE_UPLOAD_USER_MAX_ATTEMPTS" envDefault:"20"`
+	UsersProfileImageUploadUserWindowSeconds int `env:"USERS_PROFILE_IMAGE_UPLOAD_USER_WINDOW_SECONDS" envDefault:"3600"`
+	UsersProfileImageUploadUserBlockSeconds  int `env:"USERS_PROFILE_IMAGE_UPLOAD_USER_BLOCK_SECONDS" envDefault:"900"`
+	UsersProfileImageUploadIPMaxAttempts     int `env:"USERS_PROFILE_IMAGE_UPLOAD_IP_MAX_ATTEMPTS" envDefault:"60"`
+	UsersProfileImageUploadIPWindowSeconds   int `env:"USERS_PROFILE_IMAGE_UPLOAD_IP_WINDOW_SECONDS" envDefault:"300"`
+	UsersProfileImageUploadIPBlockSeconds    int `env:"USERS_PROFILE_IMAGE_UPLOAD_IP_BLOCK_SECONDS" envDefault:"900"`
 }
 
 // ProductionLike reports whether the environment requires real secrets.
@@ -121,6 +135,22 @@ func (c Config) Validate() error {
 		{"AUTH_LOGIN_BLOCK_SECONDS", c.AuthLoginBlockSeconds},
 	}
 	for _, check := range authIntegers {
+		if check.value < 1 {
+			return fmt.Errorf("%s must be a positive number, got %d", check.name, check.value)
+		}
+	}
+	usersIntegers := []struct {
+		name  string
+		value int
+	}{
+		{"USERS_PROFILE_IMAGE_UPLOAD_USER_MAX_ATTEMPTS", c.UsersProfileImageUploadUserMaxAttempts},
+		{"USERS_PROFILE_IMAGE_UPLOAD_USER_WINDOW_SECONDS", c.UsersProfileImageUploadUserWindowSeconds},
+		{"USERS_PROFILE_IMAGE_UPLOAD_USER_BLOCK_SECONDS", c.UsersProfileImageUploadUserBlockSeconds},
+		{"USERS_PROFILE_IMAGE_UPLOAD_IP_MAX_ATTEMPTS", c.UsersProfileImageUploadIPMaxAttempts},
+		{"USERS_PROFILE_IMAGE_UPLOAD_IP_WINDOW_SECONDS", c.UsersProfileImageUploadIPWindowSeconds},
+		{"USERS_PROFILE_IMAGE_UPLOAD_IP_BLOCK_SECONDS", c.UsersProfileImageUploadIPBlockSeconds},
+	}
+	for _, check := range usersIntegers {
 		if check.value < 1 {
 			return fmt.Errorf("%s must be a positive number, got %d", check.name, check.value)
 		}

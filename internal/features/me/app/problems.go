@@ -38,3 +38,44 @@ func pushNotConfiguredError() error {
 		Detail: "Push provider is not configured",
 	}
 }
+
+// objectStorageNotConfiguredError mirrors the reference's storage gate.
+func objectStorageNotConfiguredError() error {
+	return &httpx.ProblemError{
+		Status: http.StatusNotImplemented,
+		Code:   httpx.CodeUsersObjectStorageNotConfigured,
+		Detail: "Object storage is not configured",
+	}
+}
+
+// fileNotFoundError reports an unknown or foreign stored file.
+func fileNotFoundError() error {
+	return &httpx.ProblemError{Status: http.StatusNotFound, Code: httpx.CodeNotFound, Detail: "File not found"}
+}
+
+// uploadNotUploadedError reports a rejected or missing upload.
+func uploadNotUploadedError(detail string) error {
+	return &httpx.ProblemError{
+		Status: http.StatusConflict,
+		Code:   httpx.CodeUsersProfileImageNotUploaded,
+		Detail: detail,
+	}
+}
+
+// sizeMismatchError reports an upload whose stored size differs.
+func sizeMismatchError() error {
+	return &httpx.ProblemError{
+		Status: http.StatusConflict,
+		Code:   httpx.CodeUsersProfileImageSizeMismatch,
+		Detail: "Uploaded file size does not match the expected size",
+	}
+}
+
+// contentTypeMismatchError reports an upload whose stored type differs.
+func contentTypeMismatchError() error {
+	return &httpx.ProblemError{
+		Status: http.StatusConflict,
+		Code:   httpx.CodeUsersProfileImageContentTypeMismatch,
+		Detail: "Uploaded file content type does not match the expected content type",
+	}
+}

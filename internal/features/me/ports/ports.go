@@ -6,6 +6,7 @@ import (
 	"time"
 
 	"github.com/fikrilal/go-core-kit/internal/features/me/domain"
+	"github.com/fikrilal/go-core-kit/internal/platform/storage"
 )
 
 // UpdateProfileInput carries a profile patch for one user.
@@ -45,6 +46,41 @@ type UpsertPushTokenInput struct {
 	Now       time.Time
 }
 
+// CreateStoredFileInput carries a stored-file record created with a plan.
+type CreateStoredFileInput struct {
+	ID          string
+	OwnerUserID string
+	Bucket      string
+	ObjectKey   string
+	ContentType string
+	SizeBytes   int64
+	TraceID     string
+	Now         time.Time
+}
+
+// AttachProfileImageInput carries an attach for the caller's profile.
+type AttachProfileImageInput struct {
+	UserID string
+	FileID string
+	Now    time.Time
+}
+
+// ProfileImageState is the caller's attached profile image pointer.
+type ProfileImageState struct {
+	FileID    string
+	ObjectKey string
+}
+
+// ProfileImageStorage signs client-side object access and inspects objects.
+type ProfileImageStorage interface {
+	Enabled() bool
+	Bucket() string
+	PresignPut(key, contentType string, ttl time.Duration) (storage.PresignedPut, error)
+	PresignGet(key string, ttl time.Duration) (storage.PresignedGet, error)
+	Head(ctx context.Context, key string) (storage.HeadResult, error)
+	Delete(ctx context.Context, key string) error
+}
+
 // Repository is the me feature's persistence boundary.
 type Repository interface {
 	GetMe(ctx context.Context, userID string) (domain.MeView, bool, error)
@@ -54,4 +90,10 @@ type Repository interface {
 	RevokeSession(ctx context.Context, userID, sessionID string, now time.Time) (bool, error)
 	UpsertPushToken(ctx context.Context, in UpsertPushTokenInput) (bool, error)
 	RevokePushToken(ctx context.Context, userID, sessionID string, now time.Time) error
+	CreateProfileImageFile(ctx context.Context, in CreateStoredFileInput) (bool, error)
+	FindStoredFile(ctx context.Context, fileID, userID string) (domain.StoredFile, bool, error)
+	MarkStoredFileDeleted(ctx context.Context, fileID, userID string, now time.Time) error
+	ProfileImage(ctx context.Context, userID string) (ProfileImageState, bool, error)
+	AttachProfileImage(ctx context.Context, in AttachProfileImageInput) (previousObjectKey string, found bool, err error)
+	ClearProfileImage(ctx context.Context, userID string, now time.Time) (clearedObjectKey string, found bool, err error)
 }

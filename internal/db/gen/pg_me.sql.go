@@ -62,6 +62,120 @@ func (q *Queries) ClearSessionPushToken(ctx context.Context, arg ClearSessionPus
 	return result.RowsAffected()
 }
 
+const clearUserProfileImageFileID = `-- name: ClearUserProfileImageFileID :execrows
+UPDATE user_profiles
+SET profile_image_file_id = NULL, updated_at = $1
+WHERE user_id = $2
+`
+
+type ClearUserProfileImageFileIDParams struct {
+	Now    utctime.Time
+	UserID string
+}
+
+func (q *Queries) ClearUserProfileImageFileID(ctx context.Context, arg ClearUserProfileImageFileIDParams) (int64, error) {
+	result, err := q.db.ExecContext(ctx, clearUserProfileImageFileID, arg.Now, arg.UserID)
+	if err != nil {
+		return 0, err
+	}
+	return result.RowsAffected()
+}
+
+const createStoredFile = `-- name: CreateStoredFile :exec
+INSERT INTO stored_files (id, owner_user_id, purpose, status, bucket, object_key, content_type, size_bytes, trace_id, created_at, updated_at)
+VALUES (
+    $1,
+    $2,
+    'PROFILE_IMAGE',
+    'UPLOADING',
+    $3,
+    $4,
+    $5,
+    $6,
+    NULLIF($7, ''),
+    $8,
+    $9
+)
+`
+
+type CreateStoredFileParams struct {
+	ID          string
+	OwnerUserID string
+	Bucket      string
+	ObjectKey   string
+	ContentType string
+	SizeBytes   int64
+	TraceID     interface{}
+	CreatedAt   utctime.Time
+	UpdatedAt   utctime.Time
+}
+
+func (q *Queries) CreateStoredFile(ctx context.Context, arg CreateStoredFileParams) error {
+	_, err := q.db.ExecContext(ctx, createStoredFile,
+		arg.ID,
+		arg.OwnerUserID,
+		arg.Bucket,
+		arg.ObjectKey,
+		arg.ContentType,
+		arg.SizeBytes,
+		arg.TraceID,
+		arg.CreatedAt,
+		arg.UpdatedAt,
+	)
+	return err
+}
+
+const getCurrentProfileImageFile = `-- name: GetCurrentProfileImageFile :one
+SELECT f.id, f.object_key
+FROM user_profiles AS p
+JOIN stored_files AS f ON f.id = p.profile_image_file_id
+WHERE p.user_id = $1
+`
+
+type GetCurrentProfileImageFileRow struct {
+	ID        string
+	ObjectKey string
+}
+
+func (q *Queries) GetCurrentProfileImageFile(ctx context.Context, userID string) (GetCurrentProfileImageFileRow, error) {
+	row := q.db.QueryRowContext(ctx, getCurrentProfileImageFile, userID)
+	var i GetCurrentProfileImageFileRow
+	err := row.Scan(&i.ID, &i.ObjectKey)
+	return i, err
+}
+
+const getStoredFileForOwner = `-- name: GetStoredFileForOwner :one
+SELECT id, status, object_key, content_type, size_bytes
+FROM stored_files
+WHERE id = $1 AND owner_user_id = $2
+`
+
+type GetStoredFileForOwnerParams struct {
+	ID          string
+	OwnerUserID string
+}
+
+type GetStoredFileForOwnerRow struct {
+	ID          string
+	Status      string
+	ObjectKey   string
+	ContentType string
+	SizeBytes   int64
+}
+
+func (q *Queries) GetStoredFileForOwner(ctx context.Context, arg GetStoredFileForOwnerParams) (GetStoredFileForOwnerRow, error) {
+	row := q.db.QueryRowContext(ctx, getStoredFileForOwner, arg.ID, arg.OwnerUserID)
+	var i GetStoredFileForOwnerRow
+	err := row.Scan(
+		&i.ID,
+		&i.Status,
+		&i.ObjectKey,
+		&i.ContentType,
+		&i.SizeBytes,
+	)
+	return i, err
+}
+
 const getUserProfile = `-- name: GetUserProfile :one
 SELECT display_name, given_name, family_name
 FROM user_profiles
@@ -81,6 +195,17 @@ func (q *Queries) GetUserProfile(ctx context.Context, userID string) (GetUserPro
 	return i, err
 }
 
+const getUserProfileImageFileID = `-- name: GetUserProfileImageFileID :one
+SELECT profile_image_file_id FROM user_profiles WHERE user_id = $1
+`
+
+func (q *Queries) GetUserProfileImageFileID(ctx context.Context, userID string) (sql.NullString, error) {
+	row := q.db.QueryRowContext(ctx, getUserProfileImageFileID, userID)
+	var profile_image_file_id sql.NullString
+	err := row.Scan(&profile_image_file_id)
+	return profile_image_file_id, err
+}
+
 const getUserSession = `-- name: GetUserSession :one
 SELECT id, user_id, revoked_at
 FROM sessions
@@ -98,6 +223,46 @@ func (q *Queries) GetUserSession(ctx context.Context, id string) (GetUserSession
 	var i GetUserSessionRow
 	err := row.Scan(&i.ID, &i.UserID, &i.RevokedAt)
 	return i, err
+}
+
+const markStoredFileActive = `-- name: MarkStoredFileActive :execrows
+UPDATE stored_files
+SET status = 'ACTIVE', uploaded_at = $1, updated_at = $1
+WHERE id = $2 AND owner_user_id = $3
+`
+
+type MarkStoredFileActiveParams struct {
+	Now         sql.NullTime
+	ID          string
+	OwnerUserID string
+}
+
+func (q *Queries) MarkStoredFileActive(ctx context.Context, arg MarkStoredFileActiveParams) (int64, error) {
+	result, err := q.db.ExecContext(ctx, markStoredFileActive, arg.Now, arg.ID, arg.OwnerUserID)
+	if err != nil {
+		return 0, err
+	}
+	return result.RowsAffected()
+}
+
+const markStoredFileDeleted = `-- name: MarkStoredFileDeleted :execrows
+UPDATE stored_files
+SET status = 'DELETED', deleted_at = $1, updated_at = $1
+WHERE id = $2 AND owner_user_id = $3
+`
+
+type MarkStoredFileDeletedParams struct {
+	Now         sql.NullTime
+	ID          string
+	OwnerUserID string
+}
+
+func (q *Queries) MarkStoredFileDeleted(ctx context.Context, arg MarkStoredFileDeletedParams) (int64, error) {
+	result, err := q.db.ExecContext(ctx, markStoredFileDeleted, arg.Now, arg.ID, arg.OwnerUserID)
+	if err != nil {
+		return 0, err
+	}
+	return result.RowsAffected()
 }
 
 const setSessionPushToken = `-- name: SetSessionPushToken :exec
@@ -124,6 +289,25 @@ func (q *Queries) SetSessionPushToken(ctx context.Context, arg SetSessionPushTok
 		arg.Now,
 		arg.ID,
 	)
+	return err
+}
+
+const setUserProfileImageFileID = `-- name: SetUserProfileImageFileID :exec
+INSERT INTO user_profiles (user_id, profile_image_file_id, created_at, updated_at)
+VALUES ($1, NULLIF($2, ''), $3, $3)
+ON CONFLICT (user_id) DO UPDATE SET
+    profile_image_file_id = excluded.profile_image_file_id,
+    updated_at = excluded.updated_at
+`
+
+type SetUserProfileImageFileIDParams struct {
+	UserID string
+	FileID interface{}
+	Now    utctime.Time
+}
+
+func (q *Queries) SetUserProfileImageFileID(ctx context.Context, arg SetUserProfileImageFileIDParams) error {
+	_, err := q.db.ExecContext(ctx, setUserProfileImageFileID, arg.UserID, arg.FileID, arg.Now)
 	return err
 }
 

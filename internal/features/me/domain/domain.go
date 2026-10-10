@@ -79,6 +79,22 @@ type SessionView struct {
 	Status  string
 }
 
+// Stored file statuses.
+const (
+	FileStatusUploading = "UPLOADING"
+	FileStatusActive    = "ACTIVE"
+	FileStatusDeleted   = "DELETED"
+)
+
+// StoredFile is the stored-file core for profile images.
+type StoredFile struct {
+	ID          string
+	Status      string
+	ObjectKey   string
+	ContentType string
+	SizeBytes   int64
+}
+
 // Field is a patch field that can be absent, cleared (null), or set.
 type Field struct {
 	Present bool

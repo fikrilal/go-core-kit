@@ -34,12 +34,14 @@ type Config struct {
 // Deps are the service's collaborators.
 type Deps struct {
 	Repository ports.Repository
+	Storage    ports.ProfileImageStorage
 	Clock      clock.Clock
 }
 
 // Service implements the me use cases.
 type Service struct {
 	repo        ports.Repository
+	storage     ports.ProfileImageStorage
 	clock       clock.Clock
 	pushEnabled bool
 }
@@ -48,6 +50,7 @@ type Service struct {
 func New(config Config, deps Deps) *Service {
 	return &Service{
 		repo:        deps.Repository,
+		storage:     deps.Storage,
 		clock:       deps.Clock,
 		pushEnabled: config.PushEnabled,
 	}

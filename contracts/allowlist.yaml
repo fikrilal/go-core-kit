@@ -7,10 +7,6 @@ operations:
   - auth.password.reset.request
   - auth.password.reset.confirm
   # Phase 4 — me slice
-  - users.me.profileImage.upload
-  - users.me.profileImage.complete
-  - users.me.profileImage.clear
-  - users.me.profileImage.url
   - users.me.accountDeletion.request
   - users.me.accountDeletion.cancel
   # Admin — deferred
