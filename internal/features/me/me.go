@@ -24,11 +24,17 @@ type Deps struct {
 	Database *db.Database
 	Clock    clock.Clock
 	Guard    *platformauth.Guard
+	// PushEnabled mirrors the reference's provider-configured gate until the
+	// FCM adapter lands (5.3).
+	PushEnabled bool
 }
 
 // Register mounts the me feature on the router.
 func Register(router *httpx.Router, deps Deps) {
-	service := app.New(app.Deps{Repository: infra.NewRepository(deps.Database), Clock: deps.Clock})
+	service := app.New(
+		app.Config{PushEnabled: deps.PushEnabled},
+		app.Deps{Repository: infra.NewRepository(deps.Database), Clock: deps.Clock},
+	)
 	router.SetIdempotencyCaller(platformauth.IdempotencyCaller)
 	handlers := &handlers{service: service}
 	getMe := httpx.Operation{Method: http.MethodGet, Path: "/v1/me", ID: "users.me.get"}
@@ -39,6 +45,10 @@ func Register(router *httpx.Router, deps Deps) {
 	router.Handle(listSessions, deps.Guard.Require(http.HandlerFunc(handlers.listSessions)))
 	revokeSession := httpx.Operation{Method: http.MethodPost, Path: "/v1/me/sessions/{sessionId}/revoke", ID: "users.me.sessions.revoke"}
 	router.Handle(revokeSession, deps.Guard.Require(http.HandlerFunc(handlers.revokeSession)))
+	upsertPushToken := httpx.Operation{Method: http.MethodPut, Path: "/v1/me/push-token", ID: "users.me.pushToken.upsert"}
+	router.Handle(upsertPushToken, deps.Guard.Require(http.HandlerFunc(handlers.upsertPushToken)))
+	revokePushToken := httpx.Operation{Method: http.MethodDelete, Path: "/v1/me/push-token", ID: "users.me.pushToken.revoke"}
+	router.Handle(revokePushToken, deps.Guard.Require(http.HandlerFunc(handlers.revokePushToken)))
 }
 
 // sessionsListConfig is the list contract for the sessions endpoint.
@@ -151,6 +161,50 @@ func (h *handlers) revokeSession(w http.ResponseWriter, r *http.Request) {
 	if err := h.service.RevokeSession(r.Context(), app.RevokeSessionInput{
 		UserID:    principal.UserID,
 		SessionID: sessionID,
+	}); err != nil {
+		httpx.WriteError(w, r, err)
+		return
+	}
+	httpx.NoContent(w)
+}
+
+type pushTokenRequest struct {
+	Platform string `json:"platform" validate:"required"`
+	Token    string `json:"token" validate:"required"`
+}
+
+func (h *handlers) upsertPushToken(w http.ResponseWriter, r *http.Request) {
+	principal, ok := platformauth.PrincipalFrom(r.Context())
+	if !ok {
+		httpx.WriteError(w, r, &httpx.ProblemError{Status: http.StatusUnauthorized, Code: httpx.CodeUnauthorized})
+		return
+	}
+	var body pushTokenRequest
+	if err := httpx.Decode(r, &body); err != nil {
+		httpx.WriteError(w, r, err)
+		return
+	}
+	if err := h.service.UpsertPushToken(r.Context(), app.UpsertPushTokenInput{
+		UserID:    principal.UserID,
+		SessionID: principal.SessionID,
+		Platform:  body.Platform,
+		Token:     body.Token,
+	}); err != nil {
+		httpx.WriteError(w, r, err)
+		return
+	}
+	httpx.NoContent(w)
+}
+
+func (h *handlers) revokePushToken(w http.ResponseWriter, r *http.Request) {
+	principal, ok := platformauth.PrincipalFrom(r.Context())
+	if !ok {
+		httpx.WriteError(w, r, &httpx.ProblemError{Status: http.StatusUnauthorized, Code: httpx.CodeUnauthorized})
+		return
+	}
+	if err := h.service.RevokePushToken(r.Context(), app.RevokePushTokenInput{
+		UserID:    principal.UserID,
+		SessionID: principal.SessionID,
 	}); err != nil {
 		httpx.WriteError(w, r, err)
 		return

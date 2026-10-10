@@ -38,6 +38,27 @@ type fakeRepository struct {
 	revokeErr   error
 	revokeNow   time.Time
 	revocations []string
+
+	pushFound   bool
+	pushErr     error
+	pushNow     time.Time
+	pushUpserts []ports.UpsertPushTokenInput
+	pushRevokes []string
+}
+
+func (f *fakeRepository) UpsertPushToken(_ context.Context, in ports.UpsertPushTokenInput) (bool, error) {
+	f.pushUpserts = append(f.pushUpserts, in)
+	f.pushNow = in.Now
+	if f.pushErr != nil {
+		return false, f.pushErr
+	}
+	return f.pushFound, nil
+}
+
+func (f *fakeRepository) RevokePushToken(_ context.Context, _, sessionID string, now time.Time) error {
+	f.pushRevokes = append(f.pushRevokes, sessionID)
+	f.pushNow = now
+	return f.pushErr
 }
 
 func (f *fakeRepository) FindUserStatus(context.Context, string) (string, bool, error) {
@@ -75,7 +96,7 @@ func (f *fakeRepository) UpdateProfile(_ context.Context, in ports.UpdateProfile
 
 func newFixture() (*app.Service, *fakeRepository) {
 	repo := &fakeRepository{updateFound: true}
-	service := app.New(app.Deps{Repository: repo, Clock: clock.Fixed{Moment: moment}})
+	service := app.New(app.Config{PushEnabled: true}, app.Deps{Repository: repo, Clock: clock.Fixed{Moment: moment}})
 	return service, repo
 }
 
@@ -239,6 +260,139 @@ func sessionsFixture() (*app.Service, *fakeRepository) {
 
 func mustSessionsError(_ app.SessionPage, err error) error {
 	return fmt.Errorf("call: %w", err)
+}
+
+func newPushFixture(enabled bool) (*app.Service, *fakeRepository) {
+	repo := &fakeRepository{
+		updateFound: true,
+		statusFound: true,
+		statusValue: domain.StatusActive,
+		pushFound:   true,
+	}
+	service := app.New(app.Config{PushEnabled: enabled}, app.Deps{Repository: repo, Clock: clock.Fixed{Moment: moment}})
+	return service, repo
+}
+
+func TestUpsertPushTokenRequiresConfiguredPush(t *testing.T) {
+	service, repo := newPushFixture(false)
+	problem := problemError(t, service.UpsertPushToken(context.Background(), app.UpsertPushTokenInput{
+		UserID: "user-1", SessionID: "session-1", Platform: "ANDROID", Token: "fcm-token",
+	}))
+	if problem.Status != http.StatusNotImplemented || problem.Code != httpx.CodeAuthPushNotConfigured {
+		t.Fatalf("problem = %+v, want 501 AUTH_PUSH_NOT_CONFIGURED", problem)
+	}
+	if len(repo.pushUpserts) != 0 {
+		t.Error("push token stored although push is not configured")
+	}
+}
+
+func TestUpsertPushTokenValidatesBeforeTheGate(t *testing.T) {
+	service, _ := newPushFixture(false)
+	problem := problemError(t, service.UpsertPushToken(context.Background(), app.UpsertPushTokenInput{
+		UserID: "user-1", SessionID: "session-1", Platform: "WATCH", Token: "fcm-token",
+	}))
+	if problem.Status != http.StatusBadRequest || problem.Code != httpx.CodeValidationFailed {
+		t.Fatalf("problem = %+v, want 400 VALIDATION_FAILED before the 501 gate", problem)
+	}
+}
+
+func TestUpsertPushTokenNormalizesAndStores(t *testing.T) {
+	service, repo := newPushFixture(true)
+	if err := service.UpsertPushToken(context.Background(), app.UpsertPushTokenInput{ //nolint:gosec // test fixture, not a credential
+		UserID: "user-1", SessionID: "session-1", Platform: " ios ", Token: "  fcm-token  ",
+	}); err != nil {
+		t.Fatalf("UpsertPushToken() error = %v", err)
+	}
+	if len(repo.pushUpserts) != 1 {
+		t.Fatalf("upserts = %d, want 1", len(repo.pushUpserts))
+	}
+	upsert := repo.pushUpserts[0]
+	if upsert.Platform != domain.PushPlatformIOS || upsert.Token != "fcm-token" {
+		t.Errorf("upsert = %+v, want the normalized platform and trimmed token", upsert)
+	}
+	if !upsert.Now.Equal(moment) {
+		t.Errorf("now = %v, want the injected clock", upsert.Now)
+	}
+}
+
+func TestUpsertPushTokenValidation(t *testing.T) {
+	longToken := strings.Repeat("a", pushTokenMaxLengthForTest+1)
+	cases := []struct {
+		name     string
+		platform string
+		token    string
+		field    string
+		message  string
+	}{
+		{name: "unknown platform", platform: "WATCH", token: "fcm", field: "platform", message: `must be one of "ANDROID", "IOS", "WEB"`},
+		{name: "blank token", platform: "ANDROID", token: "   ", field: "token", message: "must not be empty"},
+		{name: "over long token", platform: "WEB", token: longToken, field: "token", message: "must be at most 2048 characters"},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			service, repo := newPushFixture(true)
+			problem := problemError(t, service.UpsertPushToken(context.Background(), app.UpsertPushTokenInput{
+				UserID: "user-1", SessionID: "session-1", Platform: tc.platform, Token: tc.token,
+			}))
+			if problem.Status != http.StatusBadRequest || problem.Code != httpx.CodeValidationFailed {
+				t.Fatalf("problem = %+v, want 400 VALIDATION_FAILED", problem)
+			}
+			if len(problem.Issues) != 1 || problem.Issues[0].Field != tc.field || problem.Issues[0].Message != tc.message {
+				t.Fatalf("issues = %+v, want %s %q", problem.Issues, tc.field, tc.message)
+			}
+			if len(repo.pushUpserts) != 0 {
+				t.Error("repository called for an invalid token")
+			}
+		})
+	}
+}
+
+const pushTokenMaxLengthForTest = 2048
+
+func TestUpsertPushTokenRejectsDeadSessionsAndUsers(t *testing.T) {
+	dead, deadRepo := newPushFixture(true)
+	deadRepo.pushFound = false
+	problem := problemError(t, dead.UpsertPushToken(context.Background(), app.UpsertPushTokenInput{
+		UserID: "user-1", SessionID: "revoked", Platform: "ANDROID", Token: "fcm",
+	}))
+	if problem.Status != http.StatusUnauthorized || problem.Code != httpx.CodeUnauthorized {
+		t.Fatalf("dead session mapped to %d/%s, want 401 UNAUTHORIZED", problem.Status, problem.Code)
+	}
+
+	deleted, deletedRepo := newPushFixture(true)
+	deletedRepo.statusValue = domain.StatusDeleted
+	problem = problemError(t, deleted.UpsertPushToken(context.Background(), app.UpsertPushTokenInput{
+		UserID: "deleted", SessionID: "session-1", Platform: "ANDROID", Token: "fcm",
+	}))
+	if problem.Status != http.StatusUnauthorized || problem.Code != httpx.CodeUnauthorized {
+		t.Fatalf("deleted user mapped to %d/%s, want 401 UNAUTHORIZED", problem.Status, problem.Code)
+	}
+	if len(deletedRepo.pushUpserts) != 0 {
+		t.Error("push token stored for a deleted user")
+	}
+}
+
+func TestRevokePushToken(t *testing.T) {
+	service, repo := newPushFixture(false)
+	if err := service.RevokePushToken(context.Background(), app.RevokePushTokenInput{UserID: "user-1", SessionID: "session-1"}); err != nil {
+		t.Fatalf("RevokePushToken() error = %v, want nil without a live session", err)
+	}
+	if len(repo.pushRevokes) != 1 || repo.pushRevokes[0] != "session-1" {
+		t.Errorf("revokes = %v, want session-1", repo.pushRevokes)
+	}
+	if !repo.pushNow.Equal(moment) {
+		t.Errorf("now = %v, want the injected clock", repo.pushNow)
+	}
+
+	deleted, deletedRepo := newPushFixture(false)
+	deletedRepo.statusValue = domain.StatusDeleted
+	problem := problemError(t, deleted.RevokePushToken(context.Background(), app.RevokePushTokenInput{UserID: "deleted", SessionID: "session-1"}))
+	if problem.Status != http.StatusUnauthorized || problem.Code != httpx.CodeUnauthorized {
+		t.Fatalf("deleted user mapped to %d/%s, want 401 UNAUTHORIZED", problem.Status, problem.Code)
+	}
+	if len(deletedRepo.pushRevokes) != 0 {
+		t.Error("push token revoked for a deleted user")
+	}
 }
 
 func TestListSessionsComputesStatusAndCurrent(t *testing.T) {

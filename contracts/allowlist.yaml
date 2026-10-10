@@ -7,8 +7,6 @@ operations:
   - auth.password.reset.request
   - auth.password.reset.confirm
   # Phase 4 — me slice
-  - users.me.pushToken.upsert
-  - users.me.pushToken.revoke
   - users.me.profileImage.upload
   - users.me.profileImage.complete
   - users.me.profileImage.clear

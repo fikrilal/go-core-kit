@@ -29,3 +29,12 @@ func validationFailedError(issues []httpx.FieldIssue) error {
 func sessionNotFoundError() error {
 	return &httpx.ProblemError{Status: http.StatusNotFound, Code: httpx.CodeNotFound, Detail: "Session not found"}
 }
+
+// pushNotConfiguredError mirrors the reference's provider-configured gate.
+func pushNotConfiguredError() error {
+	return &httpx.ProblemError{
+		Status: http.StatusNotImplemented,
+		Code:   httpx.CodeAuthPushNotConfigured,
+		Detail: "Push provider is not configured",
+	}
+}

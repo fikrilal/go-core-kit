@@ -32,4 +32,5 @@ const (
 	CodeAuthOidcLinkRequired       Code = "AUTH_OIDC_LINK_REQUIRED"
 	CodeAuthOidcIdentityLinked     Code = "AUTH_OIDC_IDENTITY_ALREADY_LINKED"
 	CodeAuthOidcProviderLinked     Code = "AUTH_OIDC_PROVIDER_ALREADY_LINKED"
+	CodeAuthPushNotConfigured      Code = "AUTH_PUSH_NOT_CONFIGURED"
 )

@@ -137,3 +137,23 @@ func TestLoadProdRequiresJSONLogs(t *testing.T) {
 		t.Errorf("Load() error = %v, want LOG_FORMAT invariant error", err)
 	}
 }
+
+func TestLoadPushEnabledDefaultsOffAndParsesOverride(t *testing.T) {
+	setRequired(t)
+	cfg, err := config.Load()
+	if err != nil {
+		t.Fatalf("Load() error = %v", err)
+	}
+	if cfg.PushEnabled {
+		t.Error("PushEnabled = true by default, want false")
+	}
+
+	t.Setenv("PUSH_ENABLED", "true")
+	cfg, err = config.Load()
+	if err != nil {
+		t.Fatalf("Load() error = %v", err)
+	}
+	if !cfg.PushEnabled {
+		t.Error("PushEnabled = false after PUSH_ENABLED=true")
+	}
+}

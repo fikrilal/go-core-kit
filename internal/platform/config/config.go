@@ -59,6 +59,10 @@ type Config struct {
 	AuthSigningKeysJSONBase64  string `env:"AUTH_SIGNING_KEYS_JSON_BASE64"`
 	AuthOIDCGoogleClientIDs    string `env:"AUTH_OIDC_GOOGLE_CLIENT_IDS"`
 	AuthOIDCGoogleJWKSURL      string `env:"AUTH_OIDC_GOOGLE_JWKS_URL"`
+
+	// PushEnabled gates push registration until the FCM adapter lands (5.3);
+	// it mirrors the reference's provider-configured check.
+	PushEnabled bool `env:"PUSH_ENABLED" envDefault:"false"`
 }
 
 // ProductionLike reports whether the environment requires real secrets.

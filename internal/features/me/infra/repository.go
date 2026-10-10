@@ -80,6 +80,63 @@ func (r *Repository) RevokeSession(ctx context.Context, userID, sessionID string
 	return found, nil
 }
 
+// UpsertPushToken attaches a push token to the caller's live session. The
+// caller's session is validated first, so a dead session cannot detach a token
+// from another session (reference comment).
+func (r *Repository) UpsertPushToken(ctx context.Context, in ports.UpsertPushTokenInput) (bool, error) {
+	now := utctime.Time{Time: in.Now}
+	found := false
+	err := r.database.InTx(ctx, func(tx db.Tx) error {
+		queries := gen.New(tx)
+		touched, err := queries.TouchSessionPushToken(ctx, gen.TouchSessionPushTokenParams{
+			Now:    now,
+			ID:     in.SessionID,
+			UserID: in.UserID,
+		})
+		if err != nil {
+			return fmt.Errorf("touch session: %w", err)
+		}
+		if touched != 1 {
+			return nil
+		}
+		found = true
+		if _, err := queries.ClearOtherSessionPushToken(ctx, gen.ClearOtherSessionPushTokenParams{
+			Now:       now,
+			PushToken: in.Token,
+			ID:        in.SessionID,
+		}); err != nil {
+			return fmt.Errorf("clear other session token: %w", err)
+		}
+		if err := queries.SetSessionPushToken(ctx, gen.SetSessionPushTokenParams{
+			PushPlatform: in.Platform,
+			PushToken:    in.Token,
+			Now:          now,
+			ID:           in.SessionID,
+		}); err != nil {
+			return fmt.Errorf("set session token: %w", err)
+		}
+		return nil
+	})
+	if err != nil {
+		return false, fmt.Errorf("upsert push token: %w", err)
+	}
+	return found, nil
+}
+
+// RevokePushToken clears the caller session's push token. There is no
+// session-state gate: sign-out revocation is best-effort.
+func (r *Repository) RevokePushToken(ctx context.Context, userID, sessionID string, now time.Time) error {
+	nowStamp := utctime.Time{Time: now}
+	if _, err := r.queries.ClearSessionPushToken(ctx, gen.ClearSessionPushTokenParams{
+		Now:    nowStamp,
+		ID:     sessionID,
+		UserID: userID,
+	}); err != nil {
+		return fmt.Errorf("clear session push token: %w", err)
+	}
+	return nil
+}
+
 // sessionSortCreatedAt and sessionSortID are the cursor sort names.
 const (
 	sessionSortCreatedAt = "createdAt"

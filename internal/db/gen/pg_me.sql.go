@@ -14,6 +14,54 @@ import (
 	utctime "github.com/fikrilal/go-core-kit/internal/platform/db/utctime"
 )
 
+const clearOtherSessionPushToken = `-- name: ClearOtherSessionPushToken :execrows
+UPDATE sessions
+SET push_platform = NULL,
+    push_token = NULL,
+    push_token_updated_at = $1,
+    push_token_revoked_at = $1,
+    updated_at = $1
+WHERE push_token = NULLIF($2, '') AND id != $3
+`
+
+type ClearOtherSessionPushTokenParams struct {
+	Now       sql.NullTime
+	PushToken interface{}
+	ID        string
+}
+
+func (q *Queries) ClearOtherSessionPushToken(ctx context.Context, arg ClearOtherSessionPushTokenParams) (int64, error) {
+	result, err := q.db.ExecContext(ctx, clearOtherSessionPushToken, arg.Now, arg.PushToken, arg.ID)
+	if err != nil {
+		return 0, err
+	}
+	return result.RowsAffected()
+}
+
+const clearSessionPushToken = `-- name: ClearSessionPushToken :execrows
+UPDATE sessions
+SET push_platform = NULL,
+    push_token = NULL,
+    push_token_updated_at = $1,
+    push_token_revoked_at = $1,
+    updated_at = $1
+WHERE id = $2 AND user_id = $3
+`
+
+type ClearSessionPushTokenParams struct {
+	Now    sql.NullTime
+	ID     string
+	UserID string
+}
+
+func (q *Queries) ClearSessionPushToken(ctx context.Context, arg ClearSessionPushTokenParams) (int64, error) {
+	result, err := q.db.ExecContext(ctx, clearSessionPushToken, arg.Now, arg.ID, arg.UserID)
+	if err != nil {
+		return 0, err
+	}
+	return result.RowsAffected()
+}
+
 const getUserProfile = `-- name: GetUserProfile :one
 SELECT display_name, given_name, family_name
 FROM user_profiles
@@ -50,6 +98,56 @@ func (q *Queries) GetUserSession(ctx context.Context, id string) (GetUserSession
 	var i GetUserSessionRow
 	err := row.Scan(&i.ID, &i.UserID, &i.RevokedAt)
 	return i, err
+}
+
+const setSessionPushToken = `-- name: SetSessionPushToken :exec
+UPDATE sessions
+SET push_platform = NULLIF($1, ''),
+    push_token = NULLIF($2, ''),
+    push_token_updated_at = $3,
+    push_token_revoked_at = NULL,
+    updated_at = $3
+WHERE id = $4
+`
+
+type SetSessionPushTokenParams struct {
+	PushPlatform interface{}
+	PushToken    interface{}
+	Now          sql.NullTime
+	ID           string
+}
+
+func (q *Queries) SetSessionPushToken(ctx context.Context, arg SetSessionPushTokenParams) error {
+	_, err := q.db.ExecContext(ctx, setSessionPushToken,
+		arg.PushPlatform,
+		arg.PushToken,
+		arg.Now,
+		arg.ID,
+	)
+	return err
+}
+
+const touchSessionPushToken = `-- name: TouchSessionPushToken :execrows
+UPDATE sessions
+SET push_token_updated_at = $1, updated_at = $1
+WHERE id = $2
+  AND user_id = $3
+  AND revoked_at IS NULL
+  AND expires_at > $1
+`
+
+type TouchSessionPushTokenParams struct {
+	Now    sql.NullTime
+	ID     string
+	UserID string
+}
+
+func (q *Queries) TouchSessionPushToken(ctx context.Context, arg TouchSessionPushTokenParams) (int64, error) {
+	result, err := q.db.ExecContext(ctx, touchSessionPushToken, arg.Now, arg.ID, arg.UserID)
+	if err != nil {
+		return 0, err
+	}
+	return result.RowsAffected()
 }
 
 const touchUser = `-- name: TouchUser :execrows

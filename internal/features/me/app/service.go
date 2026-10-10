@@ -4,6 +4,8 @@ package app
 import (
 	"context"
 	"fmt"
+	"slices"
+	"strings"
 	"time"
 	"unicode/utf8"
 
@@ -16,6 +18,19 @@ import (
 // maxProfileFieldLength mirrors the reference DTO bound.
 const maxProfileFieldLength = 100
 
+// pushTokenMaxLength mirrors the reference DTO bound.
+const pushTokenMaxLength = 2048
+
+// pushPlatforms are the accepted push platforms.
+var pushPlatforms = []string{domain.PushPlatformAndroid, domain.PushPlatformIOS, domain.PushPlatformWeb}
+
+// Config carries the me feature's policy knobs.
+type Config struct {
+	// PushEnabled mirrors the reference's provider-configured gate until the
+	// FCM adapter lands.
+	PushEnabled bool
+}
+
 // Deps are the service's collaborators.
 type Deps struct {
 	Repository ports.Repository
@@ -24,13 +39,18 @@ type Deps struct {
 
 // Service implements the me use cases.
 type Service struct {
-	repo  ports.Repository
-	clock clock.Clock
+	repo        ports.Repository
+	clock       clock.Clock
+	pushEnabled bool
 }
 
 // New builds the me service.
-func New(deps Deps) *Service {
-	return &Service{repo: deps.Repository, clock: deps.Clock}
+func New(config Config, deps Deps) *Service {
+	return &Service{
+		repo:        deps.Repository,
+		clock:       deps.Clock,
+		pushEnabled: config.PushEnabled,
+	}
 }
 
 // GetMe loads the authenticated user's Me view.
@@ -125,6 +145,88 @@ func (s *Service) RevokeSession(ctx context.Context, in RevokeSessionInput) erro
 		return sessionNotFoundError()
 	}
 	return nil
+}
+
+// UpsertPushTokenInput carries a push registration for the caller's session.
+type UpsertPushTokenInput struct {
+	UserID    string
+	SessionID string
+	Platform  string
+	Token     string
+}
+
+// UpsertPushToken stores the caller session's push token. Validation runs
+// first, then the provider gate, then the account check (reference order).
+func (s *Service) UpsertPushToken(ctx context.Context, in UpsertPushTokenInput) error {
+	platform, token, err := normalizePushToken(in.Platform, in.Token)
+	if err != nil {
+		return err
+	}
+	if !s.pushEnabled {
+		return pushNotConfiguredError()
+	}
+	if err := s.requireUser(ctx, in.UserID); err != nil {
+		return err
+	}
+	found, err := s.repo.UpsertPushToken(ctx, ports.UpsertPushTokenInput{
+		UserID:    in.UserID,
+		SessionID: in.SessionID,
+		Platform:  platform,
+		Token:     token,
+		Now:       s.clock.Now(),
+	})
+	if err != nil {
+		return fmt.Errorf("me: upsert push token: %w", err)
+	}
+	if !found {
+		return unauthorizedError()
+	}
+	return nil
+}
+
+// RevokePushTokenInput carries a push revocation for the caller's session.
+type RevokePushTokenInput struct {
+	UserID    string
+	SessionID string
+}
+
+// RevokePushToken clears the caller session's push token; it works even when
+// the session is already revoked, because sign-out revocation is best-effort.
+func (s *Service) RevokePushToken(ctx context.Context, in RevokePushTokenInput) error {
+	if err := s.requireUser(ctx, in.UserID); err != nil {
+		return err
+	}
+	if err := s.repo.RevokePushToken(ctx, in.UserID, in.SessionID, s.clock.Now()); err != nil {
+		return fmt.Errorf("me: revoke push token: %w", err)
+	}
+	return nil
+}
+
+// normalizePushToken trims and uppercases the platform, then validates both
+// fields, collecting issues in field order.
+func normalizePushToken(platform, token string) (string, string, error) {
+	platform = strings.ToUpper(strings.TrimSpace(platform))
+	token = strings.TrimSpace(token)
+	var issues []httpx.FieldIssue
+	if !slices.Contains(pushPlatforms, platform) {
+		issues = append(issues, httpx.FieldIssue{
+			Field:   "platform",
+			Message: `must be one of "ANDROID", "IOS", "WEB"`,
+		})
+	}
+	switch {
+	case token == "":
+		issues = append(issues, httpx.FieldIssue{Field: "token", Message: "must not be empty"})
+	case utf8.RuneCountInString(token) > pushTokenMaxLength:
+		issues = append(issues, httpx.FieldIssue{
+			Field:   "token",
+			Message: fmt.Sprintf("must be at most %d characters", pushTokenMaxLength),
+		})
+	}
+	if len(issues) > 0 {
+		return "", "", validationFailedError(issues)
+	}
+	return platform, token, nil
 }
 
 // requireUser rejects missing or deleted accounts as unusable tokens.

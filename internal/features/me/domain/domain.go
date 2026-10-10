@@ -22,6 +22,13 @@ const (
 	AuthMethodGoogle   = "GOOGLE"
 )
 
+// Push platforms.
+const (
+	PushPlatformAndroid = "ANDROID"
+	PushPlatformIOS     = "IOS"
+	PushPlatformWeb     = "WEB"
+)
+
 // User is the account core the Me view carries.
 type User struct {
 	ID            string

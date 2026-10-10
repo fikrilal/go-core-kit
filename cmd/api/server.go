@@ -56,7 +56,7 @@ func newServer(cfg config.Config, logger *slog.Logger, database *db.Database, rd
 	if err != nil {
 		return nil, fmt.Errorf("register auth: %w", err)
 	}
-	me.Register(router, me.Deps{Database: database, Clock: clock.System{}, Guard: guard})
+	me.Register(router, me.Deps{Database: database, Clock: clock.System{}, Guard: guard, PushEnabled: cfg.PushEnabled})
 	return &http.Server{
 		Addr:              fmt.Sprintf(":%d", cfg.HTTPPort),
 		Handler:           router,
