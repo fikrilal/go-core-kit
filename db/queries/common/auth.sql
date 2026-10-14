@@ -222,6 +222,33 @@ FROM users AS u
 LEFT JOIN user_profiles AS p ON p.user_id = u.id
 WHERE u.id = sqlc.arg(user_id);
 
+-- name: CreateEmailVerificationToken :exec
+INSERT INTO email_verification_tokens (id, user_id, token_hash, expires_at, created_at, updated_at)
+VALUES (
+    sqlc.arg(id),
+    sqlc.arg(user_id),
+    sqlc.arg(token_hash),
+    sqlc.arg(expires_at),
+    sqlc.arg(created_at),
+    sqlc.arg(updated_at)
+);
+
+-- name: CreatePasswordResetToken :exec
+INSERT INTO password_reset_tokens (id, user_id, token_hash, expires_at, created_at, updated_at)
+VALUES (
+    sqlc.arg(id),
+    sqlc.arg(user_id),
+    sqlc.arg(token_hash),
+    sqlc.arg(expires_at),
+    sqlc.arg(created_at),
+    sqlc.arg(updated_at)
+);
+
+-- name: GetUserEmailState :one
+SELECT id, email, email_verified_at, status
+FROM users
+WHERE id = sqlc.arg(id);
+
 -- name: GetAuthMethods :many
 SELECT 'PASSWORD' AS method FROM password_credentials AS pc WHERE pc.user_id = sqlc.arg(user_id)
 UNION

@@ -2,6 +2,7 @@ package queue
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
 	"log/slog"
 	"math/rand"
@@ -12,6 +13,18 @@ import (
 
 // HandlerFunc consumes one job.
 type HandlerFunc func(ctx context.Context, task *asynq.Task) error
+
+// Bind adapts a typed handler to a queue handler: it decodes the payload into
+// T and hands the caller the metadata envelope.
+func Bind[T any](handle func(ctx context.Context, payload T, meta Meta) error) HandlerFunc {
+	return func(ctx context.Context, task *asynq.Task) error {
+		var payload T
+		if err := json.Unmarshal(task.Payload(), &payload); err != nil {
+			return fmt.Errorf("queue: decode %s payload: %w", task.Type(), err)
+		}
+		return handle(ctx, payload, MetaFromTask(task))
+	}
+}
 
 // Server consumes jobs with the platform retry policy.
 type Server struct {

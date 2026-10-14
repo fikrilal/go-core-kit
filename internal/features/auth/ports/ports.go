@@ -6,6 +6,7 @@ import (
 	"time"
 
 	"github.com/fikrilal/go-core-kit/internal/features/auth/domain"
+	"github.com/fikrilal/go-core-kit/internal/platform/email"
 )
 
 // CreateUserInput carries a new password registration.
@@ -60,6 +61,15 @@ type CreateOidcUserInput struct {
 	Now      time.Time
 }
 
+// CreateAuthTokenInput carries a minted email token.
+type CreateAuthTokenInput struct {
+	ID        string
+	UserID    string
+	TokenHash string
+	ExpiresAt time.Time
+	Now       time.Time
+}
+
 // LinkExternalIdentityInput carries an OIDC identity link for the current user.
 type LinkExternalIdentityInput struct {
 	UserID   string
@@ -85,6 +95,14 @@ type Repository interface {
 	CreateUserWithExternalIdentity(ctx context.Context, in CreateOidcUserInput) (domain.User, error)
 	LinkExternalIdentityToUser(ctx context.Context, in LinkExternalIdentityInput) (domain.LinkIdentityKind, error)
 	GetMeView(ctx context.Context, userID string) (domain.MeView, bool, error)
+	FindUserEmailState(ctx context.Context, userID string) (domain.UserEmailState, bool, error)
+	CreateEmailVerificationToken(ctx context.Context, in CreateAuthTokenInput) error
+	CreatePasswordResetToken(ctx context.Context, in CreateAuthTokenInput) error
+}
+
+// EmailSender sends one transactional email and reports the provider id.
+type EmailSender interface {
+	Send(ctx context.Context, message email.Message) (string, error)
 }
 
 // OidcVerifier verifies OIDC id_tokens for a provider.

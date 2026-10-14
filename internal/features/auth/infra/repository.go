@@ -546,6 +546,55 @@ func verifyEmailIfMatching(ctx context.Context, queries *gen.Queries, user gen.G
 	return nil
 }
 
+// FindUserEmailState loads the account fields the email jobs read.
+func (r *Repository) FindUserEmailState(ctx context.Context, userID string) (domain.UserEmailState, bool, error) {
+	row, err := r.queries.GetUserEmailState(ctx, userID)
+	if errors.Is(err, db.ErrNoRows) {
+		return domain.UserEmailState{}, false, nil
+	}
+	if err != nil {
+		return domain.UserEmailState{}, false, fmt.Errorf("find user email state: %w", err)
+	}
+	return domain.UserEmailState{
+		ID:              row.ID,
+		Email:           row.Email,
+		EmailVerifiedAt: row.EmailVerifiedAt.Time,
+		Status:          row.Status,
+	}, true, nil
+}
+
+// CreateEmailVerificationToken stores a hashed verification token.
+func (r *Repository) CreateEmailVerificationToken(ctx context.Context, in ports.CreateAuthTokenInput) error {
+	now := utctime.Time{Time: in.Now}
+	if err := r.queries.CreateEmailVerificationToken(ctx, gen.CreateEmailVerificationTokenParams{
+		ID:        in.ID,
+		UserID:    in.UserID,
+		TokenHash: in.TokenHash,
+		ExpiresAt: utctime.Time{Time: in.ExpiresAt},
+		CreatedAt: now,
+		UpdatedAt: now,
+	}); err != nil {
+		return fmt.Errorf("create email verification token: %w", err)
+	}
+	return nil
+}
+
+// CreatePasswordResetToken stores a hashed reset token.
+func (r *Repository) CreatePasswordResetToken(ctx context.Context, in ports.CreateAuthTokenInput) error {
+	now := utctime.Time{Time: in.Now}
+	if err := r.queries.CreatePasswordResetToken(ctx, gen.CreatePasswordResetTokenParams{
+		ID:        in.ID,
+		UserID:    in.UserID,
+		TokenHash: in.TokenHash,
+		ExpiresAt: utctime.Time{Time: in.ExpiresAt},
+		CreatedAt: now,
+		UpdatedAt: now,
+	}); err != nil {
+		return fmt.Errorf("create password reset token: %w", err)
+	}
+	return nil
+}
+
 // GetMeView composes the user, profile, and auth methods for Me responses.
 func (r *Repository) GetMeView(ctx context.Context, userID string) (domain.MeView, bool, error) {
 	row, err := r.queries.GetMeView(ctx, userID)

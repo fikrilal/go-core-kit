@@ -47,22 +47,37 @@ type Config struct {
 	LogLevel     LogLevel  `env:"LOG_LEVEL" envDefault:"info"`
 	LogFormat    LogFormat `env:"LOG_FORMAT" envDefault:"json"`
 
-	AuthAccessTokenTTLSeconds  int    `env:"AUTH_ACCESS_TOKEN_TTL_SECONDS" envDefault:"900"`
-	AuthRefreshTokenTTLSeconds int    `env:"AUTH_REFRESH_TOKEN_TTL_SECONDS" envDefault:"2592000"`
-	AuthPasswordMinLength      int    `env:"AUTH_PASSWORD_MIN_LENGTH" envDefault:"10"`
-	AuthLoginMaxAttempts       int    `env:"AUTH_LOGIN_MAX_ATTEMPTS" envDefault:"10"`
-	AuthLoginWindowSeconds     int    `env:"AUTH_LOGIN_WINDOW_SECONDS" envDefault:"60"`
-	AuthLoginBlockSeconds      int    `env:"AUTH_LOGIN_BLOCK_SECONDS" envDefault:"900"`
-	AuthIssuer                 string `env:"AUTH_ISSUER"`
-	AuthAudience               string `env:"AUTH_AUDIENCE"`
-	AuthSigningKeysJSON        string `env:"AUTH_SIGNING_KEYS_JSON"`
-	AuthSigningKeysJSONBase64  string `env:"AUTH_SIGNING_KEYS_JSON_BASE64"`
-	AuthOIDCGoogleClientIDs    string `env:"AUTH_OIDC_GOOGLE_CLIENT_IDS"`
-	AuthOIDCGoogleJWKSURL      string `env:"AUTH_OIDC_GOOGLE_JWKS_URL"`
+	AuthAccessTokenTTLSeconds       int    `env:"AUTH_ACCESS_TOKEN_TTL_SECONDS" envDefault:"900"`
+	AuthRefreshTokenTTLSeconds      int    `env:"AUTH_REFRESH_TOKEN_TTL_SECONDS" envDefault:"2592000"`
+	AuthPasswordMinLength           int    `env:"AUTH_PASSWORD_MIN_LENGTH" envDefault:"10"`
+	AuthLoginMaxAttempts            int    `env:"AUTH_LOGIN_MAX_ATTEMPTS" envDefault:"10"`
+	AuthLoginWindowSeconds          int    `env:"AUTH_LOGIN_WINDOW_SECONDS" envDefault:"60"`
+	AuthLoginBlockSeconds           int    `env:"AUTH_LOGIN_BLOCK_SECONDS" envDefault:"900"`
+	AuthIssuer                      string `env:"AUTH_ISSUER"`
+	AuthAudience                    string `env:"AUTH_AUDIENCE"`
+	AuthSigningKeysJSON             string `env:"AUTH_SIGNING_KEYS_JSON"`
+	AuthSigningKeysJSONBase64       string `env:"AUTH_SIGNING_KEYS_JSON_BASE64"`
+	AuthOIDCGoogleClientIDs         string `env:"AUTH_OIDC_GOOGLE_CLIENT_IDS"`
+	AuthOIDCGoogleJWKSURL           string `env:"AUTH_OIDC_GOOGLE_JWKS_URL"`
+	AuthEmailVerificationTTLSeconds int    `env:"AUTH_EMAIL_VERIFICATION_TOKEN_TTL_SECONDS" envDefault:"86400"`
+	AuthPasswordResetTTLSeconds     int    `env:"AUTH_PASSWORD_RESET_TOKEN_TTL_SECONDS" envDefault:"1800"`
 
-	// PushEnabled gates push registration until the FCM adapter lands (5.3);
-	// it mirrors the reference's provider-configured check.
+	// Email (Resend) enables when the API key and sender are set; the public
+	// app URL builds the links inside the emails.
+	ResendAPIKey string `env:"RESEND_API_KEY"`
+	EmailFrom    string `env:"EMAIL_FROM"`
+	EmailReplyTo string `env:"EMAIL_REPLY_TO"`
+	PublicAppURL string `env:"PUBLIC_APP_URL"`
+
+	// PushEnabled gates push token registration until the FCM adapter swaps in
+	// (5.3); the API gate and the worker both follow it.
 	PushEnabled bool `env:"PUSH_ENABLED" envDefault:"false"`
+
+	// Push (FCM): the project id plus credentials enable the adapter; the API
+	// gate and the worker both follow this. Credentials accept raw JSON, base64
+	// of it, or a file path.
+	FCMProjectID      string `env:"FCM_PROJECT_ID"`
+	FCMServiceAccount string `env:"FCM_SERVICE_ACCOUNT_JSON"`
 
 	// WorkerHTTPPort is the worker's probe listener; the API keeps HTTP_PORT.
 	WorkerHTTPPort int `env:"WORKER_HTTP_PORT" envDefault:"8081"`
@@ -139,6 +154,8 @@ func (c Config) Validate() error {
 		{"AUTH_LOGIN_MAX_ATTEMPTS", c.AuthLoginMaxAttempts},
 		{"AUTH_LOGIN_WINDOW_SECONDS", c.AuthLoginWindowSeconds},
 		{"AUTH_LOGIN_BLOCK_SECONDS", c.AuthLoginBlockSeconds},
+		{"AUTH_EMAIL_VERIFICATION_TOKEN_TTL_SECONDS", c.AuthEmailVerificationTTLSeconds},
+		{"AUTH_PASSWORD_RESET_TOKEN_TTL_SECONDS", c.AuthPasswordResetTTLSeconds},
 	}
 	for _, check := range authIntegers {
 		if check.value < 1 {

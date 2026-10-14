@@ -3,7 +3,6 @@ package queue_test
 import (
 	"context"
 	"encoding/json"
-	"fmt"
 	"io"
 	"testing"
 	"time"
@@ -124,22 +123,20 @@ func TestEnqueueConsumeRoundTrip(t *testing.T) {
 	if err != nil {
 		t.Fatalf("NewServer() error = %v", err)
 	}
+	type echoPayload struct {
+		UserID string `json:"userId"`
+	}
+
 	type consumed struct {
 		userID string
 		meta   queue.Meta
 	}
 	received := make(chan consumed, 1)
 	mux, err := queue.NewServeMux(map[string]queue.HandlerFunc{
-		"test.echo": func(_ context.Context, task *asynq.Task) error {
-			var payload struct {
-				UserID string `json:"userId"`
-			}
-			if err := json.Unmarshal(task.Payload(), &payload); err != nil {
-				return fmt.Errorf("decode payload: %w", err)
-			}
-			received <- consumed{userID: payload.UserID, meta: queue.MetaFromTask(task)}
+		"test.echo": queue.Bind(func(_ context.Context, payload echoPayload, meta queue.Meta) error {
+			received <- consumed{userID: payload.UserID, meta: meta}
 			return nil
-		},
+		}),
 	})
 	if err != nil {
 		t.Fatalf("NewServeMux() error = %v", err)

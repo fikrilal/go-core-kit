@@ -54,6 +54,14 @@ type LoginUser struct {
 	PasswordHash *string
 }
 
+// UserEmailState is the account core the email jobs read.
+type UserEmailState struct {
+	ID              string
+	Email           string
+	EmailVerifiedAt time.Time
+	Status          string
+}
+
 // LoginSession is the session core a refresh token belongs to.
 type LoginSession struct {
 	ID        string
@@ -166,15 +174,45 @@ func NormalizeEmail(raw string) string {
 
 // NewRefreshToken returns a fresh opaque refresh token.
 func NewRefreshToken() (string, error) {
-	buffer := make([]byte, 32)
-	if _, err := rand.Read(buffer); err != nil {
-		return "", fmt.Errorf("auth: read refresh token: %w", err)
-	}
-	return base64.RawURLEncoding.EncodeToString(buffer), nil
+	return newOpaqueToken()
 }
 
 // HashRefreshToken returns the storage hash for a refresh token.
 func HashRefreshToken(raw string) string {
+	return hashOpaqueToken(raw)
+}
+
+// NewEmailVerificationToken returns a fresh opaque verification token.
+func NewEmailVerificationToken() (string, error) {
+	return newOpaqueToken()
+}
+
+// HashEmailVerificationToken returns the storage hash for a verification token.
+func HashEmailVerificationToken(raw string) string {
+	return hashOpaqueToken(raw)
+}
+
+// NewPasswordResetToken returns a fresh opaque password reset token.
+func NewPasswordResetToken() (string, error) {
+	return newOpaqueToken()
+}
+
+// HashPasswordResetToken returns the storage hash for a reset token.
+func HashPasswordResetToken(raw string) string {
+	return hashOpaqueToken(raw)
+}
+
+// newOpaqueToken returns 32 random bytes as raw base64url.
+func newOpaqueToken() (string, error) {
+	buffer := make([]byte, 32)
+	if _, err := rand.Read(buffer); err != nil {
+		return "", fmt.Errorf("auth: read token: %w", err)
+	}
+	return base64.RawURLEncoding.EncodeToString(buffer), nil
+}
+
+// hashOpaqueToken returns the SHA-256 storage hash for a token.
+func hashOpaqueToken(raw string) string {
 	sum := sha256.Sum256([]byte(raw))
 	return base64.RawURLEncoding.EncodeToString(sum[:])
 }

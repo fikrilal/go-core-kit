@@ -148,6 +148,56 @@ sql:
               import: "github.com/fikrilal/go-core-kit/internal/platform/db/utctime"
               package: "utctime"
               type: "Time"
+          - column: "email_verification_tokens.expires_at"
+            go_type:
+              import: "github.com/fikrilal/go-core-kit/internal/platform/db/utctime"
+              package: "utctime"
+              type: "Time"
+          - column: "email_verification_tokens.used_at"
+            go_type:
+              import: "github.com/fikrilal/go-core-kit/internal/platform/db/utctime"
+              package: "utctime"
+              type: "Time"
+          - column: "email_verification_tokens.revoked_at"
+            go_type:
+              import: "github.com/fikrilal/go-core-kit/internal/platform/db/utctime"
+              package: "utctime"
+              type: "Time"
+          - column: "email_verification_tokens.created_at"
+            go_type:
+              import: "github.com/fikrilal/go-core-kit/internal/platform/db/utctime"
+              package: "utctime"
+              type: "Time"
+          - column: "email_verification_tokens.updated_at"
+            go_type:
+              import: "github.com/fikrilal/go-core-kit/internal/platform/db/utctime"
+              package: "utctime"
+              type: "Time"
+          - column: "password_reset_tokens.expires_at"
+            go_type:
+              import: "github.com/fikrilal/go-core-kit/internal/platform/db/utctime"
+              package: "utctime"
+              type: "Time"
+          - column: "password_reset_tokens.used_at"
+            go_type:
+              import: "github.com/fikrilal/go-core-kit/internal/platform/db/utctime"
+              package: "utctime"
+              type: "Time"
+          - column: "password_reset_tokens.revoked_at"
+            go_type:
+              import: "github.com/fikrilal/go-core-kit/internal/platform/db/utctime"
+              package: "utctime"
+              type: "Time"
+          - column: "password_reset_tokens.created_at"
+            go_type:
+              import: "github.com/fikrilal/go-core-kit/internal/platform/db/utctime"
+              package: "utctime"
+              type: "Time"
+          - column: "password_reset_tokens.updated_at"
+            go_type:
+              import: "github.com/fikrilal/go-core-kit/internal/platform/db/utctime"
+              package: "utctime"
+              type: "Time"
   - engine: "postgresql"
     schema: "db/migrations/pg"
     queries: "db/queries/common"

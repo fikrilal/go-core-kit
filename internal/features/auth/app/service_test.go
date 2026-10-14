@@ -12,6 +12,7 @@ import (
 	"github.com/fikrilal/go-core-kit/internal/features/auth/domain"
 	"github.com/fikrilal/go-core-kit/internal/features/auth/ports"
 	"github.com/fikrilal/go-core-kit/internal/platform/clock"
+	"github.com/fikrilal/go-core-kit/internal/platform/email"
 	"github.com/fikrilal/go-core-kit/internal/platform/httpx"
 )
 
@@ -65,6 +66,12 @@ type fakeRepository struct {
 	meView           domain.MeView
 	meViewFound      bool
 	meViewErr        error
+
+	emailState      domain.UserEmailState
+	emailStateFound bool
+	emailStateErr   error
+	createdTokens   []ports.CreateAuthTokenInput
+	tokenErr        error
 }
 
 func (f *fakeRepository) CreateUserWithPassword(_ context.Context, in ports.CreateUserInput) (domain.User, error) {
@@ -146,6 +153,33 @@ func (f *fakeRepository) LinkExternalIdentityToUser(_ context.Context, in ports.
 
 func (f *fakeRepository) GetMeView(context.Context, string) (domain.MeView, bool, error) {
 	return f.meView, f.meViewFound, f.meViewErr
+}
+
+func (f *fakeRepository) FindUserEmailState(context.Context, string) (domain.UserEmailState, bool, error) {
+	return f.emailState, f.emailStateFound, f.emailStateErr
+}
+
+func (f *fakeRepository) CreateEmailVerificationToken(_ context.Context, in ports.CreateAuthTokenInput) error {
+	f.createdTokens = append(f.createdTokens, in)
+	return f.tokenErr
+}
+
+func (f *fakeRepository) CreatePasswordResetToken(_ context.Context, in ports.CreateAuthTokenInput) error {
+	f.createdTokens = append(f.createdTokens, in)
+	return f.tokenErr
+}
+
+type fakeEmailSender struct {
+	sent []email.Message
+	err  error
+}
+
+func (f *fakeEmailSender) Send(_ context.Context, message email.Message) (string, error) {
+	f.sent = append(f.sent, message)
+	if f.err != nil {
+		return "", f.err
+	}
+	return "email-1", nil
 }
 
 type fakeHasher struct {

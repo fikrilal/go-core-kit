@@ -35,6 +35,39 @@ func (q *Queries) ClearSessionDeviceState(ctx context.Context, arg ClearSessionD
 	return err
 }
 
+const createEmailVerificationToken = `-- name: CreateEmailVerificationToken :exec
+INSERT INTO email_verification_tokens (id, user_id, token_hash, expires_at, created_at, updated_at)
+VALUES (
+    $1,
+    $2,
+    $3,
+    $4,
+    $5,
+    $6
+)
+`
+
+type CreateEmailVerificationTokenParams struct {
+	ID        string
+	UserID    string
+	TokenHash string
+	ExpiresAt utctime.Time
+	CreatedAt utctime.Time
+	UpdatedAt utctime.Time
+}
+
+func (q *Queries) CreateEmailVerificationToken(ctx context.Context, arg CreateEmailVerificationTokenParams) error {
+	_, err := q.db.ExecContext(ctx, createEmailVerificationToken,
+		arg.ID,
+		arg.UserID,
+		arg.TokenHash,
+		arg.ExpiresAt,
+		arg.CreatedAt,
+		arg.UpdatedAt,
+	)
+	return err
+}
+
 const createExternalIdentity = `-- name: CreateExternalIdentity :exec
 INSERT INTO external_identities (id, provider, subject, email, user_id, created_at, updated_at)
 VALUES (
@@ -87,6 +120,39 @@ func (q *Queries) CreatePasswordCredential(ctx context.Context, arg CreatePasswo
 	_, err := q.db.ExecContext(ctx, createPasswordCredential,
 		arg.UserID,
 		arg.PasswordHash,
+		arg.CreatedAt,
+		arg.UpdatedAt,
+	)
+	return err
+}
+
+const createPasswordResetToken = `-- name: CreatePasswordResetToken :exec
+INSERT INTO password_reset_tokens (id, user_id, token_hash, expires_at, created_at, updated_at)
+VALUES (
+    $1,
+    $2,
+    $3,
+    $4,
+    $5,
+    $6
+)
+`
+
+type CreatePasswordResetTokenParams struct {
+	ID        string
+	UserID    string
+	TokenHash string
+	ExpiresAt utctime.Time
+	CreatedAt utctime.Time
+	UpdatedAt utctime.Time
+}
+
+func (q *Queries) CreatePasswordResetToken(ctx context.Context, arg CreatePasswordResetTokenParams) error {
+	_, err := q.db.ExecContext(ctx, createPasswordResetToken,
+		arg.ID,
+		arg.UserID,
+		arg.TokenHash,
+		arg.ExpiresAt,
 		arg.CreatedAt,
 		arg.UpdatedAt,
 	)
@@ -427,6 +493,31 @@ func (q *Queries) GetUserByExternalIdentity(ctx context.Context, arg GetUserByEx
 		&i.Email,
 		&i.EmailVerifiedAt,
 		&i.Role,
+		&i.Status,
+	)
+	return i, err
+}
+
+const getUserEmailState = `-- name: GetUserEmailState :one
+SELECT id, email, email_verified_at, status
+FROM users
+WHERE id = $1
+`
+
+type GetUserEmailStateRow struct {
+	ID              string
+	Email           string
+	EmailVerifiedAt sql.NullTime
+	Status          string
+}
+
+func (q *Queries) GetUserEmailState(ctx context.Context, id string) (GetUserEmailStateRow, error) {
+	row := q.db.QueryRowContext(ctx, getUserEmailState, id)
+	var i GetUserEmailStateRow
+	err := row.Scan(
+		&i.ID,
+		&i.Email,
+		&i.EmailVerifiedAt,
 		&i.Status,
 	)
 	return i, err

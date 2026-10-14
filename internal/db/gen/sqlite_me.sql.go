@@ -62,6 +62,30 @@ func (q *Queries) ClearSessionPushToken(ctx context.Context, arg ClearSessionPus
 	return result.RowsAffected()
 }
 
+const clearSessionPushTokenIfMatches = `-- name: ClearSessionPushTokenIfMatches :execrows
+UPDATE sessions
+SET push_platform = NULL,
+    push_token = NULL,
+    push_token_updated_at = ?1,
+    push_token_revoked_at = ?1,
+    updated_at = ?1
+WHERE id = ?2 AND push_token = NULLIF(?3, '')
+`
+
+type ClearSessionPushTokenIfMatchesParams struct {
+	Now       utctime.Time
+	ID        string
+	PushToken interface{}
+}
+
+func (q *Queries) ClearSessionPushTokenIfMatches(ctx context.Context, arg ClearSessionPushTokenIfMatchesParams) (int64, error) {
+	result, err := q.db.ExecContext(ctx, clearSessionPushTokenIfMatches, arg.Now, arg.ID, arg.PushToken)
+	if err != nil {
+		return 0, err
+	}
+	return result.RowsAffected()
+}
+
 const clearUserDeletionRequest = `-- name: ClearUserDeletionRequest :execrows
 UPDATE users
 SET deletion_requested_at = NULL,
@@ -211,6 +235,34 @@ func (q *Queries) GetCurrentProfileImageFile(ctx context.Context, userID string)
 	row := q.db.QueryRowContext(ctx, getCurrentProfileImageFile, userID)
 	var i GetCurrentProfileImageFileRow
 	err := row.Scan(&i.ID, &i.ObjectKey)
+	return i, err
+}
+
+const getSessionForPush = `-- name: GetSessionForPush :one
+SELECT s.id, s.push_token, s.revoked_at, s.expires_at, u.status AS user_status
+FROM sessions AS s
+JOIN users AS u ON u.id = s.user_id
+WHERE s.id = ?1
+`
+
+type GetSessionForPushRow struct {
+	ID         string
+	PushToken  sql.NullString
+	RevokedAt  utctime.Time
+	ExpiresAt  utctime.Time
+	UserStatus string
+}
+
+func (q *Queries) GetSessionForPush(ctx context.Context, id string) (GetSessionForPushRow, error) {
+	row := q.db.QueryRowContext(ctx, getSessionForPush, id)
+	var i GetSessionForPushRow
+	err := row.Scan(
+		&i.ID,
+		&i.PushToken,
+		&i.RevokedAt,
+		&i.ExpiresAt,
+		&i.UserStatus,
+	)
 	return i, err
 }
 

@@ -3,6 +3,7 @@
 package db_test
 
 import (
+	"context"
 	"fmt"
 	"io/fs"
 	"slices"
@@ -142,41 +143,43 @@ func TestAuthMigrationDownRestoresSkeleton(t *testing.T) {
 	if err != nil {
 		t.Fatalf("new provider: %v", err)
 	}
-	if _, err := provider.Down(ctx); err != nil {
-		t.Fatalf("Down() 0005 error = %v", err)
-	}
-	if tableExists(t, database, "user_account_deletion_audits") {
-		t.Error("deletion audit table still present after Down")
-	}
-	if _, err := provider.Down(ctx); err != nil {
-		t.Fatalf("Down() 0004 error = %v", err)
-	}
-	if tableExists(t, database, "stored_files") {
-		t.Error("stored_files still present after Down")
-	}
-	if _, err := provider.Down(ctx); err != nil {
-		t.Fatalf("Down() 0003 error = %v", err)
-	}
-	if tableExists(t, database, "user_profiles") || tableExists(t, database, "external_identities") {
-		t.Error("oidc tables still present after Down")
-	}
-	if _, err := provider.Down(ctx); err != nil {
-		t.Fatalf("Down() 0002 error = %v", err)
-	}
+	dropToSkeleton(ctx, t, provider, database)
 
-	if tableExists(t, database, "password_credentials") {
-		t.Error("password_credentials still present after Down")
-	}
 	if columns := tableColumns(t, database, "users"); !slices.Equal(columns, []string{"id", "email", "created_at", "updated_at"}) {
 		t.Errorf("users columns after Down = %v, want the 0001 shape", columns)
 	}
-	for range 4 {
+	for range 5 {
 		if _, err := provider.Up(ctx); err != nil {
 			t.Fatalf("Up() after Down error = %v", err)
 		}
 	}
 	if !tableExists(t, database, "password_credentials") || !tableExists(t, database, "user_profiles") {
 		t.Error("auth tables missing after re-Up")
+	}
+}
+
+// dropToSkeleton walks every migration down and checks what survived.
+func dropToSkeleton(ctx context.Context, t *testing.T, provider *goose.Provider, database *db.Database) {
+	t.Helper()
+	steps := []struct {
+		version string
+		gone    []string
+	}{
+		{"0006", []string{"email_verification_tokens", "password_reset_tokens"}},
+		{"0005", []string{"user_account_deletion_audits"}},
+		{"0004", []string{"stored_files"}},
+		{"0003", []string{"user_profiles", "external_identities"}},
+		{"0002", []string{"password_credentials"}},
+	}
+	for _, step := range steps {
+		if _, err := provider.Down(ctx); err != nil {
+			t.Fatalf("Down() %s error = %v", step.version, err)
+		}
+		for _, table := range step.gone {
+			if tableExists(t, database, table) {
+				t.Errorf("%s still present after Down %s", table, step.version)
+			}
+		}
 	}
 }
 

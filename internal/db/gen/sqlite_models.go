@@ -12,6 +12,17 @@ import (
 	utctime "github.com/fikrilal/go-core-kit/internal/platform/db/utctime"
 )
 
+type EmailVerificationToken struct {
+	ID        string
+	UserID    string
+	TokenHash string
+	ExpiresAt utctime.Time
+	UsedAt    utctime.Time
+	RevokedAt utctime.Time
+	CreatedAt utctime.Time
+	UpdatedAt utctime.Time
+}
+
 type ExternalIdentity struct {
 	ID        string
 	Provider  string
@@ -27,6 +38,17 @@ type PasswordCredential struct {
 	PasswordHash string
 	CreatedAt    utctime.Time
 	UpdatedAt    utctime.Time
+}
+
+type PasswordResetToken struct {
+	ID        string
+	UserID    string
+	TokenHash string
+	ExpiresAt utctime.Time
+	UsedAt    utctime.Time
+	RevokedAt utctime.Time
+	CreatedAt utctime.Time
+	UpdatedAt utctime.Time
 }
 
 type RefreshToken struct {
