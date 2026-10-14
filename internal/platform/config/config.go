@@ -64,6 +64,9 @@ type Config struct {
 	// it mirrors the reference's provider-configured check.
 	PushEnabled bool `env:"PUSH_ENABLED" envDefault:"false"`
 
+	// WorkerHTTPPort is the worker's probe listener; the API keeps HTTP_PORT.
+	WorkerHTTPPort int `env:"WORKER_HTTP_PORT" envDefault:"8081"`
+
 	StorageS3Endpoint        string `env:"STORAGE_S3_ENDPOINT"`
 	StorageS3Region          string `env:"STORAGE_S3_REGION"`
 	StorageS3Bucket          string `env:"STORAGE_S3_BUCKET"`
@@ -113,6 +116,9 @@ func (c Config) Validate() error {
 	}
 	if c.HTTPPort < 1 || c.HTTPPort > 65535 {
 		return fmt.Errorf("HTTP_PORT %d is out of range 1-65535", c.HTTPPort)
+	}
+	if c.WorkerHTTPPort < 1 || c.WorkerHTTPPort > 65535 {
+		return fmt.Errorf("WORKER_HTTP_PORT %d is out of range 1-65535", c.WorkerHTTPPort)
 	}
 	if !c.LogLevel.valid() {
 		return fmt.Errorf("LOG_LEVEL %q is not one of: debug, info, warn, error", c.LogLevel)

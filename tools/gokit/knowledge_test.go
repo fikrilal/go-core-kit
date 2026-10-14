@@ -60,7 +60,10 @@ func TestPlannedPathsLeaveShippedFeaturesChecked(t *testing.T) {
 	if slices.Contains(plannedPaths, "internal/features/") {
 		t.Fatal("internal/features/ is still exempt after the feature shipped")
 	}
-	for _, path := range []string{"cmd/worker/", "internal/shared/"} {
+	if slices.Contains(plannedPaths, "cmd/worker/") {
+		t.Fatal("cmd/worker/ is still exempt after the worker shipped")
+	}
+	for _, path := range []string{"internal/shared/"} {
 		if !slices.Contains(plannedPaths, path) {
 			t.Errorf("plannedPaths missing %s", path)
 		}

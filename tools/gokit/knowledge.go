@@ -23,7 +23,7 @@ var (
 )
 
 // plannedPaths are documented in the AGENTS.md map before their phase lands; shrink as phases ship.
-var plannedPaths = []string{"cmd/worker/", "internal/shared/"}
+var plannedPaths = []string{"internal/shared/"}
 
 var indexFilePrefixes = []string{"docs/", "_WIP/", "cmd/", "internal/", "db/", "tools/"}
 

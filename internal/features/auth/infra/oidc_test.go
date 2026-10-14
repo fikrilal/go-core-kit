@@ -142,7 +142,7 @@ func TestGoogleVerifierRejections(t *testing.T) {
 
 	cases := map[string]string{
 		"garbage":          "not-a-token",
-		"tampered":         validToken[:len(validToken)-2] + "AA",
+		"tampered":         tamperedToken(validToken),
 		"wrong audience":   f.sign(t, map[string]any{"aud": "someone-else"}),
 		"wrong issuer":     f.sign(t, map[string]any{"iss": "https://evil.example"}),
 		"expired":          f.sign(t, map[string]any{"exp": oidcMoment.Add(-time.Minute).Unix()}),
@@ -158,6 +158,17 @@ func TestGoogleVerifierRejections(t *testing.T) {
 			}
 		})
 	}
+}
+
+// tamperedToken flips a signature character whose bits are significant: the
+// final base64url character drops low bits, so mutating it can be a no-op.
+func tamperedToken(token string) string {
+	index := len(token) - 10
+	replacement := byte('A')
+	if token[index] == 'A' {
+		replacement = 'B'
+	}
+	return token[:index] + string(replacement) + token[index+1:]
 }
 
 func TestGoogleVerifierNotConfiguredAndUnknownProvider(t *testing.T) {

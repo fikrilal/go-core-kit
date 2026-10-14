@@ -27,7 +27,7 @@ Rules: findings gate on **new vs baseline**, and updating a baseline requires ex
 
 ## Current Focus
 
-**Phase 4 complete (4.1–4.5 landed).** Next product work: **Phase 5 — worker bootstrap** (unblocks 3.6/3.7), then Phase 7's pg engine lane.
+**Phase 5 in progress: 5.1 landed.** Next: **5.2 email jobs + Resend adapter** (unblocks 3.6/3.7), then 5.3 push jobs, 5.4 account-deletion finalize.
 
 Readability note 01 has landed.
 
@@ -135,7 +135,7 @@ Exit gate: contract suite green for users/me operations.
 
 ## Phase 5 — Worker + jobs
 
-- [ ] 5.1 Worker bootstrap: asynq server, retries/backoff, OTel propagation, `/health` + `/ready`
+- [x] 5.1 Worker bootstrap: asynq server, retries/backoff, `/health` + `/ready` — landed 2026-10-13; `cmd/worker` + `internal/platform/queue` (name validation, `__meta` envelope, `REDIS_URL` options, producer/server, jittered 5-attempt retry policy), probes on `WORKER_HTTP_PORT`, drain on cancel; OTel propagation still pending the otel package
 - [ ] 5.2 Email jobs + Resend adapter (unblocks 3.6/3.7)
 - [ ] 5.3 Push jobs + FCM adapter
 - [ ] 5.4 Account deletion jobs (grace period)
