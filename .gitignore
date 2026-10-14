@@ -29,3 +29,5 @@ coverage.out
 
 # Local agent mods (skills under .commandcode/skills are tracked)
 .commandcode/mods/
+/worker
+/api
