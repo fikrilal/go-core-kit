@@ -48,6 +48,21 @@ SET push_platform = NULL,
     updated_at = sqlc.arg(now)
 WHERE id = sqlc.arg(id) AND user_id = sqlc.arg(user_id);
 
+-- name: GetSessionForPush :one
+SELECT s.id, s.push_token, s.revoked_at, s.expires_at, u.status AS user_status
+FROM sessions AS s
+JOIN users AS u ON u.id = s.user_id
+WHERE s.id = sqlc.arg(id);
+
+-- name: ClearSessionPushTokenIfMatches :execrows
+UPDATE sessions
+SET push_platform = NULL,
+    push_token = NULL,
+    push_token_updated_at = sqlc.arg(now),
+    push_token_revoked_at = sqlc.arg(now),
+    updated_at = sqlc.arg(now)
+WHERE id = sqlc.arg(id) AND push_token = NULLIF(sqlc.arg(push_token), '');
+
 -- name: CreateStoredFile :exec
 INSERT INTO stored_files (id, owner_user_id, purpose, status, bucket, object_key, content_type, size_bytes, trace_id, created_at, updated_at)
 VALUES (

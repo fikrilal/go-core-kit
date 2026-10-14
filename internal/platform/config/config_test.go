@@ -138,22 +138,23 @@ func TestLoadProdRequiresJSONLogs(t *testing.T) {
 	}
 }
 
-func TestLoadPushEnabledDefaultsOffAndParsesOverride(t *testing.T) {
+func TestLoadFCMPushSettings(t *testing.T) {
 	setRequired(t)
 	cfg, err := config.Load()
 	if err != nil {
 		t.Fatalf("Load() error = %v", err)
 	}
-	if cfg.PushEnabled {
-		t.Error("PushEnabled = true by default, want false")
+	if cfg.FCMProjectID != "" || cfg.FCMServiceAccount != "" {
+		t.Error("FCM settings should default to empty")
 	}
 
-	t.Setenv("PUSH_ENABLED", "true")
+	t.Setenv("FCM_PROJECT_ID", "demo")
+	t.Setenv("FCM_SERVICE_ACCOUNT_JSON", `{"client_email":"worker@demo.iam"}`)
 	cfg, err = config.Load()
 	if err != nil {
 		t.Fatalf("Load() error = %v", err)
 	}
-	if !cfg.PushEnabled {
-		t.Error("PushEnabled = false after PUSH_ENABLED=true")
+	if cfg.FCMProjectID != "demo" || cfg.FCMServiceAccount == "" {
+		t.Errorf("FCM settings = %q/%q, want the parsed values", cfg.FCMProjectID, cfg.FCMServiceAccount)
 	}
 }

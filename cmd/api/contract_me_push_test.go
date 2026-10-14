@@ -17,7 +17,10 @@ const pushTokenFixture = "fcm-registration-token-1"
 
 func withPush(t *testing.T) *authFixture {
 	t.Helper()
-	return newAuthFixtureWith(t, func(cfg *config.Config) { cfg.PushEnabled = true })
+	return newAuthFixtureWith(t, func(cfg *config.Config) {
+		cfg.FCMProjectID = "demo"
+		cfg.FCMServiceAccount = `{"client_email":"worker@demo.iam"}`
+	})
 }
 
 func (f *authFixture) upsertPushToken(t *testing.T, token string, body any) (*http.Request, contracttest.Response) {

@@ -132,3 +132,25 @@ type ProfilePatch struct {
 func (p ProfilePatch) Defined() bool {
 	return p.DisplayName.Present || p.GivenName.Present || p.FamilyName.Present
 }
+
+// Push job outcomes and skip reasons mirror the reference's result shape.
+const (
+	PushOutcomeSent    = "sent"
+	PushOutcomeSkipped = "skipped"
+
+	PushReasonSessionNotFound = "session_not_found"
+	PushReasonSessionRevoked  = "session_revoked"
+	PushReasonSessionExpired  = "session_expired"
+	PushReasonUserInactive    = "user_inactive"
+	PushReasonNoToken         = "no_token"
+	PushReasonInvalidToken    = "invalid_token"
+)
+
+// PushSession is the session state a push job reads.
+type PushSession struct {
+	ID         string
+	PushToken  string
+	Revoked    bool
+	ExpiresAt  time.Time
+	UserStatus string
+}

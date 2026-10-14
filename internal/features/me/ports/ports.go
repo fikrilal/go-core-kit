@@ -6,6 +6,7 @@ import (
 	"time"
 
 	"github.com/fikrilal/go-core-kit/internal/features/me/domain"
+	"github.com/fikrilal/go-core-kit/internal/platform/push"
 	"github.com/fikrilal/go-core-kit/internal/platform/storage"
 )
 
@@ -88,6 +89,11 @@ type CancelAccountDeletionInput struct {
 	Now       time.Time
 }
 
+// PushSender delivers one push and reports the provider message id.
+type PushSender interface {
+	SendToToken(ctx context.Context, message push.Message) (string, error)
+}
+
 // ProfileImageStorage signs client-side object access and inspects objects.
 type ProfileImageStorage interface {
 	Enabled() bool
@@ -115,4 +121,6 @@ type Repository interface {
 	ClearProfileImage(ctx context.Context, userID string, now time.Time) (clearedObjectKey string, found bool, err error)
 	RequestAccountDeletion(ctx context.Context, in RequestAccountDeletionInput) (domain.DeletionKind, error)
 	CancelAccountDeletion(ctx context.Context, in CancelAccountDeletionInput) (domain.DeletionKind, error)
+	SessionForPush(ctx context.Context, sessionID string) (domain.PushSession, bool, error)
+	ClearSessionPushTokenIfMatches(ctx context.Context, sessionID, token string, now time.Time) error
 }

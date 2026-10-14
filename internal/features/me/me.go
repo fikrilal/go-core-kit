@@ -20,6 +20,7 @@ import (
 	"github.com/fikrilal/go-core-kit/internal/platform/clock"
 	"github.com/fikrilal/go-core-kit/internal/platform/db"
 	"github.com/fikrilal/go-core-kit/internal/platform/httpx"
+	"github.com/fikrilal/go-core-kit/internal/platform/push"
 	"github.com/fikrilal/go-core-kit/internal/platform/redis"
 	"github.com/fikrilal/go-core-kit/internal/platform/storage"
 )
@@ -85,6 +86,22 @@ func Register(router *httpx.Router, deps Deps) {
 	router.Handle(requestDeletion, deps.Guard.Require(router.Idempotent(requestDeletion, handlers.requestAccountDeletion)))
 	cancelDeletion := httpx.Operation{Method: http.MethodPost, Path: "/v1/me/account-deletion/cancel", ID: "users.me.accountDeletion.cancel"}
 	router.Handle(cancelDeletion, deps.Guard.Require(router.Idempotent(cancelDeletion, handlers.cancelAccountDeletion)))
+}
+
+// PushJobDeps are the push handler dependencies.
+type PushJobDeps struct {
+	Database *db.Database
+	Push     push.Sender
+	Clock    clock.Clock
+}
+
+// NewPushJobs builds the push.send handler for the worker.
+func NewPushJobs(deps PushJobDeps) *app.PushJobs {
+	return app.NewPushJobs(app.PushJobDeps{
+		Repository: infra.NewRepository(deps.Database),
+		Push:       deps.Push,
+		Clock:      deps.Clock,
+	})
 }
 
 // uploadLimit converts the feature-level config into the limiter's shape.

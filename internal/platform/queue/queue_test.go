@@ -3,6 +3,7 @@ package queue_test
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"io"
 	"testing"
 	"time"
@@ -163,6 +164,39 @@ func TestEnqueueConsumeRoundTrip(t *testing.T) {
 		}
 	case <-time.After(10 * time.Second):
 		t.Fatal("job was not consumed")
+	}
+}
+
+func TestInspectorDeletesScheduledTask(t *testing.T) {
+	mini := miniredis.RunT(t)
+	options, err := queue.Options("redis://" + mini.Addr() + "/0")
+	if err != nil {
+		t.Fatalf("Options() error = %v", err)
+	}
+	producer := queue.NewProducer(options)
+	t.Cleanup(func() { _ = producer.Close() })
+	inspector := queue.NewInspector(options)
+	t.Cleanup(func() { _ = inspector.Close() })
+	raw := asynq.NewInspector(options)
+	t.Cleanup(func() { _ = raw.Close() })
+
+	const taskID = "finalize:user-1"
+	if err := producer.Enqueue(t.Context(), queue.DefaultQueue, "test.echo", map[string]any{},
+		queue.Meta{}, asynq.TaskID(taskID), asynq.ProcessIn(time.Hour)); err != nil {
+		t.Fatalf("Enqueue() error = %v", err)
+	}
+	if _, err := raw.GetTaskInfo(queue.DefaultQueue, taskID); err != nil {
+		t.Fatalf("scheduled task not found: %v", err)
+	}
+
+	if err := inspector.DeleteTask(queue.DefaultQueue, taskID); err != nil {
+		t.Fatalf("DeleteTask() error = %v", err)
+	}
+	if _, err := raw.GetTaskInfo(queue.DefaultQueue, taskID); !errors.Is(err, asynq.ErrTaskNotFound) {
+		t.Fatalf("task still present after delete: %v", err)
+	}
+	if err := inspector.DeleteTask(queue.DefaultQueue, taskID); err != nil {
+		t.Fatalf("repeat DeleteTask() error = %v, want nil for a missing task", err)
 	}
 }
 

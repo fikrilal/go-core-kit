@@ -69,10 +69,6 @@ type Config struct {
 	EmailReplyTo string `env:"EMAIL_REPLY_TO"`
 	PublicAppURL string `env:"PUBLIC_APP_URL"`
 
-	// PushEnabled gates push token registration until the FCM adapter swaps in
-	// (5.3); the API gate and the worker both follow it.
-	PushEnabled bool `env:"PUSH_ENABLED" envDefault:"false"`
-
 	// Push (FCM): the project id plus credentials enable the adapter; the API
 	// gate and the worker both follow this. Credentials accept raw JSON, base64
 	// of it, or a file path.

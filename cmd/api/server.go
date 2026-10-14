@@ -18,6 +18,7 @@ import (
 	"github.com/fikrilal/go-core-kit/internal/platform/db"
 	"github.com/fikrilal/go-core-kit/internal/platform/health"
 	"github.com/fikrilal/go-core-kit/internal/platform/httpx"
+	"github.com/fikrilal/go-core-kit/internal/platform/push"
 	"github.com/fikrilal/go-core-kit/internal/platform/redis"
 	"github.com/fikrilal/go-core-kit/internal/platform/storage"
 )
@@ -71,8 +72,8 @@ func newServer(cfg config.Config, logger *slog.Logger, database *db.Database, rd
 		Clock:    clock.System{},
 		Guard:    guard,
 		Storage:  objectStorage,
-		// PushEnabled mirrors the reference's provider gate until 5.3.
-		PushEnabled: cfg.PushEnabled,
+		// The push gate follows the FCM credentials, like the reference.
+		PushEnabled: push.New(push.Options{ProjectID: cfg.FCMProjectID, Credentials: cfg.FCMServiceAccount}, clock.System{}).Enabled(),
 		UploadUserLimit: me.UploadLimitConfig{
 			MaxAttempts: cfg.UsersProfileImageUploadUserMaxAttempts,
 			Window:      time.Duration(cfg.UsersProfileImageUploadUserWindowSeconds) * time.Second,

@@ -369,6 +369,38 @@ func (r *Repository) ClearProfileImage(ctx context.Context, userID string, now t
 	return clearedObjectKey, found, nil
 }
 
+// SessionForPush loads the state a push job needs.
+func (r *Repository) SessionForPush(ctx context.Context, sessionID string) (domain.PushSession, bool, error) {
+	row, err := r.queries.GetSessionForPush(ctx, sessionID)
+	if errors.Is(err, db.ErrNoRows) {
+		return domain.PushSession{}, false, nil
+	}
+	if err != nil {
+		return domain.PushSession{}, false, fmt.Errorf("find session for push: %w", err)
+	}
+	return domain.PushSession{
+		ID:         row.ID,
+		PushToken:  row.PushToken.String,
+		Revoked:    !row.RevokedAt.IsZero(),
+		ExpiresAt:  row.ExpiresAt.Time,
+		UserStatus: row.UserStatus,
+	}, true, nil
+}
+
+// ClearSessionPushTokenIfMatches clears the token only when it still matches
+// what the worker sent, so a concurrent registration is never cleared.
+func (r *Repository) ClearSessionPushTokenIfMatches(ctx context.Context, sessionID, token string, now time.Time) error {
+	stamp := utctime.Time{Time: now}
+	if _, err := r.queries.ClearSessionPushTokenIfMatches(ctx, gen.ClearSessionPushTokenIfMatchesParams{
+		Now:       stamp,
+		ID:        sessionID,
+		PushToken: token,
+	}); err != nil {
+		return fmt.Errorf("clear session push token: %w", err)
+	}
+	return nil
+}
+
 // RequestAccountDeletion schedules the deletion and records the audit row.
 // A repeated request and the last-admin invariant both leave the row alone.
 func (r *Repository) RequestAccountDeletion(ctx context.Context, in ports.RequestAccountDeletionInput) (domain.DeletionKind, error) {

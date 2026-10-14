@@ -65,10 +65,24 @@ type fakeRepository struct {
 	clearFound      bool
 	clearErr        error
 
+	pushSession      domain.PushSession
+	pushSessionFound bool
+	pushSessionErr   error
+	clearedPush      []string
+
 	deletionKind     domain.DeletionKind
 	deletionErr      error
 	deletionRequests []ports.RequestAccountDeletionInput
 	deletionCancels  []ports.CancelAccountDeletionInput
+}
+
+func (f *fakeRepository) SessionForPush(context.Context, string) (domain.PushSession, bool, error) {
+	return f.pushSession, f.pushSessionFound, f.pushSessionErr
+}
+
+func (f *fakeRepository) ClearSessionPushTokenIfMatches(_ context.Context, _, token string, _ time.Time) error {
+	f.clearedPush = append(f.clearedPush, token)
+	return nil
 }
 
 func (f *fakeRepository) RequestAccountDeletion(_ context.Context, in ports.RequestAccountDeletionInput) (domain.DeletionKind, error) {
