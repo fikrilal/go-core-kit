@@ -6,6 +6,7 @@ import (
 	"strings"
 
 	"github.com/fikrilal/go-core-kit/internal/features/auth/domain"
+	"github.com/fikrilal/go-core-kit/internal/features/auth/ports"
 )
 
 // VerifyEmail consumes a verification token and marks the account verified.
@@ -16,7 +17,7 @@ func (s *Service) VerifyEmail(ctx context.Context, rawToken string) error {
 	// An empty token is the DTO's `required` validation, not this layer's job.
 	token := strings.TrimSpace(rawToken)
 	now := s.clock.Now()
-	state, found, err := s.repo.EmailVerificationTokenByHash(ctx, domain.HashEmailVerificationToken(token))
+	state, found, err := s.repo.TokenByHash(ctx, ports.TokenVerification, domain.HashEmailVerificationToken(token))
 	if err != nil {
 		return fmt.Errorf("auth: verify email: %w", err)
 	}

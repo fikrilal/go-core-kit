@@ -713,22 +713,29 @@ func (r *Repository) CreateSession(ctx context.Context, in ports.NewSessionInput
 	return nil
 }
 
-// EmailVerificationTokenByHash loads one live verification token.
-func (r *Repository) EmailVerificationTokenByHash(ctx context.Context, tokenHash string) (ports.EmailVerificationTokenState, bool, error) {
-	row, err := r.queries.GetEmailVerificationTokenByHash(ctx, tokenHash)
-	if errors.Is(err, db.ErrNoRows) {
-		return ports.EmailVerificationTokenState{}, false, nil
+// TokenByHash loads one live token of the given kind.
+func (r *Repository) TokenByHash(ctx context.Context, kind ports.TokenKind, tokenHash string) (ports.TokenState, bool, error) {
+	switch kind {
+	case ports.TokenVerification:
+		row, err := r.queries.GetEmailVerificationTokenByHash(ctx, tokenHash)
+		if errors.Is(err, db.ErrNoRows) {
+			return ports.TokenState{}, false, nil
+		}
+		if err != nil {
+			return ports.TokenState{}, false, fmt.Errorf("find verification token: %w", err)
+		}
+		return ports.TokenState{ID: row.ID, UserID: row.UserID, ExpiresAt: row.ExpiresAt.Time, UsedAt: row.UsedAt.Time, UserStatus: row.UserStatus}, true, nil
+	case ports.TokenPasswordReset:
+		row, err := r.queries.GetPasswordResetTokenByHash(ctx, tokenHash)
+		if errors.Is(err, db.ErrNoRows) {
+			return ports.TokenState{}, false, nil
+		}
+		if err != nil {
+			return ports.TokenState{}, false, fmt.Errorf("find reset token: %w", err)
+		}
+		return ports.TokenState{ID: row.ID, UserID: row.UserID, ExpiresAt: row.ExpiresAt.Time, UsedAt: row.UsedAt.Time, UserStatus: row.UserStatus}, true, nil
 	}
-	if err != nil {
-		return ports.EmailVerificationTokenState{}, false, fmt.Errorf("find verification token: %w", err)
-	}
-	return ports.EmailVerificationTokenState{
-		ID:         row.ID,
-		UserID:     row.UserID,
-		ExpiresAt:  row.ExpiresAt.Time,
-		UsedAt:     row.UsedAt.Time,
-		UserStatus: row.UserStatus,
-	}, true, nil
+	return ports.TokenState{}, false, fmt.Errorf("unknown token kind %q", kind)
 }
 
 // ConsumeEmailVerificationTokenAndVerifyEmail marks the token used and the
@@ -765,4 +772,67 @@ func (r *Repository) ConsumeEmailVerificationTokenAndVerifyEmail(ctx context.Con
 		return false, fmt.Errorf("consume verification token: %w", err)
 	}
 	return consumed, nil
+}
+
+// ConsumePasswordResetTokenAndSetPassword marks the token used, replaces the
+// credential, and signs the account out, all in one transaction. Sessions cascade
+// to their refresh tokens.
+func (r *Repository) ConsumePasswordResetTokenAndSetPassword(ctx context.Context, in ports.PasswordResetConsumption) (bool, error) {
+	stamp := utctime.Time{Time: in.Now}
+	consumed := false
+	err := r.database.InTx(ctx, func(tx db.Tx) error {
+		queries := gen.New(tx)
+		updated, err := queries.MarkPasswordResetTokenUsed(ctx, gen.MarkPasswordResetTokenUsedParams{
+			UsedAt:    stamp,
+			UpdatedAt: stamp,
+			ID:        in.TokenID,
+		})
+		if err != nil {
+			return fmt.Errorf("consume reset token: %w", err)
+		}
+		if updated != 1 {
+			// A concurrent request consumed it; leave the credential alone.
+			return nil
+		}
+		consumed = true
+		if _, err := queries.GetPasswordCredentialHash(ctx, in.UserID); errors.Is(err, db.ErrNoRows) {
+			// An account without a credential (OIDC only) sets one here.
+			if err := queries.CreatePasswordCredential(ctx, gen.CreatePasswordCredentialParams{
+				UserID:       in.UserID,
+				PasswordHash: in.PasswordHash,
+				CreatedAt:    stamp,
+				UpdatedAt:    stamp,
+			}); err != nil {
+				return fmt.Errorf("create password credential: %w", err)
+			}
+		} else if err != nil {
+			return fmt.Errorf("read password credential: %w", err)
+		} else if err := queries.UpdatePasswordCredentialHash(ctx, gen.UpdatePasswordCredentialHashParams{
+			PasswordHash: in.PasswordHash,
+			UpdatedAt:    stamp,
+			UserID:       in.UserID,
+		}); err != nil {
+			return fmt.Errorf("update password credential: %w", err)
+		}
+		if err := queries.DeleteUserSessions(ctx, in.UserID); err != nil {
+			return fmt.Errorf("delete sessions: %w", err)
+		}
+		return nil
+	})
+	if err != nil {
+		return false, fmt.Errorf("consume reset token: %w", err)
+	}
+	return consumed, nil
+}
+
+// UserEmailStateByEmail loads an account's email state for the reset request.
+func (r *Repository) UserEmailStateByEmail(ctx context.Context, email string) (domain.UserEmailState, bool, error) {
+	row, err := r.queries.GetUserEmailStateByEmail(ctx, email)
+	if errors.Is(err, db.ErrNoRows) {
+		return domain.UserEmailState{}, false, nil
+	}
+	if err != nil {
+		return domain.UserEmailState{}, false, fmt.Errorf("find user by email: %w", err)
+	}
+	return domain.UserEmailState{ID: row.ID, Email: row.Email, Status: row.Status}, true, nil
 }

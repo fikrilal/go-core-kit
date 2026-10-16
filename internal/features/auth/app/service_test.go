@@ -24,7 +24,11 @@ const (
 )
 
 type fakeRepository struct {
-	verificationToken      ports.EmailVerificationTokenState
+	resetToken             ports.TokenState
+	resetTokenFound        bool
+	resetConsumed          bool
+	resetPasswords         []ports.PasswordResetConsumption
+	verificationToken      ports.TokenState
 	verificationTokenFound bool
 	verificationConsumed   bool
 	verifiedUsers          []string
@@ -78,7 +82,18 @@ type fakeRepository struct {
 	tokenErr        error
 }
 
-func (f *fakeRepository) EmailVerificationTokenByHash(context.Context, string) (ports.EmailVerificationTokenState, bool, error) {
+func (f *fakeRepository) ConsumePasswordResetTokenAndSetPassword(_ context.Context, in ports.PasswordResetConsumption) (bool, error) {
+	if !f.resetConsumed {
+		return false, nil
+	}
+	f.resetPasswords = append(f.resetPasswords, in)
+	return true, nil
+}
+
+func (f *fakeRepository) TokenByHash(_ context.Context, kind ports.TokenKind, _ string) (ports.TokenState, bool, error) {
+	if kind == ports.TokenPasswordReset {
+		return f.resetToken, f.resetTokenFound, nil
+	}
 	return f.verificationToken, f.verificationTokenFound, nil
 }
 
@@ -172,6 +187,10 @@ func (f *fakeRepository) GetMeView(context.Context, string) (domain.MeView, bool
 }
 
 func (f *fakeRepository) FindUserEmailState(context.Context, string) (domain.UserEmailState, bool, error) {
+	return f.emailState, f.emailStateFound, f.emailStateErr
+}
+
+func (f *fakeRepository) UserEmailStateByEmail(context.Context, string) (domain.UserEmailState, bool, error) {
 	return f.emailState, f.emailStateFound, f.emailStateErr
 }
 

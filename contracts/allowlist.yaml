@@ -2,8 +2,6 @@
 # Grouped by the phase that lands them. The coverage test fails when this drifts.
 operations:
   # Phase 3 — auth slice
-  - auth.password.reset.request
-  - auth.password.reset.confirm
   # Admin — deferred
   - admin.whoami.get
   - admin.users.list

@@ -54,17 +54,21 @@ type Config struct {
 	AuthLoginWindowSeconds     int `env:"AUTH_LOGIN_WINDOW_SECONDS" envDefault:"60"`
 	AuthLoginBlockSeconds      int `env:"AUTH_LOGIN_BLOCK_SECONDS" envDefault:"900"`
 	// The verification resend route is rate limited per account, like login.
-	AuthEmailResendMaxAttempts      int    `env:"AUTH_EMAIL_RESEND_MAX_ATTEMPTS" envDefault:"3"`
-	AuthEmailResendWindowSeconds    int    `env:"AUTH_EMAIL_RESEND_WINDOW_SECONDS" envDefault:"3600"`
-	AuthEmailResendBlockSeconds     int    `env:"AUTH_EMAIL_RESEND_BLOCK_SECONDS" envDefault:"3600"`
-	AuthIssuer                      string `env:"AUTH_ISSUER"`
-	AuthAudience                    string `env:"AUTH_AUDIENCE"`
-	AuthSigningKeysJSON             string `env:"AUTH_SIGNING_KEYS_JSON"`
-	AuthSigningKeysJSONBase64       string `env:"AUTH_SIGNING_KEYS_JSON_BASE64"`
-	AuthOIDCGoogleClientIDs         string `env:"AUTH_OIDC_GOOGLE_CLIENT_IDS"`
-	AuthOIDCGoogleJWKSURL           string `env:"AUTH_OIDC_GOOGLE_JWKS_URL"`
-	AuthEmailVerificationTTLSeconds int    `env:"AUTH_EMAIL_VERIFICATION_TOKEN_TTL_SECONDS" envDefault:"86400"`
-	AuthPasswordResetTTLSeconds     int    `env:"AUTH_PASSWORD_RESET_TOKEN_TTL_SECONDS" envDefault:"1800"`
+	AuthEmailResendMaxAttempts   int `env:"AUTH_EMAIL_RESEND_MAX_ATTEMPTS" envDefault:"3"`
+	AuthEmailResendWindowSeconds int `env:"AUTH_EMAIL_RESEND_WINDOW_SECONDS" envDefault:"3600"`
+	AuthEmailResendBlockSeconds  int `env:"AUTH_EMAIL_RESEND_BLOCK_SECONDS" envDefault:"3600"`
+	// The password reset request route is rate limited per address, like login.
+	AuthPasswordResetRequestMaxAttempts   int    `env:"AUTH_PASSWORD_RESET_REQUEST_MAX_ATTEMPTS" envDefault:"3"`
+	AuthPasswordResetRequestWindowSeconds int    `env:"AUTH_PASSWORD_RESET_REQUEST_WINDOW_SECONDS" envDefault:"3600"`
+	AuthPasswordResetRequestBlockSeconds  int    `env:"AUTH_PASSWORD_RESET_REQUEST_BLOCK_SECONDS" envDefault:"3600"`
+	AuthIssuer                            string `env:"AUTH_ISSUER"`
+	AuthAudience                          string `env:"AUTH_AUDIENCE"`
+	AuthSigningKeysJSON                   string `env:"AUTH_SIGNING_KEYS_JSON"`
+	AuthSigningKeysJSONBase64             string `env:"AUTH_SIGNING_KEYS_JSON_BASE64"`
+	AuthOIDCGoogleClientIDs               string `env:"AUTH_OIDC_GOOGLE_CLIENT_IDS"`
+	AuthOIDCGoogleJWKSURL                 string `env:"AUTH_OIDC_GOOGLE_JWKS_URL"`
+	AuthEmailVerificationTTLSeconds       int    `env:"AUTH_EMAIL_VERIFICATION_TOKEN_TTL_SECONDS" envDefault:"86400"`
+	AuthPasswordResetTTLSeconds           int    `env:"AUTH_PASSWORD_RESET_TOKEN_TTL_SECONDS" envDefault:"1800"`
 
 	// Email (Resend) enables when the API key and sender are set; the public
 	// app URL builds the links inside the emails.
@@ -161,6 +165,9 @@ func (c Config) Validate() error {
 		{"AUTH_EMAIL_RESEND_MAX_ATTEMPTS", c.AuthEmailResendMaxAttempts},
 		{"AUTH_EMAIL_RESEND_WINDOW_SECONDS", c.AuthEmailResendWindowSeconds},
 		{"AUTH_EMAIL_RESEND_BLOCK_SECONDS", c.AuthEmailResendBlockSeconds},
+		{"AUTH_PASSWORD_RESET_REQUEST_MAX_ATTEMPTS", c.AuthPasswordResetRequestMaxAttempts},
+		{"AUTH_PASSWORD_RESET_REQUEST_WINDOW_SECONDS", c.AuthPasswordResetRequestWindowSeconds},
+		{"AUTH_PASSWORD_RESET_REQUEST_BLOCK_SECONDS", c.AuthPasswordResetRequestBlockSeconds},
 		{"AUTH_EMAIL_VERIFICATION_TOKEN_TTL_SECONDS", c.AuthEmailVerificationTTLSeconds},
 		{"AUTH_PASSWORD_RESET_TOKEN_TTL_SECONDS", c.AuthPasswordResetTTLSeconds},
 	}

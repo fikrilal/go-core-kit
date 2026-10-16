@@ -30,22 +30,25 @@ const dummyPassword = "dummy-password-for-timing"
 
 // Config carries the auth policy knobs from platform configuration.
 type Config struct {
-	AccessTokenTTL         time.Duration
-	SessionTTL             time.Duration
-	PasswordMinLength      int
-	LoginMaxAttempts       int
-	LoginWindow            time.Duration
-	LoginBlock             time.Duration
-	EmailResendMaxAttempts int
-	EmailResendWindow      time.Duration
-	EmailResendBlock       time.Duration
-	Issuer                 string
-	Audience               string
-	SigningKeysJSON        string
-	SigningKeysJSONBase64  string
-	ProductionLike         bool
-	OIDCGoogleClientIDs    string
-	OIDCGoogleJWKSURL      string
+	AccessTokenTTL          time.Duration
+	SessionTTL              time.Duration
+	PasswordMinLength       int
+	LoginMaxAttempts        int
+	LoginWindow             time.Duration
+	LoginBlock              time.Duration
+	EmailResendMaxAttempts  int
+	EmailResendWindow       time.Duration
+	EmailResendBlock        time.Duration
+	ResetRequestMaxAttempts int
+	ResetRequestWindow      time.Duration
+	ResetRequestBlock       time.Duration
+	Issuer                  string
+	Audience                string
+	SigningKeysJSON         string
+	SigningKeysJSONBase64   string
+	ProductionLike          bool
+	OIDCGoogleClientIDs     string
+	OIDCGoogleJWKSURL       string
 }
 
 // Deps are the auth feature's dependencies.
@@ -96,6 +99,13 @@ func Register(router *httpx.Router, deps Deps) (*platformauth.Guard, error) {
 				Window:      deps.Config.EmailResendWindow,
 				Block:       deps.Config.EmailResendBlock,
 			}),
+			RequestLimiter: infra.NewLimiter(deps.Redis, infra.LimiterConfig{
+				Scope:       "auth:password_reset",
+				Detail:      "Too many password reset requests. Try again later.",
+				MaxAttempts: deps.Config.ResetRequestMaxAttempts,
+				Window:      deps.Config.ResetRequestWindow,
+				Block:       deps.Config.ResetRequestBlock,
+			}),
 			Scheduler:    deps.Scheduler,
 			EmailEnabled: deps.EmailEnabled,
 			Oidc:         infra.NewGoogleIDTokenVerifier(deps.Config.OIDCGoogleClientIDs, deps.Config.OIDCGoogleJWKSURL, deps.Clock),
@@ -122,6 +132,11 @@ func Register(router *httpx.Router, deps Deps) (*platformauth.Guard, error) {
 	// The verification token is the credential, so this route is public; it
 	// carries no idempotency key in the snapshot either.
 	router.HandleFunc(httpx.Operation{Method: http.MethodPost, Path: "/v1/auth/email/verify", ID: "auth.email.verify"}, handlers.verifyEmail)
+	// The reset token is the credential, so this route is public too.
+	router.HandleFunc(httpx.Operation{Method: http.MethodPost, Path: "/v1/auth/password/reset/confirm", ID: "auth.password.reset.confirm"}, handlers.confirmPasswordReset)
+	// Requesting a reset is anonymous and answers the same way for an unknown
+	// address, so the route cannot enumerate accounts.
+	router.HandleFunc(httpx.Operation{Method: http.MethodPost, Path: "/v1/auth/password/reset/request", ID: "auth.password.reset.request"}, handlers.requestPasswordReset)
 	changePassword := httpx.Operation{Method: http.MethodPost, Path: "/v1/auth/password/change", ID: "auth.password.change"}
 	router.Handle(changePassword, guard.Require(router.Idempotent(changePassword, handlers.changePassword)))
 	resendVerification := httpx.Operation{Method: http.MethodPost, Path: "/v1/auth/email/verification/resend", ID: "auth.email.verification.resend"}
@@ -179,6 +194,54 @@ func (h *handlers) resendVerificationEmail(w http.ResponseWriter, r *http.Reques
 			httpx.WriteError(w, r, fmt.Errorf("auth: enqueue verification email: %w", err))
 			return
 		}
+	}
+	httpx.NoContent(w)
+}
+
+// passwordResetRequestRequest carries the address a reset is requested for.
+type passwordResetRequestRequest struct {
+	Email string `json:"email" validate:"required,email"`
+}
+
+// requestPasswordReset enqueues a reset email when the account exists.
+func (h *handlers) requestPasswordReset(w http.ResponseWriter, r *http.Request) {
+	var body passwordResetRequestRequest
+	if err := httpx.Decode(r, &body); err != nil {
+		httpx.WriteError(w, r, err)
+		return
+	}
+	userID, err := h.service.RequestPasswordReset(r.Context(), body.Email)
+	if err != nil {
+		httpx.WriteError(w, r, err)
+		return
+	}
+	if userID != "" {
+		meta := queue.Meta{RequestID: httpx.RequestID(r), TraceID: httpx.RequestID(r)}
+		if err := h.scheduler.EnqueueAt(r.Context(), email.Queue, EmailPasswordResetJob, EmailJobPayload{UserID: userID}, meta, h.clock.Now()); err != nil {
+			httpx.WriteError(w, r, fmt.Errorf("auth: enqueue password reset email: %w", err))
+			return
+		}
+	}
+	httpx.NoContent(w)
+}
+
+// passwordResetConfirmRequest carries the reset token and the new password.
+type passwordResetConfirmRequest struct {
+	Token    string `json:"token" validate:"required"`
+	Password string `json:"password" validate:"required"`
+}
+
+// confirmPasswordReset consumes a reset token and replaces the credential,
+// signing every existing session out.
+func (h *handlers) confirmPasswordReset(w http.ResponseWriter, r *http.Request) {
+	var body passwordResetConfirmRequest
+	if err := httpx.Decode(r, &body); err != nil {
+		httpx.WriteError(w, r, err)
+		return
+	}
+	if err := h.service.ConfirmPasswordReset(r.Context(), body.Token, body.Password); err != nil {
+		httpx.WriteError(w, r, err)
+		return
 	}
 	httpx.NoContent(w)
 }

@@ -18,7 +18,7 @@ func verificationFixture(t *testing.T) (*app.Service, *fakeRepository) {
 	repo := &fakeRepository{
 		verificationConsumed:   true,
 		verificationTokenFound: true,
-		verificationToken: ports.EmailVerificationTokenState{
+		verificationToken: ports.TokenState{
 			ID: "token-1", UserID: "user-1", ExpiresAt: moment.Add(time.Hour), UserStatus: domain.StatusActive,
 		},
 	}
@@ -40,23 +40,23 @@ func TestVerifyEmailProblemCodes(t *testing.T) {
 		name     string
 		found    bool
 		consumed bool
-		state    ports.EmailVerificationTokenState
+		state    ports.TokenState
 		wantCode httpx.Code
 	}{
 		{name: "unknown token", wantCode: httpx.CodeAuthEmailVerificationTokenInvalid},
 		{
 			name: "deleted account", found: true, wantCode: httpx.CodeAuthEmailVerificationTokenInvalid,
-			state: ports.EmailVerificationTokenState{UserStatus: domain.StatusDeleted, ExpiresAt: moment.Add(time.Hour)},
+			state: ports.TokenState{UserStatus: domain.StatusDeleted, ExpiresAt: moment.Add(time.Hour)},
 		},
-		{name: "already used", found: true, state: ports.EmailVerificationTokenState{
+		{name: "already used", found: true, state: ports.TokenState{
 			UserStatus: domain.StatusActive,
 			UsedAt:     moment.Add(-time.Minute), ExpiresAt: moment.Add(time.Hour),
 		}, wantCode: httpx.CodeAuthEmailVerificationTokenExpired},
-		{name: "expired", found: true, state: ports.EmailVerificationTokenState{
+		{name: "expired", found: true, state: ports.TokenState{
 			UserStatus: domain.StatusActive,
 			ExpiresAt:  moment.Add(-time.Second),
 		}, wantCode: httpx.CodeAuthEmailVerificationTokenExpired},
-		{name: "lost the race", found: true, consumed: false, state: ports.EmailVerificationTokenState{
+		{name: "lost the race", found: true, consumed: false, state: ports.TokenState{
 			UserStatus: domain.StatusActive,
 			ExpiresAt:  moment.Add(time.Hour),
 		}, wantCode: httpx.CodeAuthEmailVerificationTokenExpired},

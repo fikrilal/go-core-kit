@@ -20,7 +20,7 @@ func TestContractAuthEmailVerify(t *testing.T) {
 	// the endpoint can be driven without the queue. The hash mirrors
 	// domain.HashEmailVerificationToken: SHA-256, base64url without padding.
 	token := "verify-token-1"
-	seedVerificationToken(t, f, token, time.Now().Add(time.Hour))
+	seedAuthToken(t, f, "email_verification_tokens", "token-1", "verify@example.com", token, time.Now().Add(time.Hour))
 
 	req, resp := f.post(t, "/v1/auth/email/verify", map[string]string{"token": token})
 	if resp.Status != http.StatusNoContent {
@@ -39,17 +39,17 @@ func TestContractAuthEmailVerify(t *testing.T) {
 	assertAuthVerifyProblem(t, missing, http.StatusBadRequest, "VALIDATION_FAILED")
 }
 
-// seedVerificationToken writes a live token for the registered account.
-func seedVerificationToken(t *testing.T, f *authFixture, token string, expiresAt time.Time) {
+// seedAuthToken writes a live token row for the account, hashing the token the
+// way domain.HashEmailVerificationToken and domain.HashPasswordResetToken do.
+func seedAuthToken(t *testing.T, f *authFixture, table, id, email, token string, expiresAt time.Time) {
 	t.Helper()
 	sum := sha256.Sum256([]byte(token))
 	hash := base64.RawURLEncoding.EncodeToString(sum[:])
 	stamp := time.Now().UTC().Format("2006-01-02T15:04:05.000000000Z")
-	if _, err := f.database.SQL().ExecContext(t.Context(),
-		`INSERT INTO email_verification_tokens (id, user_id, token_hash, expires_at, created_at, updated_at)
-		 VALUES ('token-1', (SELECT id FROM users WHERE email = 'verify@example.com'), ?, ?, ?, ?)`,
-		hash, expiresAt.UTC().Format("2006-01-02T15:04:05.000000000Z"), stamp, stamp); err != nil {
-		t.Fatalf("seed verification token: %v", err)
+	query := "INSERT INTO " + table + " (id, user_id, token_hash, expires_at, created_at, updated_at) VALUES (?, (SELECT id FROM users WHERE email = ?), ?, ?, ?, ?)"
+	if _, err := f.database.SQL().ExecContext(t.Context(), query,
+		id, email, hash, expiresAt.UTC().Format("2006-01-02T15:04:05.000000000Z"), stamp, stamp); err != nil {
+		t.Fatalf("seed %s: %v", table, err)
 	}
 }
 

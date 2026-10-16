@@ -23,47 +23,50 @@ type Config struct {
 
 // Deps are the service's collaborators.
 type Deps struct {
-	Repository    ports.Repository
-	Hasher        ports.PasswordHasher
-	Tokens        ports.AccessTokens
-	Limiter       ports.LoginLimiter
-	ResendLimiter ports.LoginLimiter
-	Scheduler     ports.JobScheduler
-	EmailEnabled  bool
-	Oidc          ports.OidcVerifier
-	Clock         clock.Clock
-	DummyHash     string
+	Repository     ports.Repository
+	Hasher         ports.PasswordHasher
+	Tokens         ports.AccessTokens
+	Limiter        ports.LoginLimiter
+	ResendLimiter  ports.LoginLimiter
+	RequestLimiter ports.LoginLimiter
+	Scheduler      ports.JobScheduler
+	EmailEnabled   bool
+	Oidc           ports.OidcVerifier
+	Clock          clock.Clock
+	DummyHash      string
 }
 
 // Service implements the auth use cases.
 type Service struct {
-	repo          ports.Repository
-	hasher        ports.PasswordHasher
-	tokens        ports.AccessTokens
-	limiter       ports.LoginLimiter
-	resendLimiter ports.LoginLimiter
-	scheduler     ports.JobScheduler
-	emailEnabled  bool
-	oidc          ports.OidcVerifier
-	clock         clock.Clock
-	config        Config
-	dummyHash     string
+	repo           ports.Repository
+	hasher         ports.PasswordHasher
+	tokens         ports.AccessTokens
+	limiter        ports.LoginLimiter
+	resendLimiter  ports.LoginLimiter
+	requestLimiter ports.LoginLimiter
+	scheduler      ports.JobScheduler
+	emailEnabled   bool
+	oidc           ports.OidcVerifier
+	clock          clock.Clock
+	config         Config
+	dummyHash      string
 }
 
 // New builds the auth service.
 func New(config Config, deps Deps) *Service {
 	return &Service{
-		repo:          deps.Repository,
-		hasher:        deps.Hasher,
-		tokens:        deps.Tokens,
-		limiter:       deps.Limiter,
-		resendLimiter: deps.ResendLimiter,
-		scheduler:     deps.Scheduler,
-		emailEnabled:  deps.EmailEnabled,
-		oidc:          deps.Oidc,
-		clock:         deps.Clock,
-		config:        config,
-		dummyHash:     deps.DummyHash,
+		repo:           deps.Repository,
+		hasher:         deps.Hasher,
+		tokens:         deps.Tokens,
+		limiter:        deps.Limiter,
+		resendLimiter:  deps.ResendLimiter,
+		requestLimiter: deps.RequestLimiter,
+		scheduler:      deps.Scheduler,
+		emailEnabled:   deps.EmailEnabled,
+		oidc:           deps.Oidc,
+		clock:          deps.Clock,
+		config:         config,
+		dummyHash:      deps.DummyHash,
 	}
 }
 

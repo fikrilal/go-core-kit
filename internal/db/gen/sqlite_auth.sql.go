@@ -427,6 +427,34 @@ func (q *Queries) GetPasswordCredentialHash(ctx context.Context, userID string) 
 	return password_hash, err
 }
 
+const getPasswordResetTokenByHash = `-- name: GetPasswordResetTokenByHash :one
+SELECT t.id, t.user_id, t.expires_at, t.used_at, u.status AS user_status
+FROM password_reset_tokens t
+JOIN users u ON u.id = t.user_id
+WHERE t.token_hash = ?1 AND t.revoked_at IS NULL
+`
+
+type GetPasswordResetTokenByHashRow struct {
+	ID         string
+	UserID     string
+	ExpiresAt  utctime.Time
+	UsedAt     utctime.Time
+	UserStatus string
+}
+
+func (q *Queries) GetPasswordResetTokenByHash(ctx context.Context, tokenHash string) (GetPasswordResetTokenByHashRow, error) {
+	row := q.db.QueryRowContext(ctx, getPasswordResetTokenByHash, tokenHash)
+	var i GetPasswordResetTokenByHashRow
+	err := row.Scan(
+		&i.ID,
+		&i.UserID,
+		&i.ExpiresAt,
+		&i.UsedAt,
+		&i.UserStatus,
+	)
+	return i, err
+}
+
 const getRefreshTokenWithSession = `-- name: GetRefreshTokenWithSession :one
 SELECT
     t.id AS token_id,
@@ -551,6 +579,25 @@ func (q *Queries) GetUserEmailState(ctx context.Context, id string) (GetUserEmai
 	return i, err
 }
 
+const getUserEmailStateByEmail = `-- name: GetUserEmailStateByEmail :one
+SELECT id, email, status
+FROM users
+WHERE email = ?1
+`
+
+type GetUserEmailStateByEmailRow struct {
+	ID     string
+	Email  string
+	Status string
+}
+
+func (q *Queries) GetUserEmailStateByEmail(ctx context.Context, email string) (GetUserEmailStateByEmailRow, error) {
+	row := q.db.QueryRowContext(ctx, getUserEmailStateByEmail, email)
+	var i GetUserEmailStateByEmailRow
+	err := row.Scan(&i.ID, &i.Email, &i.Status)
+	return i, err
+}
+
 const getUserForLogin = `-- name: GetUserForLogin :one
 SELECT
     u.id,
@@ -612,6 +659,26 @@ type MarkEmailVerificationTokenUsedParams struct {
 
 func (q *Queries) MarkEmailVerificationTokenUsed(ctx context.Context, arg MarkEmailVerificationTokenUsedParams) (int64, error) {
 	result, err := q.db.ExecContext(ctx, markEmailVerificationTokenUsed, arg.UsedAt, arg.UpdatedAt, arg.ID)
+	if err != nil {
+		return 0, err
+	}
+	return result.RowsAffected()
+}
+
+const markPasswordResetTokenUsed = `-- name: MarkPasswordResetTokenUsed :execrows
+UPDATE password_reset_tokens
+SET used_at = ?1, updated_at = ?2
+WHERE id = ?3 AND used_at IS NULL
+`
+
+type MarkPasswordResetTokenUsedParams struct {
+	UsedAt    utctime.Time
+	UpdatedAt utctime.Time
+	ID        string
+}
+
+func (q *Queries) MarkPasswordResetTokenUsed(ctx context.Context, arg MarkPasswordResetTokenUsedParams) (int64, error) {
+	result, err := q.db.ExecContext(ctx, markPasswordResetTokenUsed, arg.UsedAt, arg.UpdatedAt, arg.ID)
 	if err != nil {
 		return 0, err
 	}

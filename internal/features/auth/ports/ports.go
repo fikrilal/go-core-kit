@@ -62,13 +62,30 @@ type CreateOidcUserInput struct {
 	Now      time.Time
 }
 
-// EmailVerificationTokenState is the token row the verify use case reads.
-type EmailVerificationTokenState struct {
+// TokenKind names the token table a lookup reads.
+type TokenKind string
+
+// Token kinds.
+const (
+	TokenVerification  TokenKind = "email_verification" //nolint:gosec // token kind name, not a credential
+	TokenPasswordReset TokenKind = "password_reset"
+)
+
+// TokenState is the token row the verify and confirm use cases read.
+type TokenState struct {
 	ID         string
 	UserID     string
 	ExpiresAt  time.Time
 	UsedAt     time.Time
 	UserStatus string
+}
+
+// PasswordResetConsumption carries the reset transaction.
+type PasswordResetConsumption struct {
+	TokenID      string
+	UserID       string
+	PasswordHash string
+	Now          time.Time
 }
 
 // CreateAuthTokenInput carries a minted email token.
@@ -111,10 +128,12 @@ type Repository interface {
 	LinkExternalIdentityToUser(ctx context.Context, in LinkExternalIdentityInput) (domain.LinkIdentityKind, error)
 	GetMeView(ctx context.Context, userID string) (domain.MeView, bool, error)
 	FindUserEmailState(ctx context.Context, userID string) (domain.UserEmailState, bool, error)
+	UserEmailStateByEmail(ctx context.Context, email string) (domain.UserEmailState, bool, error)
 	CreateEmailVerificationToken(ctx context.Context, in CreateAuthTokenInput) error
 	CreatePasswordResetToken(ctx context.Context, in CreateAuthTokenInput) error
-	EmailVerificationTokenByHash(ctx context.Context, tokenHash string) (EmailVerificationTokenState, bool, error)
+	TokenByHash(ctx context.Context, kind TokenKind, tokenHash string) (TokenState, bool, error)
 	ConsumeEmailVerificationTokenAndVerifyEmail(ctx context.Context, tokenID, userID string, now time.Time) (bool, error)
+	ConsumePasswordResetTokenAndSetPassword(ctx context.Context, in PasswordResetConsumption) (bool, error)
 }
 
 // EmailSender sends one transactional email and reports the provider id.

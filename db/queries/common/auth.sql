@@ -264,3 +264,19 @@ WHERE t.token_hash = sqlc.arg(token_hash) AND t.revoked_at IS NULL;
 UPDATE email_verification_tokens
 SET used_at = sqlc.arg(used_at), updated_at = sqlc.arg(updated_at)
 WHERE id = sqlc.arg(id) AND used_at IS NULL;
+
+-- name: GetPasswordResetTokenByHash :one
+SELECT t.id, t.user_id, t.expires_at, t.used_at, u.status AS user_status
+FROM password_reset_tokens t
+JOIN users u ON u.id = t.user_id
+WHERE t.token_hash = sqlc.arg(token_hash) AND t.revoked_at IS NULL;
+
+-- name: MarkPasswordResetTokenUsed :execrows
+UPDATE password_reset_tokens
+SET used_at = sqlc.arg(used_at), updated_at = sqlc.arg(updated_at)
+WHERE id = sqlc.arg(id) AND used_at IS NULL;
+
+-- name: GetUserEmailStateByEmail :one
+SELECT id, email, status
+FROM users
+WHERE email = sqlc.arg(email);

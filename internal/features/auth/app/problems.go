@@ -97,6 +97,17 @@ func verificationEmailNotConfiguredError() error {
 	return &httpx.ProblemError{Status: http.StatusNotImplemented, Code: httpx.CodeAuthEmailNotConfigured}
 }
 
+// passwordResetTokenInvalidError covers an unknown token and an unverifiable
+// account, deliberately as one answer.
+func passwordResetTokenInvalidError() error {
+	return &httpx.ProblemError{Status: http.StatusUnauthorized, Code: httpx.CodeAuthPasswordResetTokenInvalid}
+}
+
+// passwordResetTokenExpiredError reports a token that was used or expired.
+func passwordResetTokenExpiredError() error {
+	return &httpx.ProblemError{Status: http.StatusUnauthorized, Code: httpx.CodeAuthPasswordResetTokenExpired}
+}
+
 func unauthorizedError() error {
 	return &httpx.ProblemError{
 		Status: http.StatusUnauthorized,

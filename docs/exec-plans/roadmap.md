@@ -27,7 +27,7 @@ Rules: findings gate on **new vs baseline**, and updating a baseline requires ex
 
 ## Current Focus
 
-**Phase 5: 5.1–5.4 landed.** Exit gate still needs **3.6/3.7** (email verification and password reset end-to-end), both unblocked by 5.2.
+**Phase 5: 5.1–5.4 landed, and its exit gate is satisfied** — 3.6 and 3.7 landed the verification and password-reset flows end to end (worker to wire), leaving the allowlist at 8 operations.
 
 Readability note 01 has landed.
 
@@ -116,7 +116,7 @@ Objective: the full auth surface, contract-green.
 - [x] 3.4 Access tokens: EdDSA keyring, JWKS endpoint — landed 2026-10-11; JWKS live and snapshot-validated, verifier with the reference rejection matrix, principal guard unit-tested; allowlist 28 → 27
 - [x] 3.5 Change password — landed 2026-10-11; first protected route (guard + idempotency composed guard-outer), CAS credential update, other-session revocation; allowlist 27 → 26
 - [x] 3.6 Email verification + resend — landed 2026-10-15; public verify consumes the token and verifies the address in one transaction, the guarded resend applies the provider gate, the silent no-oracle skip, and the per-account limiter before enqueuing on the emails lane; allowlist 12 → 10
-- [ ] 3.7 Password reset request/confirm *(needs 5.2)*
+- [x] 3.7 Password reset request/confirm — landed 2026-10-15; the confirm transaction replaces the credential and signs every session out, the request applies the provider gate and a per-address limit with no oracle, and the token lookup is shared across both token kinds; allowlist 10 → 8
 - [x] 3.8 OIDC exchange — landed 2026-10-11; Google id_token verification (JWKS-cached adapter), identity resolve/create with link-required collisions, unified MeView; allowlist 26 → 25
 - [x] 3.9 `forbidigo` rules land with the first feature (no `time.Now()` in services, no raw JSON writes) — landed 2026-10-11; rules proven live via gate honesty (driver/raw-JSON/time.Now/platform→features fixtures); six honesty scenarios run in `make verify`
 - [x] 3.10 `auth.oidc.connect` — landed 2026-10-12; guarded + idempotent identity link with the reference kind semantics (already-linked is 204, identity/provider conflicts are distinct 409s), conditional email verification when the identity email matches an unverified account; allowlist 25 → 24
@@ -175,7 +175,7 @@ Exit gate: acceptance criteria of both `_WIP` proposals satisfied.
 ## Cross-Cutting Follow-Ups
 
 - [x] Strict lint/format baseline + `make tools` for golangci-lint (landed with 1.0)
-- [ ] Extend `make tools` pins for `sqlc`, `goose`, `oapi-codegen`, `vacuum` as they land
+- [ ] Extend `make tools` pins for `sqlc`, `goose`, `oapi-codegen`, `vacuum`
 - [ ] Duplication policy: blocking core profile with reviewed allowlists (once features exist)
 - [ ] Secrets scan gate (pattern-based, `git ls-files` scoped) in CI
 - [ ] Litestream backup + single-box deployment notes (`docs/engineering/`)

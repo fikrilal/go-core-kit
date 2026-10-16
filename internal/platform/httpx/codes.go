@@ -36,6 +36,9 @@ const (
 	// CodeAuthEmailNotConfigured reports the email provider gate: the resend
 	// route answers it when no sender is configured.
 	CodeAuthEmailNotConfigured Code = "AUTH_EMAIL_NOT_CONFIGURED"
+	// Password reset token codes, mirroring the verification family.
+	CodeAuthPasswordResetTokenInvalid Code = "AUTH_PASSWORD_RESET_TOKEN_INVALID"
+	CodeAuthPasswordResetTokenExpired Code = "AUTH_PASSWORD_RESET_TOKEN_EXPIRED"
 	// CodeAuthEmailVerificationTokenInvalid covers an unknown token and an
 	// account that cannot be verified: the two are deliberately one answer.
 	CodeAuthEmailVerificationTokenInvalid Code = "AUTH_EMAIL_VERIFICATION_TOKEN_INVALID" //nolint:gosec // wire error code, not a credential
