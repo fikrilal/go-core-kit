@@ -98,6 +98,9 @@ type SessionView struct {
 	Status  string
 }
 
+// FilePurposeProfileImage is the only stored-file purpose today.
+const FilePurposeProfileImage = "PROFILE_IMAGE"
+
 // Stored file statuses.
 const (
 	FileStatusUploading = "UPLOADING"
@@ -112,6 +115,7 @@ type StoredFile struct {
 	ObjectKey   string
 	ContentType string
 	SizeBytes   int64
+	Purpose     string
 }
 
 // Field is a patch field that can be absent, cleared (null), or set.
@@ -153,4 +157,60 @@ type PushSession struct {
 	Revoked    bool
 	ExpiresAt  time.Time
 	UserStatus string
+}
+
+// EmailSent is the outcome of a delivered email.
+const EmailSent = "sent"
+
+// FinalizeKind is what the finalize transaction did.
+type FinalizeKind string
+
+// Finalize transaction results.
+const (
+	FinalizeDone             FinalizeKind = "finalized"
+	FinalizeBlockedLastAdmin FinalizeKind = "blocked_last_admin"
+)
+
+// Account deletion finalize outcomes.
+const (
+	DeletionFinalized        = "finalized"
+	DeletionNotDue           = "not_due"
+	DeletionBlockedLastAdmin = "blocked_last_admin"
+
+	DeletionOutcomeSkipped       = "skipped"
+	DeletionReasonUserNotFound   = "user_not_found"
+	DeletionReasonAlreadyDeleted = "already_deleted"
+	DeletionReasonNotScheduled   = "not_scheduled"
+	DeletionReasonTooLate        = "too_late"
+)
+
+// Stored-file cleanup outcomes.
+const (
+	FileCleanupDeleted = "deleted"
+	FileCleanupExpired = "expired"
+	FileCleanupSkipped = "skipped"
+
+	FileReasonNotFound     = "file_not_found"
+	FileReasonWrongPurpose = "wrong_purpose"
+	FileReasonNotUploading = "not_uploading"
+)
+
+// UserDeletionEmailState is the account core the deletion emails read.
+type UserDeletionEmailState struct {
+	ID                   string
+	Email                string
+	Status               string
+	DeletionScheduledFor time.Time
+}
+
+// UserFinalizeState is the account core the finalize job reads.
+type UserFinalizeState struct {
+	ID                   string
+	Email                string
+	Role                 string
+	Status               string
+	DeletionScheduledFor time.Time
+	RequestedSessionID   string
+	RequestedTraceID     string
+	DeletedAt            time.Time
 }

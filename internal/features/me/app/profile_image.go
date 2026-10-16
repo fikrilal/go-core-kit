@@ -86,7 +86,13 @@ func (s *Service) CreateUploadPlan(ctx context.Context, in UploadPlanInput) (Upl
 	if !found {
 		return UploadPlan{}, unauthorizedError()
 	}
-	return UploadPlan{FileID: fileID.String(), Upload: upload, ExpiresAt: now.Add(ProfileImagePresignTTL)}, nil
+	plan := UploadPlan{FileID: fileID.String(), Upload: upload, ExpiresAt: now.Add(ProfileImagePresignTTL)}
+	// The expiry job is armed at plan time so an abandoned upload is cleaned up
+	// even when the client never completes it; the delay is policy.
+	if s.deletion != nil && s.uploadExpireDelay > 0 {
+		s.deletion.ScheduleUploadExpiry(ctx, in.UserID, plan.FileID, now.Add(s.uploadExpireDelay), requestMeta(in.TraceID))
+	}
+	return plan, nil
 }
 
 // CompleteUploadInput carries an upload finalization.

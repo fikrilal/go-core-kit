@@ -16,9 +16,11 @@ import (
 	"github.com/fikrilal/go-core-kit/internal/features/me/app"
 	"github.com/fikrilal/go-core-kit/internal/features/me/domain"
 	"github.com/fikrilal/go-core-kit/internal/features/me/infra"
+	"github.com/fikrilal/go-core-kit/internal/features/me/ports"
 	platformauth "github.com/fikrilal/go-core-kit/internal/platform/auth"
 	"github.com/fikrilal/go-core-kit/internal/platform/clock"
 	"github.com/fikrilal/go-core-kit/internal/platform/db"
+	"github.com/fikrilal/go-core-kit/internal/platform/email"
 	"github.com/fikrilal/go-core-kit/internal/platform/httpx"
 	"github.com/fikrilal/go-core-kit/internal/platform/push"
 	"github.com/fikrilal/go-core-kit/internal/platform/redis"
@@ -42,19 +44,28 @@ type Deps struct {
 	Storage  *storage.Client
 	// PushEnabled mirrors the reference's provider-configured gate until the
 	// FCM adapter lands (5.3).
-	PushEnabled     bool
-	UploadUserLimit UploadLimitConfig
-	UploadIPLimit   UploadLimitConfig
+	PushEnabled bool
+	// Scheduler arms the account-deletion workflow's delayed jobs; the
+	// composition root always provides it, tests may omit it.
+	Scheduler ports.JobScheduler
+	// EmailEnabled mirrors the configured email sender.
+	EmailEnabled bool
+	// UploadExpireDelay is how long an unfinished upload stays claimable.
+	UploadExpireDelay time.Duration
+	UploadUserLimit   UploadLimitConfig
+	UploadIPLimit     UploadLimitConfig
 }
 
 // Register mounts the me feature on the router.
 func Register(router *httpx.Router, deps Deps) {
 	service := app.New(
-		app.Config{PushEnabled: deps.PushEnabled},
+		app.Config{PushEnabled: deps.PushEnabled, UploadExpireDelay: deps.UploadExpireDelay},
 		app.Deps{
-			Repository: infra.NewRepository(deps.Database),
-			Storage:    deps.Storage,
-			Clock:      deps.Clock,
+			Repository:   infra.NewRepository(deps.Database),
+			Storage:      deps.Storage,
+			Clock:        deps.Clock,
+			Scheduler:    deps.Scheduler,
+			EmailEnabled: deps.EmailEnabled,
 		},
 	)
 	router.SetIdempotencyCaller(platformauth.IdempotencyCaller)
@@ -102,6 +113,24 @@ func NewPushJobs(deps PushJobDeps) *app.PushJobs {
 		Push:       deps.Push,
 		Clock:      deps.Clock,
 	})
+}
+
+// AccountDeletionJobDeps are the account-deletion worker-lane dependencies.
+type AccountDeletionJobDeps struct {
+	Database *db.Database
+	Storage  ports.ProfileImageStorage
+	Email    email.Sender
+	Clock    clock.Clock
+}
+
+// NewAccountDeletionJobs builds the finalize and stored-file handlers.
+func NewAccountDeletionJobs(deps AccountDeletionJobDeps) *app.AccountDeletionJobs {
+	return app.NewAccountDeletionJobs(infra.NewRepository(deps.Database), deps.Storage, deps.Clock)
+}
+
+// NewDeletionEmails builds the two account-deletion email handlers.
+func NewDeletionEmails(deps AccountDeletionJobDeps, publicAppURL string) *app.DeletionEmails {
+	return app.NewDeletionEmails(infra.NewRepository(deps.Database), deps.Email, deps.Clock, publicAppURL)
 }
 
 // uploadLimit converts the feature-level config into the limiter's shape.

@@ -169,3 +169,60 @@ ON CONFLICT (user_id) DO UPDATE SET
     given_name = excluded.given_name,
     family_name = excluded.family_name,
     updated_at = excluded.updated_at;
+
+-- name: GetUserForFinalize :one
+SELECT id, email, role, status, deletion_scheduled_for, deletion_requested_session_id,
+       deletion_requested_trace_id, deleted_at
+FROM users
+WHERE id = sqlc.arg(id);
+
+-- name: FinalizeUserDeletion :exec
+UPDATE users
+SET email = sqlc.arg(email),
+    email_verified_at = NULL,
+    role = 'USER',
+    status = 'DELETED',
+    deleted_at = sqlc.arg(deleted_at),
+    deletion_requested_at = NULL,
+    deletion_scheduled_for = NULL,
+    deletion_requested_session_id = NULL,
+    deletion_requested_trace_id = NULL,
+    suspended_at = NULL,
+    suspended_reason = NULL,
+    updated_at = sqlc.arg(updated_at)
+WHERE id = sqlc.arg(id);
+
+-- name: ClearUserProfileNames :execrows
+UPDATE user_profiles
+SET display_name = NULL, given_name = NULL, family_name = NULL, updated_at = sqlc.arg(now)
+WHERE user_id = sqlc.arg(user_id);
+
+-- name: DeletePasswordCredential :exec
+DELETE FROM password_credentials WHERE user_id = sqlc.arg(user_id);
+
+-- name: DeleteExternalIdentities :exec
+DELETE FROM external_identities WHERE user_id = sqlc.arg(user_id);
+
+-- name: DeleteEmailVerificationTokens :exec
+DELETE FROM email_verification_tokens WHERE user_id = sqlc.arg(user_id);
+
+-- name: DeletePasswordResetTokens :exec
+DELETE FROM password_reset_tokens WHERE user_id = sqlc.arg(user_id);
+
+-- name: DeleteUserSessions :exec
+DELETE FROM sessions WHERE user_id = sqlc.arg(user_id);
+
+-- name: GetStoredFileForCleanup :one
+SELECT id, object_key, status, purpose
+FROM stored_files
+WHERE id = sqlc.arg(id) AND owner_user_id = sqlc.arg(owner_user_id);
+
+-- name: ExpireStoredFileIfUploading :execrows
+UPDATE stored_files
+SET status = 'DELETED', deleted_at = sqlc.arg(now), updated_at = sqlc.arg(now)
+WHERE id = sqlc.arg(id) AND owner_user_id = sqlc.arg(owner_user_id) AND status = 'UPLOADING';
+
+-- name: GetUserDeletionEmailState :one
+SELECT id, email, status, deletion_scheduled_for
+FROM users
+WHERE id = sqlc.arg(id);

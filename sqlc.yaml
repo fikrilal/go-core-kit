@@ -33,6 +33,11 @@ sql:
               import: "github.com/fikrilal/go-core-kit/internal/platform/db/utctime"
               package: "utctime"
               type: "Time"
+          - column: "users.deleted_at"
+            go_type:
+              import: "github.com/fikrilal/go-core-kit/internal/platform/db/utctime"
+              package: "utctime"
+              type: "Time"
           - column: "users.deletion_scheduled_for"
             go_type:
               import: "github.com/fikrilal/go-core-kit/internal/platform/db/utctime"

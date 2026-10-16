@@ -29,21 +29,27 @@ type Config struct {
 	// PushEnabled mirrors the reference's provider-configured gate until the
 	// FCM adapter lands.
 	PushEnabled bool
+	// UploadExpireDelay is how long an unfinished upload stays claimable.
+	UploadExpireDelay time.Duration
 }
 
 // Deps are the service's collaborators.
 type Deps struct {
-	Repository ports.Repository
-	Storage    ports.ProfileImageStorage
-	Clock      clock.Clock
+	Repository   ports.Repository
+	Storage      ports.ProfileImageStorage
+	Clock        clock.Clock
+	Scheduler    ports.JobScheduler
+	EmailEnabled bool
 }
 
 // Service implements the me use cases.
 type Service struct {
-	repo        ports.Repository
-	storage     ports.ProfileImageStorage
-	clock       clock.Clock
-	pushEnabled bool
+	repo              ports.Repository
+	storage           ports.ProfileImageStorage
+	clock             clock.Clock
+	pushEnabled       bool
+	deletion          *AccountDeletionScheduler
+	uploadExpireDelay time.Duration
 }
 
 // New builds the me service.
@@ -53,6 +59,9 @@ func New(config Config, deps Deps) *Service {
 		storage:     deps.Storage,
 		clock:       deps.Clock,
 		pushEnabled: config.PushEnabled,
+		deletion:    newDeletionScheduler(deps.Scheduler, deps.Clock, deps.EmailEnabled),
+
+		uploadExpireDelay: config.UploadExpireDelay,
 	}
 }
 

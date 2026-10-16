@@ -148,7 +148,7 @@ func TestAuthMigrationDownRestoresSkeleton(t *testing.T) {
 	if columns := tableColumns(t, database, "users"); !slices.Equal(columns, []string{"id", "email", "created_at", "updated_at"}) {
 		t.Errorf("users columns after Down = %v, want the 0001 shape", columns)
 	}
-	for range 5 {
+	for range 6 {
 		if _, err := provider.Up(ctx); err != nil {
 			t.Fatalf("Up() after Down error = %v", err)
 		}
@@ -165,6 +165,7 @@ func dropToSkeleton(ctx context.Context, t *testing.T, provider *goose.Provider,
 		version string
 		gone    []string
 	}{
+		{"0007", nil},
 		{"0006", []string{"email_verification_tokens", "password_reset_tokens"}},
 		{"0005", []string{"user_account_deletion_audits"}},
 		{"0004", []string{"stored_files"}},

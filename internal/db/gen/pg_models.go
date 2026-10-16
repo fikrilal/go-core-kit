@@ -111,6 +111,7 @@ type User struct {
 	DeletionScheduledFor       sql.NullTime
 	DeletionRequestedSessionID sql.NullString
 	DeletionRequestedTraceID   sql.NullString
+	DeletedAt                  sql.NullTime
 }
 
 type UserAccountDeletionAudit struct {

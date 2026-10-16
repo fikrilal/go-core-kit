@@ -7,6 +7,7 @@ import (
 
 	"github.com/fikrilal/go-core-kit/internal/features/me/domain"
 	"github.com/fikrilal/go-core-kit/internal/platform/push"
+	"github.com/fikrilal/go-core-kit/internal/platform/queue"
 	"github.com/fikrilal/go-core-kit/internal/platform/storage"
 )
 
@@ -89,6 +90,21 @@ type CancelAccountDeletionInput struct {
 	Now       time.Time
 }
 
+// JobScheduler schedules and cancels delayed jobs by deterministic task id.
+type JobScheduler interface {
+	Schedule(ctx context.Context, queue, job, taskID string, payload any, meta queue.Meta, at time.Time) error
+	Cancel(queue, taskID string) error
+}
+
+// FinalizeDeletionInput carries the de-identification transaction.
+type FinalizeDeletionInput struct {
+	UserID         string
+	ScrubbedEmail  string
+	ActorSessionID string
+	TraceID        string
+	Now            time.Time
+}
+
 // PushSender delivers one push and reports the provider message id.
 type PushSender interface {
 	SendToToken(ctx context.Context, message push.Message) (string, error)
@@ -119,8 +135,13 @@ type Repository interface {
 	ProfileImage(ctx context.Context, userID string) (ProfileImageState, bool, error)
 	AttachProfileImage(ctx context.Context, in AttachProfileImageInput) (previousObjectKey string, found bool, err error)
 	ClearProfileImage(ctx context.Context, userID string, now time.Time) (clearedObjectKey string, found bool, err error)
-	RequestAccountDeletion(ctx context.Context, in RequestAccountDeletionInput) (domain.DeletionKind, error)
+	RequestAccountDeletion(ctx context.Context, in RequestAccountDeletionInput) (domain.DeletionKind, time.Time, error)
 	CancelAccountDeletion(ctx context.Context, in CancelAccountDeletionInput) (domain.DeletionKind, error)
 	SessionForPush(ctx context.Context, sessionID string) (domain.PushSession, bool, error)
 	ClearSessionPushTokenIfMatches(ctx context.Context, sessionID, token string, now time.Time) error
+	UserForFinalize(ctx context.Context, userID string) (domain.UserFinalizeState, bool, error)
+	FinalizeDeletion(ctx context.Context, in FinalizeDeletionInput) (domain.FinalizeKind, error)
+	StoredFileForCleanup(ctx context.Context, fileID, ownerUserID string) (domain.StoredFile, bool, error)
+	ExpireStoredFileIfUploading(ctx context.Context, fileID, ownerUserID string, now time.Time) (bool, error)
+	UserDeletionEmailState(ctx context.Context, userID string) (domain.UserDeletionEmailState, bool, error)
 }

@@ -20,12 +20,21 @@ import (
 var moment = time.Date(2026, 10, 12, 12, 0, 0, 0, time.UTC)
 
 type fakeRepository struct {
-	view        domain.MeView
-	viewFound   bool
-	viewErr     error
-	updateFound bool
-	updateErr   error
-	updates     []ports.UpdateProfileInput
+	finalizeState domain.UserFinalizeState
+	finalizeFound bool
+	finalized     []ports.FinalizeDeletionInput
+	finalizeKind  domain.FinalizeKind
+	cleanupFile   domain.StoredFile
+	cleanupFound  bool
+	uploadExpired bool
+	emailState    domain.UserDeletionEmailState
+	emailFound    bool
+	view          domain.MeView
+	viewFound     bool
+	viewErr       error
+	updateFound   bool
+	updateErr     error
+	updates       []ports.UpdateProfileInput
 
 	statusValue string
 	statusFound bool
@@ -85,12 +94,12 @@ func (f *fakeRepository) ClearSessionPushTokenIfMatches(_ context.Context, _, to
 	return nil
 }
 
-func (f *fakeRepository) RequestAccountDeletion(_ context.Context, in ports.RequestAccountDeletionInput) (domain.DeletionKind, error) {
+func (f *fakeRepository) RequestAccountDeletion(_ context.Context, in ports.RequestAccountDeletionInput) (domain.DeletionKind, time.Time, error) {
 	f.deletionRequests = append(f.deletionRequests, in)
 	if f.deletionErr != nil {
-		return "", f.deletionErr
+		return domain.DeletionNotFound, time.Time{}, f.deletionErr
 	}
-	return f.deletionKind, nil
+	return f.deletionKind, time.Time{}, nil
 }
 
 func (f *fakeRepository) CancelAccountDeletion(_ context.Context, in ports.CancelAccountDeletionInput) (domain.DeletionKind, error) {
@@ -207,6 +216,30 @@ func (f *fakeRepository) RevokeSession(_ context.Context, _, sessionID string, n
 		return false, f.revokeErr
 	}
 	return f.revokeOK, nil
+}
+
+func (f *fakeRepository) UserForFinalize(context.Context, string) (domain.UserFinalizeState, bool, error) {
+	return f.finalizeState, f.finalizeFound, nil
+}
+
+func (f *fakeRepository) FinalizeDeletion(_ context.Context, in ports.FinalizeDeletionInput) (domain.FinalizeKind, error) {
+	f.finalized = append(f.finalized, in)
+	if f.finalizeKind != "" {
+		return f.finalizeKind, nil
+	}
+	return domain.FinalizeDone, nil
+}
+
+func (f *fakeRepository) StoredFileForCleanup(context.Context, string, string) (domain.StoredFile, bool, error) {
+	return f.cleanupFile, f.cleanupFound, nil
+}
+
+func (f *fakeRepository) ExpireStoredFileIfUploading(context.Context, string, string, time.Time) (bool, error) {
+	return f.uploadExpired, nil
+}
+
+func (f *fakeRepository) UserDeletionEmailState(context.Context, string) (domain.UserDeletionEmailState, bool, error) {
+	return f.emailState, f.emailFound, nil
 }
 
 func (f *fakeRepository) GetMe(context.Context, string) (domain.MeView, bool, error) {

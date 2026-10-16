@@ -80,7 +80,7 @@ func newAuthFixtureWith(t *testing.T, mutate func(cfg *config.Config)) *authFixt
 		mutate(&cfg)
 	}
 	logger := logging.New(config.LogLevelError, config.LogFormatJSON, io.Discard)
-	server, err := newServer(cfg, logger, database, rdb)
+	server, _, err := newServer(cfg, logger, database, rdb)
 	if err != nil {
 		t.Fatalf("newServer() error = %v", err)
 	}

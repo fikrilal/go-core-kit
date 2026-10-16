@@ -37,7 +37,7 @@ func TestServeServesProbesAndShutsDown(t *testing.T) {
 		t.Fatalf("Migrate() error = %v", err)
 	}
 
-	httpServer, err := newServer(testConfig(t), logger, database, rdb)
+	httpServer, _, err := newServer(testConfig(t), logger, database, rdb)
 	if err != nil {
 		t.Fatalf("newServer() error = %v", err)
 	}

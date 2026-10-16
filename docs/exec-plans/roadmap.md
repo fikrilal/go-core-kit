@@ -27,7 +27,7 @@ Rules: findings gate on **new vs baseline**, and updating a baseline requires ex
 
 ## Current Focus
 
-**Phase 5: 5.1–5.3 landed.** Next: **5.4 account-deletion finalize + emails**, then **3.6/3.7** (unblocked by 5.2).
+**Phase 5: 5.1–5.4 landed.** Exit gate still needs **3.6/3.7** (email verification and password reset end-to-end), both unblocked by 5.2.
 
 Readability note 01 has landed.
 
@@ -138,7 +138,7 @@ Exit gate: contract suite green for users/me operations.
 - [x] 5.1 Worker bootstrap: asynq server, retries/backoff, `/health` + `/ready` — landed 2026-10-13; `cmd/worker` + `internal/platform/queue` (name validation, `__meta` envelope, `REDIS_URL` options, producer/server, jittered 5-attempt retry policy), probes on `WORKER_HTTP_PORT`, drain on cancel; OTel propagation still pending the otel package
 - [x] 5.2 Email jobs + Resend adapter — landed 2026-10-13; `platform/email` (stdlib Resend client, shared templates, `emails` queue), worker-side token minting for `auth.sendVerificationEmail` / `auth.sendPasswordResetEmail` with the reference skip semantics, migration 0006 token tables, `queue.Bind`; unblocks 3.6/3.7
 - [x] 5.3 Push jobs + FCM adapter — landed 2026-10-13; stdlib+jwx FCM v1 client with cached service-account auth and the reference failure classes, session-state-machine `push.send` handler with the invalid-token compare-and-set clear, `PUSH_ENABLED` retired for credential-derived enablement; ADC unported
-- [ ] 5.4 Account deletion jobs (grace period)
+- [x] 5.4 Account deletion jobs (grace period) — landed 2026-10-15; deterministic finalize/reminder/expiry jobs via `queue.Scheduler`, one-transaction de-identification with the FINALIZED audit, last-admin re-check, the two deletion emails, and the profile-image cleanup jobs (4.4 follow-up); schema 0007 on both engines
 
 Exit gate: email verification/reset flows complete end-to-end.
 

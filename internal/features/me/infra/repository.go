@@ -403,11 +403,25 @@ func (r *Repository) ClearSessionPushTokenIfMatches(ctx context.Context, session
 
 // RequestAccountDeletion schedules the deletion and records the audit row.
 // A repeated request and the last-admin invariant both leave the row alone.
-func (r *Repository) RequestAccountDeletion(ctx context.Context, in ports.RequestAccountDeletionInput) (domain.DeletionKind, error) {
-	now := utctime.Time{Time: in.Now}
-	kind := domain.DeletionOK
-	err := r.database.InTx(ctx, func(tx db.Tx) error {
+func (r *Repository) RequestAccountDeletion(ctx context.Context, in ports.RequestAccountDeletionInput) (domain.DeletionKind, time.Time, error) {
+	kind, due, err := requestDeletionTx(ctx, r.database, in)
+	if err != nil {
+		return domain.DeletionNotFound, time.Time{}, fmt.Errorf("request account deletion: %w", err)
+	}
+	return kind, due, nil
+}
+
+// requestDeletionTx decides and applies one deletion request inside the
+// transaction, and reports the stored schedule for repeat requests.
+func requestDeletionTx(ctx context.Context, database *db.Database, in ports.RequestAccountDeletionInput) (domain.DeletionKind, time.Time, error) {
+	var kind domain.DeletionKind
+	var due time.Time
+	err := database.InTx(ctx, func(tx db.Tx) error {
 		queries := gen.New(tx)
+		now := utctime.Time{Time: in.Now}
+		// A newly scheduled request takes the caller's instant; a repeat keeps
+		// the stored one, which the branch above reports.
+		due = in.ScheduledFor
 		state, err := queries.GetUserDeletionState(ctx, in.UserID)
 		if errors.Is(err, db.ErrNoRows) {
 			kind = domain.DeletionNotFound
@@ -431,7 +445,10 @@ func (r *Repository) RequestAccountDeletion(ctx context.Context, in ports.Reques
 			}
 		}
 		if !state.DeletionScheduledFor.IsZero() {
+			// A repeat keeps the stored schedule, and the caller re-arms the job
+			// from it so a lost scheduling attempt cannot strand the account.
 			kind = domain.DeletionAlreadyRequested
+			due = state.DeletionScheduledFor.Time
 			return nil
 		}
 		if _, err := queries.SetUserDeletionRequest(ctx, gen.SetUserDeletionRequestParams{
@@ -444,12 +461,13 @@ func (r *Repository) RequestAccountDeletion(ctx context.Context, in ports.Reques
 		}); err != nil {
 			return fmt.Errorf("set deletion request: %w", err)
 		}
+		kind = domain.DeletionOK
 		return recordDeletionAudit(ctx, queries, in.UserID, in.SessionID, in.TraceID, "REQUESTED", now)
 	})
 	if err != nil {
-		return "", fmt.Errorf("request account deletion: %w", err)
+		return domain.DeletionNotFound, time.Time{}, fmt.Errorf("deletion request transaction: %w", err)
 	}
-	return kind, nil
+	return kind, due, nil
 }
 
 // CancelAccountDeletion clears a scheduled deletion and records the audit row.
@@ -845,4 +863,157 @@ func orderAuthMethods(methods []string) []string {
 		return precedence[a] - precedence[b]
 	})
 	return ordered
+}
+
+// UserForFinalize loads the account state the finalize job reads.
+func (r *Repository) UserForFinalize(ctx context.Context, userID string) (domain.UserFinalizeState, bool, error) {
+	row, err := r.queries.GetUserForFinalize(ctx, userID)
+	if errors.Is(err, db.ErrNoRows) {
+		return domain.UserFinalizeState{}, false, nil
+	}
+	if err != nil {
+		return domain.UserFinalizeState{}, false, fmt.Errorf("find user for finalize: %w", err)
+	}
+	return domain.UserFinalizeState{
+		ID:                   row.ID,
+		Email:                row.Email,
+		Role:                 row.Role,
+		Status:               row.Status,
+		DeletionScheduledFor: row.DeletionScheduledFor.Time,
+		RequestedSessionID:   row.DeletionRequestedSessionID.String,
+		RequestedTraceID:     row.DeletionRequestedTraceID.String,
+		DeletedAt:            row.DeletedAt.Time,
+	}, true, nil
+}
+
+// FinalizeDeletion de-identifies the account in one transaction.
+func (r *Repository) FinalizeDeletion(ctx context.Context, in ports.FinalizeDeletionInput) (domain.FinalizeKind, error) {
+	now := utctime.Time{Time: in.Now}
+	kind, err := finalizeDeletionTx(ctx, r.database, in, now)
+	if err != nil {
+		return domain.FinalizeDone, fmt.Errorf("finalize deletion: %w", err)
+	}
+	return kind, nil
+}
+
+// finalizeDeletionTx counts the active admins and writes the de-identification
+// in one transaction, so the guard cannot go stale between the two.
+func finalizeDeletionTx(ctx context.Context, database *db.Database, in ports.FinalizeDeletionInput, now utctime.Time) (domain.FinalizeKind, error) {
+	kind := domain.FinalizeDone
+	err := database.InTx(ctx, func(tx db.Tx) error {
+		queries := gen.New(tx)
+		blocked, err := lastActiveAdminBlocks(ctx, queries, in, now)
+		if err != nil {
+			return err
+		}
+		if blocked {
+			kind = domain.FinalizeBlockedLastAdmin
+			return nil
+		}
+		if err := finalizeUserRows(ctx, queries, in, now); err != nil {
+			return err
+		}
+		return recordDeletionAudit(ctx, queries, in.UserID, in.ActorSessionID, in.TraceID, "FINALIZED", now)
+	})
+	if err != nil {
+		return domain.FinalizeDone, fmt.Errorf("finalize transaction: %w", err)
+	}
+	return kind, nil
+}
+
+// lastActiveAdminBlocks reports whether the target is the last active admin,
+// recording the blocked audit row when it is.
+func lastActiveAdminBlocks(ctx context.Context, queries *gen.Queries, in ports.FinalizeDeletionInput, now utctime.Time) (bool, error) {
+	state, err := queries.GetUserForFinalize(ctx, in.UserID)
+	if err != nil {
+		return false, fmt.Errorf("read user for finalize: %w", err)
+	}
+	if state.Role != string(domain.RoleAdmin) || state.Status != string(domain.StatusActive) {
+		return false, nil
+	}
+	admins, err := queries.CountActiveAdmins(ctx)
+	if err != nil {
+		return false, fmt.Errorf("count active admins: %w", err)
+	}
+	if admins > 1 {
+		return false, nil
+	}
+	if err := recordDeletionAudit(ctx, queries, in.UserID, in.ActorSessionID, in.TraceID, "FINALIZE_BLOCKED_LAST_ADMIN", now); err != nil {
+		return false, err
+	}
+	return true, nil
+}
+
+// finalizeUserRows writes the de-identification and its cascades.
+func finalizeUserRows(ctx context.Context, queries *gen.Queries, in ports.FinalizeDeletionInput, now utctime.Time) error {
+	if err := queries.FinalizeUserDeletion(ctx, gen.FinalizeUserDeletionParams{
+		Email:     in.ScrubbedEmail,
+		DeletedAt: now,
+		UpdatedAt: now,
+		ID:        in.UserID,
+	}); err != nil {
+		return fmt.Errorf("finalize user: %w", err)
+	}
+	if _, err := queries.ClearUserProfileNames(ctx, gen.ClearUserProfileNamesParams{Now: now, UserID: in.UserID}); err != nil {
+		return fmt.Errorf("clear profile names: %w", err)
+	}
+	for _, step := range []struct {
+		what string
+		run  func() error
+	}{
+		{"delete password credential", func() error { return queries.DeletePasswordCredential(ctx, in.UserID) }},
+		{"delete external identities", func() error { return queries.DeleteExternalIdentities(ctx, in.UserID) }},
+		{"delete verification tokens", func() error { return queries.DeleteEmailVerificationTokens(ctx, in.UserID) }},
+		{"delete reset tokens", func() error { return queries.DeletePasswordResetTokens(ctx, in.UserID) }},
+		{"delete sessions", func() error { return queries.DeleteUserSessions(ctx, in.UserID) }},
+	} {
+		if err := step.run(); err != nil {
+			return fmt.Errorf("%s: %w", step.what, err)
+		}
+	}
+	return nil
+}
+
+// StoredFileForCleanup loads a stored file owned by the caller.
+func (r *Repository) StoredFileForCleanup(ctx context.Context, fileID, ownerUserID string) (domain.StoredFile, bool, error) {
+	row, err := r.queries.GetStoredFileForCleanup(ctx, gen.GetStoredFileForCleanupParams{ID: fileID, OwnerUserID: ownerUserID})
+	if errors.Is(err, db.ErrNoRows) {
+		return domain.StoredFile{}, false, nil
+	}
+	if err != nil {
+		return domain.StoredFile{}, false, fmt.Errorf("find stored file for cleanup: %w", err)
+	}
+	return domain.StoredFile{ID: row.ID, Status: row.Status, ObjectKey: row.ObjectKey, Purpose: row.Purpose}, true, nil
+}
+
+// ExpireStoredFileIfUploading marks a stale upload deleted, reporting whether
+// it was still uploading.
+func (r *Repository) ExpireStoredFileIfUploading(ctx context.Context, fileID, ownerUserID string, now time.Time) (bool, error) {
+	stamp := utctime.Time{Time: now}
+	updated, err := r.queries.ExpireStoredFileIfUploading(ctx, gen.ExpireStoredFileIfUploadingParams{
+		Now:         stamp,
+		ID:          fileID,
+		OwnerUserID: ownerUserID,
+	})
+	if err != nil {
+		return false, fmt.Errorf("expire stored file: %w", err)
+	}
+	return updated == 1, nil
+}
+
+// UserDeletionEmailState loads the account state the deletion emails read.
+func (r *Repository) UserDeletionEmailState(ctx context.Context, userID string) (domain.UserDeletionEmailState, bool, error) {
+	row, err := r.queries.GetUserDeletionEmailState(ctx, userID)
+	if errors.Is(err, db.ErrNoRows) {
+		return domain.UserDeletionEmailState{}, false, nil
+	}
+	if err != nil {
+		return domain.UserDeletionEmailState{}, false, fmt.Errorf("find deletion email state: %w", err)
+	}
+	return domain.UserDeletionEmailState{
+		ID:                   row.ID,
+		Email:                row.Email,
+		Status:               row.Status,
+		DeletionScheduledFor: row.DeletionScheduledFor.Time,
+	}, true, nil
 }

@@ -65,9 +65,13 @@ type Config struct {
 	// Email (Resend) enables when the API key and sender are set; the public
 	// app URL builds the links inside the emails.
 	ResendAPIKey string `env:"RESEND_API_KEY"`
-	EmailFrom    string `env:"EMAIL_FROM"`
-	EmailReplyTo string `env:"EMAIL_REPLY_TO"`
-	PublicAppURL string `env:"PUBLIC_APP_URL"`
+
+	// UsersProfileImageUploadExpireDelaySeconds is how long an unfinished
+	// profile-image upload stays claimable before the cleanup job expires it.
+	UsersProfileImageUploadExpireDelaySeconds int64  `env:"USERS_PROFILE_IMAGE_UPLOAD_EXPIRE_DELAY_SECONDS" envDefault:"7200"`
+	EmailFrom                                 string `env:"EMAIL_FROM"`
+	EmailReplyTo                              string `env:"EMAIL_REPLY_TO"`
+	PublicAppURL                              string `env:"PUBLIC_APP_URL"`
 
 	// Push (FCM): the project id plus credentials enable the adapter; the API
 	// gate and the worker both follow this. Credentials accept raw JSON, base64

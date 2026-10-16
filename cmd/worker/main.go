@@ -17,6 +17,8 @@ import (
 	"github.com/fikrilal/go-core-kit/internal/features/auth"
 	"github.com/fikrilal/go-core-kit/internal/features/auth/app"
 	"github.com/fikrilal/go-core-kit/internal/features/me"
+	meapp "github.com/fikrilal/go-core-kit/internal/features/me/app"
+	"github.com/fikrilal/go-core-kit/internal/features/me/domain"
 	"github.com/fikrilal/go-core-kit/internal/platform/clock"
 	"github.com/fikrilal/go-core-kit/internal/platform/config"
 	"github.com/fikrilal/go-core-kit/internal/platform/db"
@@ -25,6 +27,7 @@ import (
 	"github.com/fikrilal/go-core-kit/internal/platform/push"
 	"github.com/fikrilal/go-core-kit/internal/platform/queue"
 	"github.com/fikrilal/go-core-kit/internal/platform/redis"
+	"github.com/fikrilal/go-core-kit/internal/platform/storage"
 )
 
 // os.Exit skips defers, so runMain returns the status.
@@ -73,6 +76,7 @@ func run(ctx context.Context, cfg config.Config, logger *slog.Logger) error {
 		queue.DefaultQueue: 1,
 		email.Queue:        1,
 		push.Queue:         1,
+		meapp.QueueUsers:   2,
 	}, queue.DefaultConcurrency, logger)
 	if err != nil {
 		return fmt.Errorf("queue server: %w", err)
@@ -103,15 +107,29 @@ func run(ctx context.Context, cfg config.Config, logger *slog.Logger) error {
 // jobs register when Resend is configured, push jobs when FCM is; skipped
 // accounts and sessions are successful outcomes, logged with the ids.
 func jobHandlers(cfg config.Config, database *db.Database, logger *slog.Logger) map[string]queue.HandlerFunc {
+	queueOptions, err := queue.Options(cfg.RedisURL)
+	if err != nil {
+		logger.Error("parse REDIS_URL", slog.String("error", err.Error()))
+		return map[string]queue.HandlerFunc{}
+	}
 	return composeHandlers(cfg, database, logger,
 		email.New(email.Options{APIKey: cfg.ResendAPIKey, From: cfg.EmailFrom, ReplyTo: cfg.EmailReplyTo}),
 		push.New(push.Options{ProjectID: cfg.FCMProjectID, Credentials: cfg.FCMServiceAccount}, clock.System{}),
+		storage.New(storage.Options{
+			Endpoint:        cfg.StorageS3Endpoint,
+			Region:          cfg.StorageS3Region,
+			Bucket:          cfg.StorageS3Bucket,
+			AccessKeyID:     cfg.StorageS3AccessKeyID,
+			SecretAccessKey: cfg.StorageS3SecretAccessKey,
+			ForcePathStyle:  cfg.StorageS3ForcePathStyle,
+		}, clock.System{}),
+		queue.NewScheduler(queueOptions, clock.System{}),
 	)
 }
 
 // composeHandlers binds the feature handlers to the queue; tests inject
 // stub senders to execute the closures.
-func composeHandlers(cfg config.Config, database *db.Database, logger *slog.Logger, sender email.Sender, pushSender push.Sender) map[string]queue.HandlerFunc {
+func composeHandlers(cfg config.Config, database *db.Database, logger *slog.Logger, sender email.Sender, pushSender push.Sender, objectStorage *storage.Client, scheduler *queue.Scheduler) map[string]queue.HandlerFunc {
 	handlers := map[string]queue.HandlerFunc{}
 	if sender.Enabled() {
 		jobs := auth.NewEmailJobs(auth.EmailJobsConfig{
@@ -124,7 +142,7 @@ func composeHandlers(cfg config.Config, database *db.Database, logger *slog.Logg
 			if err != nil {
 				return fmt.Errorf("verification email job: %w", err)
 			}
-			logEmailOutcome(logger, "verification email job", payload.UserID, outcome, meta)
+			logEmailOutcome(logger, "verification email job", payload.UserID, outcome.Outcome, outcome.EmailID, meta)
 			return nil
 		})
 		handlers[auth.EmailPasswordResetJob] = queue.Bind(func(ctx context.Context, payload auth.EmailJobPayload, meta queue.Meta) error {
@@ -132,7 +150,7 @@ func composeHandlers(cfg config.Config, database *db.Database, logger *slog.Logg
 			if err != nil {
 				return fmt.Errorf("password reset email job: %w", err)
 			}
-			logEmailOutcome(logger, "password reset email job", payload.UserID, outcome, meta)
+			logEmailOutcome(logger, "password reset email job", payload.UserID, outcome.Outcome, outcome.EmailID, meta)
 			return nil
 		})
 	} else {
@@ -160,20 +178,140 @@ func composeHandlers(cfg config.Config, database *db.Database, logger *slog.Logg
 	} else {
 		logger.Warn("push is not configured; push jobs are not registered")
 	}
+	registerAccountDeletionHandlers(handlers, cfg, database, logger, sender, objectStorage, scheduler)
 	return handlers
+}
+
+// registerAccountDeletionHandlers adds the account-deletion lane: the finalize
+// job (always), the stored-file cleanup (with object storage), and the two
+// deletion emails (with a configured sender).
+func registerAccountDeletionHandlers(handlers map[string]queue.HandlerFunc, cfg config.Config, database *db.Database, logger *slog.Logger, sender email.Sender, objectStorage *storage.Client, scheduler *queue.Scheduler) {
+	cleanup := me.NewAccountDeletionJobs(me.AccountDeletionJobDeps{Database: database, Storage: objectStorage, Clock: clock.System{}})
+	registerStoredFileHandlers(handlers, logger, cleanup, objectStorage)
+	registerFinalizeHandler(handlers, logger, cleanup, scheduler)
+	if sender.Enabled() {
+		registerDeletionEmailHandlers(handlers, cfg, database, logger, sender)
+	}
+}
+
+// registerStoredFileHandlers adds the profile-image cleanup jobs.
+func registerStoredFileHandlers(handlers map[string]queue.HandlerFunc, logger *slog.Logger, cleanup *meapp.AccountDeletionJobs, objectStorage *storage.Client) {
+	if objectStorage == nil || !objectStorage.Enabled() {
+		return
+	}
+	handlers[meapp.JobDeleteStoredFile] = queue.Bind(func(ctx context.Context, payload meapp.FileJobPayload, meta queue.Meta) error {
+		outcome, err := cleanup.DeleteStoredFile(ctx, payload.OwnerUserID, payload.FileID)
+		if err != nil {
+			return fmt.Errorf("worker: cleanup stored file: %w", err)
+		}
+		logCleanupOutcome(logger, "profile image cleanup job", outcome, meta)
+		return nil
+	})
+	handlers[meapp.JobExpireUpload] = queue.Bind(func(ctx context.Context, payload meapp.FileJobPayload, meta queue.Meta) error {
+		outcome, err := cleanup.ExpireUpload(ctx, payload.OwnerUserID, payload.FileID)
+		if err != nil {
+			return fmt.Errorf("worker: expire upload: %w", err)
+		}
+		logCleanupOutcome(logger, "profile image expiry job", outcome, meta)
+		return nil
+	})
+}
+
+// registerFinalizeHandler adds the finalize job, which re-arms itself when the
+// account is not due yet or is still the last active admin.
+func registerFinalizeHandler(handlers map[string]queue.HandlerFunc, logger *slog.Logger, cleanup *meapp.AccountDeletionJobs, scheduler *queue.Scheduler) {
+	handlers[meapp.JobFinalizeDeletion] = queue.Bind(func(ctx context.Context, payload meapp.DeletionJobPayload, meta queue.Meta) error {
+		outcome, err := cleanup.FinalizeAccountDeletion(ctx, payload.UserID)
+		if err != nil {
+			return fmt.Errorf("worker: finalize account deletion: %w", err)
+		}
+		switch outcome.Kind {
+		case domain.DeletionNotDue:
+			// The account is not due yet: re-arm for the stored instant instead
+			// of polling.
+			if scheduler != nil {
+				if err := scheduler.Schedule(ctx, meapp.QueueUsers, meapp.JobFinalizeDeletion, meapp.FinalizeTaskID(payload.UserID), payload, meta, outcome.ScheduledFor); err != nil {
+					return fmt.Errorf("worker: re-delay finalize: %w", err)
+				}
+			}
+		case domain.DeletionBlockedLastAdmin:
+			// The account is the last active admin: re-check after a day.
+			if scheduler != nil {
+				if err := scheduler.Schedule(ctx, meapp.QueueUsers, meapp.JobFinalizeDeletion, meapp.FinalizeTaskID(payload.UserID), payload, meta, clock.System{}.Now().Add(24*time.Hour)); err != nil {
+					return fmt.Errorf("worker: re-delay blocked finalize: %w", err)
+				}
+			}
+		case domain.DeletionFinalized, domain.DeletionOutcomeSkipped:
+		}
+		logDeletionOutcome(logger, payload.UserID, outcome, meta)
+		return nil
+	})
+}
+
+// registerDeletionEmailHandlers adds the two account-deletion emails.
+func registerDeletionEmailHandlers(handlers map[string]queue.HandlerFunc, cfg config.Config, database *db.Database, logger *slog.Logger, sender email.Sender) {
+	deletionEmails := me.NewDeletionEmails(me.AccountDeletionJobDeps{Database: database, Email: sender, Clock: clock.System{}}, cfg.PublicAppURL)
+	handlers[meapp.JobDeletionRequestedEmail] = queue.Bind(func(ctx context.Context, payload meapp.DeletionJobPayload, meta queue.Meta) error {
+		outcome, err := deletionEmails.SendRequested(ctx, payload.UserID)
+		if err != nil {
+			return fmt.Errorf("worker: send deletion request email: %w", err)
+		}
+		logEmailOutcome(logger, "account deletion requested email job", payload.UserID, outcome.Outcome, outcome.EmailID, meta)
+		return nil
+	})
+	handlers[meapp.JobDeletionReminderEmail] = queue.Bind(func(ctx context.Context, payload meapp.DeletionJobPayload, meta queue.Meta) error {
+		outcome, err := deletionEmails.SendReminder(ctx, payload.UserID)
+		if err != nil {
+			return fmt.Errorf("worker: send deletion reminder email: %w", err)
+		}
+		logEmailOutcome(logger, "account deletion reminder email job", payload.UserID, outcome.Outcome, outcome.EmailID, meta)
+		return nil
+	})
+}
+
+// logCleanupOutcome logs a cleanup result: the work at info, the skips at warn.
+func logCleanupOutcome(logger *slog.Logger, job string, outcome meapp.CleanupOutcome, meta queue.Meta) {
+	attrs := []any{
+		slog.String("outcome", outcome.Kind),
+		slog.String("reason", outcome.Reason),
+		slog.String("request_id", meta.RequestID),
+		slog.String("trace_id", meta.TraceID),
+	}
+	if outcome.Kind == domain.FileCleanupSkipped {
+		logger.Warn(job, attrs...)
+		return
+	}
+	logger.Info(job, attrs...)
+}
+
+// logDeletionOutcome logs a finalize result: a finalize at info, everything
+// else (skips, not due, blocked) at warn.
+func logDeletionOutcome(logger *slog.Logger, userID string, outcome meapp.FinalizeOutcome, meta queue.Meta) {
+	attrs := []any{
+		slog.String("user_id", userID),
+		slog.String("outcome", outcome.Kind),
+		slog.String("reason", outcome.Reason),
+		slog.String("request_id", meta.RequestID),
+		slog.String("trace_id", meta.TraceID),
+	}
+	if outcome.Kind == domain.DeletionFinalized {
+		logger.Info("account deletion finalize job", attrs...)
+		return
+	}
+	logger.Warn("account deletion finalize job", attrs...)
 }
 
 // logEmailOutcome logs a sent email at info with the provider id and every
 // skip at warn, mirroring the reference's levels.
-func logEmailOutcome(logger *slog.Logger, job, userID string, outcome app.EmailJobOutcome, meta queue.Meta) {
+func logEmailOutcome(logger *slog.Logger, job, userID, outcome, emailID string, meta queue.Meta) {
 	attrs := []any{
 		slog.String("user_id", userID),
-		slog.String("outcome", outcome.Outcome),
+		slog.String("outcome", outcome),
 		slog.String("request_id", meta.RequestID),
 		slog.String("trace_id", meta.TraceID),
 	}
-	if outcome.Outcome == app.EmailOutcomeSent {
-		logger.Info(job, append(attrs, slog.String("email_id", outcome.EmailID))...)
+	if outcome == app.EmailOutcomeSent {
+		logger.Info(job, append(attrs, slog.String("email_id", emailID))...)
 		return
 	}
 	logger.Warn(job, attrs...)

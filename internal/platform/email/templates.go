@@ -98,3 +98,73 @@ func renderHTML(brand, heading, token, actionURL, expiresAtIso string) string {
 		html.EscapeString(expiresAtIso),
 	)
 }
+
+// renderDeletionHTML renders the deletion emails: the date and the app link,
+// without the verification token box.
+func renderDeletionHTML(brand, heading, scheduledForIso, appURL string) string {
+	var action string
+	if appURL != "" {
+		action = fmt.Sprintf(`<p><a href="%s">Open the app</a></p>`, html.EscapeString(appURL))
+	}
+	return fmt.Sprintf(
+		`<!doctype html><html><body style="font-family:sans-serif;padding:24px">`+
+			"<h1 style=\"font-size:18px\">%s</h1>"+
+			"<p>%s</p>"+
+			"<p>This account is scheduled to be deleted on <strong>%s</strong>.</p>"+
+			action+
+			"</body></html>",
+		html.EscapeString(brand),
+		html.EscapeString(heading),
+		html.EscapeString(scheduledForIso),
+	)
+}
+
+// DeletionRequestedEmail renders the "account deletion requested" message.
+func DeletionRequestedEmail(to, brand, scheduledForIso, appURL string) Message {
+	lines := []string{
+		"Account deletion requested", "",
+		"Your account is scheduled to be deleted on " + scheduledForIso + ".",
+		"You can cancel before that time from within the app.", "",
+		"If you did not request this, cancel the deletion request immediately and contact support.",
+	}
+	if appURL != "" {
+		lines = append(lines, "", "Open the app: "+appURL)
+	}
+	return Message{
+		To:      to,
+		Subject: "Account deletion requested",
+		Text:    strings.Join(lines, "\n"),
+		HTML:    renderDeletionHTML(brand, "Account deletion requested", scheduledForIso, appURL),
+	}
+}
+
+// DeletionReminderEmail renders the "account deletion reminder" message.
+func DeletionReminderEmail(to, brand, scheduledForIso, appURL string) Message {
+	lines := []string{
+		"Account deletion reminder", "",
+		"Your account is scheduled to be deleted on " + scheduledForIso + ".",
+		"If you want to keep your account, cancel the deletion request before that time.",
+	}
+	if appURL != "" {
+		lines = append(lines, "", "Open the app: "+appURL)
+	}
+	return Message{
+		To:      to,
+		Subject: "Account deletion reminder",
+		Text:    strings.Join(lines, "\n"),
+		HTML:    renderDeletionHTML(brand, "Account deletion reminder", scheduledForIso, appURL),
+	}
+}
+
+// AppURL returns the public app root, mirroring the reference's root link.
+func AppURL(publicAppURL string) string {
+	parsed, err := url.Parse(strings.TrimSpace(publicAppURL))
+	if err != nil || parsed.Scheme == "" || parsed.Host == "" {
+		return ""
+	}
+	parsed.Path = "/"
+	parsed.RawPath = ""
+	parsed.RawQuery = ""
+	parsed.Fragment = ""
+	return parsed.String()
+}

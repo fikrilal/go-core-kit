@@ -128,6 +128,25 @@ func (q *Queries) ClearUserProfileImageFileID(ctx context.Context, arg ClearUser
 	return result.RowsAffected()
 }
 
+const clearUserProfileNames = `-- name: ClearUserProfileNames :execrows
+UPDATE user_profiles
+SET display_name = NULL, given_name = NULL, family_name = NULL, updated_at = ?1
+WHERE user_id = ?2
+`
+
+type ClearUserProfileNamesParams struct {
+	Now    utctime.Time
+	UserID string
+}
+
+func (q *Queries) ClearUserProfileNames(ctx context.Context, arg ClearUserProfileNamesParams) (int64, error) {
+	result, err := q.db.ExecContext(ctx, clearUserProfileNames, arg.Now, arg.UserID)
+	if err != nil {
+		return 0, err
+	}
+	return result.RowsAffected()
+}
+
 const countActiveAdmins = `-- name: CountActiveAdmins :one
 SELECT COUNT(*) FROM users WHERE role = 'ADMIN' AND status = 'ACTIVE'
 `
@@ -219,6 +238,105 @@ func (q *Queries) CreateStoredFile(ctx context.Context, arg CreateStoredFilePara
 	return err
 }
 
+const deleteEmailVerificationTokens = `-- name: DeleteEmailVerificationTokens :exec
+DELETE FROM email_verification_tokens WHERE user_id = ?1
+`
+
+func (q *Queries) DeleteEmailVerificationTokens(ctx context.Context, userID string) error {
+	_, err := q.db.ExecContext(ctx, deleteEmailVerificationTokens, userID)
+	return err
+}
+
+const deleteExternalIdentities = `-- name: DeleteExternalIdentities :exec
+DELETE FROM external_identities WHERE user_id = ?1
+`
+
+func (q *Queries) DeleteExternalIdentities(ctx context.Context, userID string) error {
+	_, err := q.db.ExecContext(ctx, deleteExternalIdentities, userID)
+	return err
+}
+
+const deletePasswordCredential = `-- name: DeletePasswordCredential :exec
+DELETE FROM password_credentials WHERE user_id = ?1
+`
+
+func (q *Queries) DeletePasswordCredential(ctx context.Context, userID string) error {
+	_, err := q.db.ExecContext(ctx, deletePasswordCredential, userID)
+	return err
+}
+
+const deletePasswordResetTokens = `-- name: DeletePasswordResetTokens :exec
+DELETE FROM password_reset_tokens WHERE user_id = ?1
+`
+
+func (q *Queries) DeletePasswordResetTokens(ctx context.Context, userID string) error {
+	_, err := q.db.ExecContext(ctx, deletePasswordResetTokens, userID)
+	return err
+}
+
+const deleteUserSessions = `-- name: DeleteUserSessions :exec
+DELETE FROM sessions WHERE user_id = ?1
+`
+
+func (q *Queries) DeleteUserSessions(ctx context.Context, userID string) error {
+	_, err := q.db.ExecContext(ctx, deleteUserSessions, userID)
+	return err
+}
+
+const expireStoredFileIfUploading = `-- name: ExpireStoredFileIfUploading :execrows
+UPDATE stored_files
+SET status = 'DELETED', deleted_at = ?1, updated_at = ?1
+WHERE id = ?2 AND owner_user_id = ?3 AND status = 'UPLOADING'
+`
+
+type ExpireStoredFileIfUploadingParams struct {
+	Now         utctime.Time
+	ID          string
+	OwnerUserID string
+}
+
+func (q *Queries) ExpireStoredFileIfUploading(ctx context.Context, arg ExpireStoredFileIfUploadingParams) (int64, error) {
+	result, err := q.db.ExecContext(ctx, expireStoredFileIfUploading, arg.Now, arg.ID, arg.OwnerUserID)
+	if err != nil {
+		return 0, err
+	}
+	return result.RowsAffected()
+}
+
+const finalizeUserDeletion = `-- name: FinalizeUserDeletion :exec
+UPDATE users
+SET email = ?1,
+    email_verified_at = NULL,
+    role = 'USER',
+    status = 'DELETED',
+    deleted_at = ?2,
+    deletion_requested_at = NULL,
+    deletion_scheduled_for = NULL,
+    deletion_requested_session_id = NULL,
+    deletion_requested_trace_id = NULL,
+    suspended_at = NULL,
+    suspended_reason = NULL,
+    updated_at = ?3
+WHERE id = ?4
+`
+
+type FinalizeUserDeletionParams struct {
+	Email     string
+	DeletedAt utctime.Time
+	UpdatedAt utctime.Time
+	ID        string
+}
+
+func (q *Queries) FinalizeUserDeletion(ctx context.Context, arg FinalizeUserDeletionParams) error {
+	_, err := q.db.ExecContext(ctx, finalizeUserDeletion,
+		arg.Email,
+		arg.DeletedAt,
+		arg.UpdatedAt,
+		arg.ID,
+	)
+	return err
+}
+
 const getCurrentProfileImageFile = `-- name: GetCurrentProfileImageFile :one
 SELECT f.id, f.object_key
 FROM user_profiles AS p
@@ -266,6 +384,36 @@ func (q *Queries) GetSessionForPush(ctx context.Context, id string) (GetSessionF
 	return i, err
 }
 
+const getStoredFileForCleanup = `-- name: GetStoredFileForCleanup :one
+SELECT id, object_key, status, purpose
+FROM stored_files
+WHERE id = ?1 AND owner_user_id = ?2
+`
+
+type GetStoredFileForCleanupParams struct {
+	ID          string
+	OwnerUserID string
+}
+
+type GetStoredFileForCleanupRow struct {
+	ID        string
+	ObjectKey string
+	Status    string
+	Purpose   string
+}
+
+func (q *Queries) GetStoredFileForCleanup(ctx context.Context, arg GetStoredFileForCleanupParams) (GetStoredFileForCleanupRow, error) {
+	row := q.db.QueryRowContext(ctx, getStoredFileForCleanup, arg.ID, arg.OwnerUserID)
+	var i GetStoredFileForCleanupRow
+	err := row.Scan(
+		&i.ID,
+		&i.ObjectKey,
+		&i.Status,
+		&i.Purpose,
+	)
+	return i, err
+}
+
 const getStoredFileForOwner = `-- name: GetStoredFileForOwner :one
 SELECT id, status, object_key, content_type, size_bytes
 FROM stored_files
@@ -298,6 +446,31 @@ func (q *Queries) GetStoredFileForOwner(ctx context.Context, arg GetStoredFileFo
 	return i, err
 }
 
+const getUserDeletionEmailState = `-- name: GetUserDeletionEmailState :one
+SELECT id, email, status, deletion_scheduled_for
+FROM users
+WHERE id = ?1
+`
+
+type GetUserDeletionEmailStateRow struct {
+	ID                   string
+	Email                string
+	Status               string
+	DeletionScheduledFor utctime.Time
+}
+
+func (q *Queries) GetUserDeletionEmailState(ctx context.Context, id string) (GetUserDeletionEmailStateRow, error) {
+	row := q.db.QueryRowContext(ctx, getUserDeletionEmailState, id)
+	var i GetUserDeletionEmailStateRow
+	err := row.Scan(
+		&i.ID,
+		&i.Email,
+		&i.Status,
+		&i.DeletionScheduledFor,
+	)
+	return i, err
+}
+
 const getUserDeletionState = `-- name: GetUserDeletionState :one
 SELECT role, status, deletion_requested_at, deletion_scheduled_for
 FROM users
@@ -319,6 +492,40 @@ func (q *Queries) GetUserDeletionState(ctx context.Context, id string) (GetUserD
 		&i.Status,
 		&i.DeletionRequestedAt,
 		&i.DeletionScheduledFor,
+	)
+	return i, err
+}
+
+const getUserForFinalize = `-- name: GetUserForFinalize :one
+SELECT id, email, role, status, deletion_scheduled_for, deletion_requested_session_id,
+       deletion_requested_trace_id, deleted_at
+FROM users
+WHERE id = ?1
+`
+
+type GetUserForFinalizeRow struct {
+	ID                         string
+	Email                      string
+	Role                       string
+	Status                     string
+	DeletionScheduledFor       utctime.Time
+	DeletionRequestedSessionID sql.NullString
+	DeletionRequestedTraceID   sql.NullString
+	DeletedAt                  utctime.Time
+}
+
+func (q *Queries) GetUserForFinalize(ctx context.Context, id string) (GetUserForFinalizeRow, error) {
+	row := q.db.QueryRowContext(ctx, getUserForFinalize, id)
+	var i GetUserForFinalizeRow
+	err := row.Scan(
+		&i.ID,
+		&i.Email,
+		&i.Role,
+		&i.Status,
+		&i.DeletionScheduledFor,
+		&i.DeletionRequestedSessionID,
+		&i.DeletionRequestedTraceID,
+		&i.DeletedAt,
 	)
 	return i, err
 }

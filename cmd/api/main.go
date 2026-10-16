@@ -61,10 +61,11 @@ func run(ctx context.Context, cfg config.Config, logger *slog.Logger) error {
 	}
 	defer closeAndLog(rdb.Close, logger, "redis")
 
-	httpServer, err := newServer(cfg, logger, database, rdb)
+	httpServer, closeScheduler, err := newServer(cfg, logger, database, rdb)
 	if err != nil {
 		return err
 	}
+	defer closeAndLog(closeScheduler, logger, "scheduler")
 	// A canceled context aborts the bind.
 	lc := net.ListenConfig{}
 	listener, err := lc.Listen(ctx, "tcp", httpServer.Addr)

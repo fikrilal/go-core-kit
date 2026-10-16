@@ -34,7 +34,7 @@ func TestContractProbes(t *testing.T) {
 	t.Cleanup(func() { _ = rdb.Close() })
 
 	logger := logging.New(config.LogLevelError, config.LogFormatJSON, io.Discard)
-	server, err := newServer(testConfig(t), logger, database, rdb)
+	server, _, err := newServer(testConfig(t), logger, database, rdb)
 	if err != nil {
 		t.Fatalf("newServer() error = %v", err)
 	}

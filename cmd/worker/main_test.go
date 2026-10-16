@@ -16,6 +16,7 @@ import (
 
 	"github.com/fikrilal/go-core-kit/db/migrations"
 	"github.com/fikrilal/go-core-kit/internal/features/auth"
+	meapp "github.com/fikrilal/go-core-kit/internal/features/me/app"
 	"github.com/fikrilal/go-core-kit/internal/platform/config"
 	"github.com/fikrilal/go-core-kit/internal/platform/db"
 	"github.com/fikrilal/go-core-kit/internal/platform/email"
@@ -59,12 +60,16 @@ func TestEmailHandlersRegistrations(t *testing.T) {
 	}
 
 	handlers := jobHandlers(config.Config{
+		RedisURL:     "redis://127.0.0.1:6379/0",
 		ResendAPIKey: "resend-key",
 		EmailFrom:    "auth@example.com",
 		PublicAppURL: "https://app.example.com",
 		FCMProjectID: "demo", FCMServiceAccount: `{"client_email":"worker@demo.iam"}`,
 	}, database, logger)
-	for _, job := range []string{auth.EmailVerificationJob, auth.EmailPasswordResetJob, push.JobSend} {
+	for _, job := range []string{
+		auth.EmailVerificationJob, auth.EmailPasswordResetJob, push.JobSend,
+		meapp.JobFinalizeDeletion, meapp.JobDeletionRequestedEmail, meapp.JobDeletionReminderEmail,
+	} {
 		if handlers[job] == nil {
 			t.Errorf("handler for %s is missing", job)
 		}
@@ -109,7 +114,7 @@ func TestJobHandlersExecuteThroughBind(t *testing.T) {
 		AuthEmailVerificationTTLSeconds: 86400,
 		AuthPasswordResetTTLSeconds:     1800,
 		PublicAppURL:                    "https://app.example.com",
-	}, database, logger, sender, &stubPushSender{})
+	}, database, logger, sender, &stubPushSender{}, nil, nil)
 
 	payload, err := queue.WithMeta(auth.EmailJobPayload{UserID: "user-1"}, queue.Meta{RequestID: "req-1", TraceID: "trace-1"})
 	if err != nil {

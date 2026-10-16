@@ -23,7 +23,7 @@ type RequestAccountDeletionInput struct {
 // A repeated request keeps the stored schedule and reports success.
 func (s *Service) RequestAccountDeletion(ctx context.Context, in RequestAccountDeletionInput) error {
 	now := s.clock.Now()
-	kind, err := s.repo.RequestAccountDeletion(ctx, ports.RequestAccountDeletionInput{
+	kind, due, err := s.repo.RequestAccountDeletion(ctx, ports.RequestAccountDeletionInput{
 		UserID:       in.UserID,
 		SessionID:    in.SessionID,
 		TraceID:      in.TraceID,
@@ -34,7 +34,16 @@ func (s *Service) RequestAccountDeletion(ctx context.Context, in RequestAccountD
 		return fmt.Errorf("me: request account deletion: %w", err)
 	}
 	switch kind {
-	case domain.DeletionOK, domain.DeletionAlreadyRequested, domain.DeletionNotRequested:
+	case domain.DeletionOK, domain.DeletionAlreadyRequested:
+		// Both arms re-arm the job: a retry after a scheduling failure must not
+		// strand the account, and the task ids are deterministic.
+		if s.deletion != nil {
+			if err := s.deletion.ScheduleRequest(ctx, in.UserID, due, requestMeta(in.TraceID)); err != nil {
+				return fmt.Errorf("me: schedule account deletion: %w", err)
+			}
+		}
+		return nil
+	case domain.DeletionNotRequested:
 		return nil
 	case domain.DeletionNotFound:
 		return unauthorizedError()
@@ -64,7 +73,14 @@ func (s *Service) CancelAccountDeletion(ctx context.Context, in CancelAccountDel
 		return fmt.Errorf("me: cancel account deletion: %w", err)
 	}
 	switch kind {
-	case domain.DeletionOK, domain.DeletionNotRequested, domain.DeletionAlreadyRequested:
+	case domain.DeletionOK:
+		if s.deletion != nil {
+			if err := s.deletion.CancelRequest(in.UserID); err != nil {
+				return fmt.Errorf("me: cancel account deletion jobs: %w", err)
+			}
+		}
+		return nil
+	case domain.DeletionNotRequested, domain.DeletionAlreadyRequested:
 		return nil
 	case domain.DeletionNotFound:
 		return unauthorizedError()
