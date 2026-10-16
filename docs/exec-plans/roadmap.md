@@ -144,11 +144,11 @@ Exit gate: email verification/reset flows complete end-to-end.
 
 ## Phase 6 — gokit CLI + guides
 
-- [ ] 6.1 `scaffold feature` / `scaffold endpoint` (output passes `make verify` untouched)
-- [ ] 6.2 `remove feature` (unwires routes/DI/tests cleanly)
-- [ ] 6.3 `doctor` + completion of `db generate`
-- [ ] 6.4 Guides: adding-a-feature, adding-an-endpoint, config, jobs (`docs/guide/`)
-- [ ] 6.5 Scaffold smoke: generated output verified by `make verify` in CI
+- [x] 6.1 `scaffold feature` / `scaffold endpoint` — landed 2026-10-15; marker-based wiring, snapshot-resolved operations, allowlist hand-off, rollback on failure; template output not yet proven by `make verify` (that is 6.5's smoke)
+- [x] 6.2 `remove feature` — landed 2026-10-15; unwires the composition root, returns the feature's operations to the allowlist, and deletes the per-feature files, with text edits before any deletion so refusals leave the tree untouched
+- [x] 6.3 `doctor` + completion of `db generate` — landed 2026-10-15; doctor's checks are documented in `docs/guide/config.md`, and `db generate` now cleans its `.gen/` scratch on both success and failure
+- [x] 6.4 Guides — landed 2026-10-15; `docs/guide/{adding-a-feature,adding-an-endpoint,config,jobs}.md` written from the implemented behavior and indexed in `docs/README.md`
+- [x] 6.5 Scaffold smoke — landed 2026-10-15; `make scaffold-smoke` (and a CI step) copies the tree, scaffolds a feature plus one allowlisted operation, regenerates, and runs the full profile there: `passed — scaffolded output is gate-clean`, which closes 6.1's recorded deviation and surfaced five template defects
 
 Exit gate: a fresh clone can scaffold a working endpoint in one command.
 

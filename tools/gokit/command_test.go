@@ -6,6 +6,40 @@ import (
 	"testing"
 )
 
+func TestParseScaffoldAndRemoveCommands(t *testing.T) {
+	commands := []struct {
+		args []string
+	}{
+		{args: []string{"scaffold", "feature", "--name", "reports"}},
+		{args: []string{"scaffold", "endpoint", "--feature", "reports", "--operation", "reports.list"}},
+		{args: []string{"scaffold", "endpoint", "--feature=reports", "--operation=reports.list"}},
+		{args: []string{"remove", "feature", "--name", "reports"}},
+	}
+	for _, tt := range commands {
+		if _, err := parseCommand(tt.args); err != nil {
+			t.Errorf("parseCommand(%v) error = %v", tt.args, err)
+		}
+	}
+
+	usageErrors := [][]string{
+		{"scaffold"},
+		{"scaffold", "feature"},
+		{"scaffold", "feature", "--name"},
+		{"scaffold", "endpoint", "--feature", "reports"},
+		{"scaffold", "endpoint", "--operation", "reports.list"},
+		{"scaffold", "endpoint", "--feature", "reports", "--operation"},
+		{"scaffold", "feature", "--unknown", "reports"},
+		{"remove"},
+		{"remove", "endpoint", "--name", "reports"},
+		{"remove", "feature"},
+	}
+	for _, args := range usageErrors {
+		if _, err := parseCommand(args); err == nil {
+			t.Errorf("parseCommand(%v) error = nil, want a usage error", args)
+		}
+	}
+}
+
 func TestParseCommand(t *testing.T) {
 	cases := []struct {
 		name string

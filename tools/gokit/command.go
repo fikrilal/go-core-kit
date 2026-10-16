@@ -15,6 +15,10 @@ const usageText = `gokit commands:
   contract sync|check|generate    pin the backend snapshot; verify digest; regenerate types
   gates honesty                   prove the verification gates fail on injected violations
   knowledge check                 env.example, project map, links, ADR index
+  scaffold feature --name <name>  create a feature skeleton and wire the API
+  scaffold endpoint --feature <f> --operation <id>
+                                  implement one allowlisted snapshot operation
+  remove feature --name <name>    delete a feature and unwire it
   help                            show this message`
 
 type command interface {
@@ -130,6 +134,10 @@ func parseCommand(args []string) (command, error) {
 			return nil, usagef("drift expects: gokit drift check")
 		}
 		return driftCheckCommand{}, nil
+	case "scaffold":
+		return parseScaffold(args[1:])
+	case "remove":
+		return parseRemove(args[1:])
 	case "help":
 		if len(args) != 1 {
 			return nil, usagef("help takes no arguments")
@@ -137,6 +145,80 @@ func parseCommand(args []string) (command, error) {
 		return helpCommand{}, nil
 	}
 	return nil, usagef("unknown command %q", args[0])
+}
+
+func parseScaffold(args []string) (command, error) {
+	if len(args) == 0 {
+		return nil, usagef("scaffold expects: gokit scaffold feature|endpoint")
+	}
+	switch args[0] {
+	case "feature":
+		values, err := parseFlags("scaffold feature", args[1:], "--name")
+		if err != nil {
+			return nil, err
+		}
+		name := values["--name"]
+		if name == "" {
+			return nil, usagef("scaffold feature: --name is required")
+		}
+		return scaffoldFeatureCommand{name: name}, nil
+	case "endpoint":
+		values, err := parseFlags("scaffold endpoint", args[1:], "--feature", "--operation")
+		if err != nil {
+			return nil, err
+		}
+		feature, operation := values["--feature"], values["--operation"]
+		if feature == "" || operation == "" {
+			return nil, usagef("scaffold endpoint: --feature and --operation are required")
+		}
+		return scaffoldEndpointCommand{feature: feature, operation: operation}, nil
+	}
+	return nil, usagef("scaffold expects: gokit scaffold feature|endpoint")
+}
+
+func parseRemove(args []string) (command, error) {
+	if len(args) == 0 || args[0] != "feature" {
+		return nil, usagef("remove expects: gokit remove feature --name <name>")
+	}
+	values, err := parseFlags("remove feature", args[1:], "--name")
+	if err != nil {
+		return nil, err
+	}
+	name := values["--name"]
+	if name == "" {
+		return nil, usagef("remove feature: --name is required")
+	}
+	return removeFeatureCommand{name: name}, nil
+}
+
+// parseFlags reads the named flags from args, accepting both `--flag value` and
+// `--flag=value`, rejecting anything else under the command's name.
+func parseFlags(command string, args []string, names ...string) (map[string]string, error) {
+	values := map[string]string{}
+	for i := 0; i < len(args); i++ {
+		matched := false
+		for _, name := range names {
+			switch {
+			case args[i] == name:
+				if i+1 >= len(args) {
+					return nil, usagef("%s: %s requires a value", command, name)
+				}
+				values[name] = args[i+1]
+				i++
+				matched = true
+			case strings.HasPrefix(args[i], name+"="):
+				values[name] = strings.TrimPrefix(args[i], name+"=")
+				matched = true
+			}
+			if matched {
+				break
+			}
+		}
+		if !matched {
+			return nil, usagef("%s: unexpected argument %q", command, args[i])
+		}
+	}
+	return values, nil
 }
 
 func parseVerify(args []string) (command, error) {

@@ -35,6 +35,13 @@ func generateDB() error {
 	if err := os.RemoveAll(scratchDir); err != nil {
 		return fmt.Errorf("clean scratch: %w", err)
 	}
+	// The scratch directory is sqlc's workspace, never a tree resident: it goes
+	// away whether generation succeeds or fails.
+	defer func() {
+		if err := os.RemoveAll(scratchDir); err != nil {
+			fmt.Fprintf(os.Stderr, "gokit: clean scratch: %v\n", err)
+		}
+	}()
 	if err := runSqlc(); err != nil {
 		return err
 	}

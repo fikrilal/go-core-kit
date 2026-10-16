@@ -29,3 +29,5 @@ jobs:
             | tar -xz -C "$(go env GOPATH)/bin" vacuum
       - name: Verify
         run: make verify
+      - name: Scaffold smoke
+        run: make scaffold-smoke

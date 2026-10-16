@@ -60,6 +60,8 @@ func newServer(cfg config.Config, logger *slog.Logger, database *db.Database, rd
 	if err != nil {
 		return nil, nil, fmt.Errorf("register auth: %w", err)
 	}
+
+	// gokit:feature-registrations — `gokit scaffold feature` inserts here.
 	objectStorage := storage.New(storage.Options{
 		Endpoint:        cfg.StorageS3Endpoint,
 		Region:          cfg.StorageS3Region,

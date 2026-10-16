@@ -11,6 +11,11 @@ go-core-kit is a production-grade Go backend template that serves the same wire 
   - `docs/standards/README.md` — index; individual standards land with the platform core
 - ADRs (decision log)
   - `docs/adr/README.md`
+- Guides
+  - `docs/guide/adding-a-feature.md`
+  - `docs/guide/adding-an-endpoint.md`
+  - `docs/guide/config.md`
+  - `docs/guide/jobs.md`
 - Execution plans
   - `docs/exec-plans/README.md`
   - `docs/exec-plans/roadmap.md` — high-level phases and task tracking

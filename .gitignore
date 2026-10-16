@@ -31,3 +31,4 @@ coverage.out
 .commandcode/mods/
 /worker
 /api
+/gokit

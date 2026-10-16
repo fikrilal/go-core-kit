@@ -7,7 +7,7 @@ SQLC_VERSION ?= v1.31.1
 OAPI_CODEGEN_VERSION ?= v2.8.0
 VACUUM_VERSION ?= v0.33.0
 
-.PHONY: verify fmt fmt-check vet lint test build build-pg tidy tools generate drift
+.PHONY: verify fmt fmt-check vet lint test build build-pg tidy tools generate drift scaffold-smoke
 
 verify:
 	$(GO) run ./tools/gokit verify --profile full
@@ -63,3 +63,7 @@ generate:
 
 drift:
 	$(GO) run ./tools/gokit drift check
+
+# scaffold-smoke proves scaffolded output passes the gate in a throwaway copy.
+scaffold-smoke:
+	bash tools/gokit/scaffold-smoke.sh
