@@ -33,6 +33,13 @@ const (
 	CodeAuthOidcIdentityLinked     Code = "AUTH_OIDC_IDENTITY_ALREADY_LINKED"
 	CodeAuthOidcProviderLinked     Code = "AUTH_OIDC_PROVIDER_ALREADY_LINKED"
 	CodeAuthPushNotConfigured      Code = "AUTH_PUSH_NOT_CONFIGURED"
+	// CodeAuthEmailNotConfigured reports the email provider gate: the resend
+	// route answers it when no sender is configured.
+	CodeAuthEmailNotConfigured Code = "AUTH_EMAIL_NOT_CONFIGURED"
+	// CodeAuthEmailVerificationTokenInvalid covers an unknown token and an
+	// account that cannot be verified: the two are deliberately one answer.
+	CodeAuthEmailVerificationTokenInvalid Code = "AUTH_EMAIL_VERIFICATION_TOKEN_INVALID" //nolint:gosec // wire error code, not a credential
+	CodeAuthEmailVerificationTokenExpired Code = "AUTH_EMAIL_VERIFICATION_TOKEN_EXPIRED" //nolint:gosec // wire error code, not a credential
 )
 
 // Users error codes.

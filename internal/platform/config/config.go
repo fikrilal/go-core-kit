@@ -47,12 +47,16 @@ type Config struct {
 	LogLevel     LogLevel  `env:"LOG_LEVEL" envDefault:"info"`
 	LogFormat    LogFormat `env:"LOG_FORMAT" envDefault:"json"`
 
-	AuthAccessTokenTTLSeconds       int    `env:"AUTH_ACCESS_TOKEN_TTL_SECONDS" envDefault:"900"`
-	AuthRefreshTokenTTLSeconds      int    `env:"AUTH_REFRESH_TOKEN_TTL_SECONDS" envDefault:"2592000"`
-	AuthPasswordMinLength           int    `env:"AUTH_PASSWORD_MIN_LENGTH" envDefault:"10"`
-	AuthLoginMaxAttempts            int    `env:"AUTH_LOGIN_MAX_ATTEMPTS" envDefault:"10"`
-	AuthLoginWindowSeconds          int    `env:"AUTH_LOGIN_WINDOW_SECONDS" envDefault:"60"`
-	AuthLoginBlockSeconds           int    `env:"AUTH_LOGIN_BLOCK_SECONDS" envDefault:"900"`
+	AuthAccessTokenTTLSeconds  int `env:"AUTH_ACCESS_TOKEN_TTL_SECONDS" envDefault:"900"`
+	AuthRefreshTokenTTLSeconds int `env:"AUTH_REFRESH_TOKEN_TTL_SECONDS" envDefault:"2592000"`
+	AuthPasswordMinLength      int `env:"AUTH_PASSWORD_MIN_LENGTH" envDefault:"10"`
+	AuthLoginMaxAttempts       int `env:"AUTH_LOGIN_MAX_ATTEMPTS" envDefault:"10"`
+	AuthLoginWindowSeconds     int `env:"AUTH_LOGIN_WINDOW_SECONDS" envDefault:"60"`
+	AuthLoginBlockSeconds      int `env:"AUTH_LOGIN_BLOCK_SECONDS" envDefault:"900"`
+	// The verification resend route is rate limited per account, like login.
+	AuthEmailResendMaxAttempts      int    `env:"AUTH_EMAIL_RESEND_MAX_ATTEMPTS" envDefault:"3"`
+	AuthEmailResendWindowSeconds    int    `env:"AUTH_EMAIL_RESEND_WINDOW_SECONDS" envDefault:"3600"`
+	AuthEmailResendBlockSeconds     int    `env:"AUTH_EMAIL_RESEND_BLOCK_SECONDS" envDefault:"3600"`
 	AuthIssuer                      string `env:"AUTH_ISSUER"`
 	AuthAudience                    string `env:"AUTH_AUDIENCE"`
 	AuthSigningKeysJSON             string `env:"AUTH_SIGNING_KEYS_JSON"`
@@ -154,6 +158,9 @@ func (c Config) Validate() error {
 		{"AUTH_LOGIN_MAX_ATTEMPTS", c.AuthLoginMaxAttempts},
 		{"AUTH_LOGIN_WINDOW_SECONDS", c.AuthLoginWindowSeconds},
 		{"AUTH_LOGIN_BLOCK_SECONDS", c.AuthLoginBlockSeconds},
+		{"AUTH_EMAIL_RESEND_MAX_ATTEMPTS", c.AuthEmailResendMaxAttempts},
+		{"AUTH_EMAIL_RESEND_WINDOW_SECONDS", c.AuthEmailResendWindowSeconds},
+		{"AUTH_EMAIL_RESEND_BLOCK_SECONDS", c.AuthEmailResendBlockSeconds},
 		{"AUTH_EMAIL_VERIFICATION_TOKEN_TTL_SECONDS", c.AuthEmailVerificationTTLSeconds},
 		{"AUTH_PASSWORD_RESET_TOKEN_TTL_SECONDS", c.AuthPasswordResetTTLSeconds},
 	}

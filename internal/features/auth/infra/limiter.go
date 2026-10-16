@@ -6,23 +6,54 @@ import (
 	"encoding/base64"
 	"fmt"
 	"net/http"
+	"strings"
 	"time"
 
 	"github.com/fikrilal/go-core-kit/internal/platform/httpx"
 	"github.com/fikrilal/go-core-kit/internal/platform/redis"
 )
 
-// LoginLimiter enforces the login attempt policy in Redis.
+// LimiterConfig parameterizes a limiter: the Redis key scope and what the 429
+// says. Two routes with different scopes must not share either.
+type LimiterConfig struct {
+	Scope       string
+	Detail      string
+	MaxAttempts int
+	Window      time.Duration
+	Block       time.Duration
+}
+
+// LoginLimiter enforces one attempt policy in Redis.
 type LoginLimiter struct {
 	client      *redis.Client
+	scope       string
+	detail      string
 	maxAttempts int64
 	window      time.Duration
 	block       time.Duration
 }
 
-// NewLoginLimiter builds the limiter.
+// NewLoginLimiter builds the login limiter.
 func NewLoginLimiter(client *redis.Client, maxAttempts int, window, block time.Duration) *LoginLimiter {
-	return &LoginLimiter{client: client, maxAttempts: int64(maxAttempts), window: window, block: block}
+	return NewLimiter(client, LimiterConfig{
+		Scope:       "auth:login",
+		Detail:      "Too many login attempts. Try again later.",
+		MaxAttempts: maxAttempts,
+		Window:      window,
+		Block:       block,
+	})
+}
+
+// NewLimiter builds a limiter under its own scope and message.
+func NewLimiter(client *redis.Client, config LimiterConfig) *LoginLimiter {
+	return &LoginLimiter{
+		client:      client,
+		scope:       config.Scope,
+		detail:      config.Detail,
+		maxAttempts: int64(config.MaxAttempts),
+		window:      config.Window,
+		block:       config.Block,
+	}
 }
 
 type attemptKeys struct {
@@ -58,7 +89,7 @@ func (l *LoginLimiter) AssertAllowed(ctx context.Context, email, ip string) erro
 	return &httpx.ProblemError{
 		Status:            http.StatusTooManyRequests,
 		Code:              httpx.CodeRateLimited,
-		Detail:            "Too many login attempts. Try again later.",
+		Detail:            l.detail,
 		RetryAfterSeconds: int(retryAfter.Round(time.Second).Seconds()),
 	}
 }
@@ -97,16 +128,19 @@ func (l *LoginLimiter) RecordSuccess(ctx context.Context, email, ip string) erro
 }
 
 func (l *LoginLimiter) keys(email, ip string) []attemptKeys {
+	// The scope decides the namespace: two routes sharing one would let a
+	// resend attempt block a login.
+	scope := strings.Split(l.scope, ":")
 	emailHash := hashKey(email)
 	keys := []attemptKeys{{
-		count: redis.Key("auth", "login", "email", emailHash, "failures"),
-		block: redis.Key("auth", "login", "email", emailHash, "blocked"),
+		count: redis.Key(append(append([]string{}, scope...), "email", emailHash, "failures")...),
+		block: redis.Key(append(append([]string{}, scope...), "email", emailHash, "blocked")...),
 	}}
 	if ip != "" {
 		ipHash := hashKey(ip)
 		keys = append(keys, attemptKeys{
-			count: redis.Key("auth", "login", "ip", ipHash, "failures"),
-			block: redis.Key("auth", "login", "ip", ipHash, "blocked"),
+			count: redis.Key(append(append([]string{}, scope...), "ip", ipHash, "failures")...),
+			block: redis.Key(append(append([]string{}, scope...), "ip", ipHash, "blocked")...),
 		})
 	}
 	return keys

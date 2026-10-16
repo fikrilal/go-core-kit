@@ -115,7 +115,7 @@ Objective: the full auth surface, contract-green.
 - [x] 3.3 Sessions: refresh rotation, reuse detection, logout — landed 2026-10-11; rotation with session-family containment, idempotent 204 logout; allowlist 30 → 28
 - [x] 3.4 Access tokens: EdDSA keyring, JWKS endpoint — landed 2026-10-11; JWKS live and snapshot-validated, verifier with the reference rejection matrix, principal guard unit-tested; allowlist 28 → 27
 - [x] 3.5 Change password — landed 2026-10-11; first protected route (guard + idempotency composed guard-outer), CAS credential update, other-session revocation; allowlist 27 → 26
-- [ ] 3.6 Email verification + resend *(needs 5.2)*
+- [x] 3.6 Email verification + resend — landed 2026-10-15; public verify consumes the token and verifies the address in one transaction, the guarded resend applies the provider gate, the silent no-oracle skip, and the per-account limiter before enqueuing on the emails lane; allowlist 12 → 10
 - [ ] 3.7 Password reset request/confirm *(needs 5.2)*
 - [x] 3.8 OIDC exchange — landed 2026-10-11; Google id_token verification (JWKS-cached adapter), identity resolve/create with link-required collisions, unified MeView; allowlist 26 → 25
 - [x] 3.9 `forbidigo` rules land with the first feature (no `time.Now()` in services, no raw JSON writes) — landed 2026-10-11; rules proven live via gate honesty (driver/raw-JSON/time.Now/platform→features fixtures); six honesty scenarios run in `make verify`

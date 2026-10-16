@@ -7,6 +7,7 @@ import (
 
 	"github.com/fikrilal/go-core-kit/internal/features/auth/domain"
 	"github.com/fikrilal/go-core-kit/internal/platform/email"
+	"github.com/fikrilal/go-core-kit/internal/platform/queue"
 )
 
 // CreateUserInput carries a new password registration.
@@ -61,6 +62,15 @@ type CreateOidcUserInput struct {
 	Now      time.Time
 }
 
+// EmailVerificationTokenState is the token row the verify use case reads.
+type EmailVerificationTokenState struct {
+	ID         string
+	UserID     string
+	ExpiresAt  time.Time
+	UsedAt     time.Time
+	UserStatus string
+}
+
 // CreateAuthTokenInput carries a minted email token.
 type CreateAuthTokenInput struct {
 	ID        string
@@ -77,6 +87,11 @@ type LinkExternalIdentityInput struct {
 	Subject  string
 	Email    string
 	Now      time.Time
+}
+
+// JobScheduler enqueues jobs on a platform queue from the API side.
+type JobScheduler interface {
+	EnqueueAt(ctx context.Context, queue, job string, payload any, meta queue.Meta, at time.Time) error
 }
 
 // Repository is the auth feature's persistence boundary.
@@ -98,6 +113,8 @@ type Repository interface {
 	FindUserEmailState(ctx context.Context, userID string) (domain.UserEmailState, bool, error)
 	CreateEmailVerificationToken(ctx context.Context, in CreateAuthTokenInput) error
 	CreatePasswordResetToken(ctx context.Context, in CreateAuthTokenInput) error
+	EmailVerificationTokenByHash(ctx context.Context, tokenHash string) (EmailVerificationTokenState, bool, error)
+	ConsumeEmailVerificationTokenAndVerifyEmail(ctx context.Context, tokenID, userID string, now time.Time) (bool, error)
 }
 
 // EmailSender sends one transactional email and reports the provider id.

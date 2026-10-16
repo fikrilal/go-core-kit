@@ -82,6 +82,21 @@ func suspendedError() error {
 	}
 }
 
+// emailVerificationTokenInvalidError hides whether the token ever existed.
+func emailVerificationTokenInvalidError() error {
+	return &httpx.ProblemError{Status: http.StatusUnauthorized, Code: httpx.CodeAuthEmailVerificationTokenInvalid}
+}
+
+// emailVerificationTokenExpiredError reports a token that was used or expired.
+func emailVerificationTokenExpiredError() error {
+	return &httpx.ProblemError{Status: http.StatusUnauthorized, Code: httpx.CodeAuthEmailVerificationTokenExpired}
+}
+
+// verificationEmailNotConfiguredError reports the provider gate.
+func verificationEmailNotConfiguredError() error {
+	return &httpx.ProblemError{Status: http.StatusNotImplemented, Code: httpx.CodeAuthEmailNotConfigured}
+}
+
 func unauthorizedError() error {
 	return &httpx.ProblemError{
 		Status: http.StatusUnauthorized,

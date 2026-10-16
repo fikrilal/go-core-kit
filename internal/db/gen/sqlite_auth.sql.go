@@ -306,6 +306,34 @@ func (q *Queries) GetAuthMethods(ctx context.Context, userID string) ([]string, 
 	return items, nil
 }
 
+const getEmailVerificationTokenByHash = `-- name: GetEmailVerificationTokenByHash :one
+SELECT t.id, t.user_id, t.expires_at, t.used_at, u.status AS user_status
+FROM email_verification_tokens t
+JOIN users u ON u.id = t.user_id
+WHERE t.token_hash = ?1 AND t.revoked_at IS NULL
+`
+
+type GetEmailVerificationTokenByHashRow struct {
+	ID         string
+	UserID     string
+	ExpiresAt  utctime.Time
+	UsedAt     utctime.Time
+	UserStatus string
+}
+
+func (q *Queries) GetEmailVerificationTokenByHash(ctx context.Context, tokenHash string) (GetEmailVerificationTokenByHashRow, error) {
+	row := q.db.QueryRowContext(ctx, getEmailVerificationTokenByHash, tokenHash)
+	var i GetEmailVerificationTokenByHashRow
+	err := row.Scan(
+		&i.ID,
+		&i.UserID,
+		&i.ExpiresAt,
+		&i.UsedAt,
+		&i.UserStatus,
+	)
+	return i, err
+}
+
 const getExternalIdentityIDByUserAndProvider = `-- name: GetExternalIdentityIDByUserAndProvider :one
 SELECT id FROM external_identities
 WHERE user_id = ?1 AND provider = ?2
@@ -568,6 +596,26 @@ func (q *Queries) GetUserIDByEmail(ctx context.Context, email string) (string, e
 	var id string
 	err := row.Scan(&id)
 	return id, err
+}
+
+const markEmailVerificationTokenUsed = `-- name: MarkEmailVerificationTokenUsed :execrows
+UPDATE email_verification_tokens
+SET used_at = ?1, updated_at = ?2
+WHERE id = ?3 AND used_at IS NULL
+`
+
+type MarkEmailVerificationTokenUsedParams struct {
+	UsedAt    utctime.Time
+	UpdatedAt utctime.Time
+	ID        string
+}
+
+func (q *Queries) MarkEmailVerificationTokenUsed(ctx context.Context, arg MarkEmailVerificationTokenUsedParams) (int64, error) {
+	result, err := q.db.ExecContext(ctx, markEmailVerificationTokenUsed, arg.UsedAt, arg.UpdatedAt, arg.ID)
+	if err != nil {
+		return 0, err
+	}
+	return result.RowsAffected()
 }
 
 const markRefreshTokenRotated = `-- name: MarkRefreshTokenRotated :execrows

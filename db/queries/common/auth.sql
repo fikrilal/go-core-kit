@@ -253,3 +253,14 @@ WHERE id = sqlc.arg(id);
 SELECT 'PASSWORD' AS method FROM password_credentials AS pc WHERE pc.user_id = sqlc.arg(user_id)
 UNION
 SELECT ei.provider AS method FROM external_identities AS ei WHERE ei.user_id = sqlc.arg(user_id);
+
+-- name: GetEmailVerificationTokenByHash :one
+SELECT t.id, t.user_id, t.expires_at, t.used_at, u.status AS user_status
+FROM email_verification_tokens t
+JOIN users u ON u.id = t.user_id
+WHERE t.token_hash = sqlc.arg(token_hash) AND t.revoked_at IS NULL;
+
+-- name: MarkEmailVerificationTokenUsed :execrows
+UPDATE email_verification_tokens
+SET used_at = sqlc.arg(used_at), updated_at = sqlc.arg(updated_at)
+WHERE id = sqlc.arg(id) AND used_at IS NULL;

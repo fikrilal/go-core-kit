@@ -46,6 +46,16 @@ func (s *Scheduler) Schedule(ctx context.Context, queueName, jobName, taskID str
 		asynq.TaskID(taskID), asynq.ProcessIn(delay))
 }
 
+// EnqueueAt enqueues job for at without a deterministic id; use Schedule when the
+// caller must be able to cancel or replace it.
+func (s *Scheduler) EnqueueAt(ctx context.Context, queueName, jobName string, payload any, meta Meta, at time.Time) error {
+	delay := at.Sub(s.clock.Now())
+	if delay < 0 {
+		delay = 0
+	}
+	return s.producer.Enqueue(ctx, queueName, jobName, payload, meta, asynq.ProcessIn(delay))
+}
+
 // Cancel removes a pending scheduled task; a missing task is not an error.
 func (s *Scheduler) Cancel(queueName, taskID string) error {
 	return s.inspector.DeleteTask(queueName, taskID)

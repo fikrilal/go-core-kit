@@ -15,11 +15,14 @@ import (
 	"github.com/fikrilal/go-core-kit/internal/features/auth/app"
 	"github.com/fikrilal/go-core-kit/internal/features/auth/domain"
 	"github.com/fikrilal/go-core-kit/internal/features/auth/infra"
+	"github.com/fikrilal/go-core-kit/internal/features/auth/ports"
 	platformauth "github.com/fikrilal/go-core-kit/internal/platform/auth"
 	"github.com/fikrilal/go-core-kit/internal/platform/clock"
 	"github.com/fikrilal/go-core-kit/internal/platform/db"
+	"github.com/fikrilal/go-core-kit/internal/platform/email"
 	"github.com/fikrilal/go-core-kit/internal/platform/httpx"
 	"github.com/fikrilal/go-core-kit/internal/platform/password"
+	"github.com/fikrilal/go-core-kit/internal/platform/queue"
 	"github.com/fikrilal/go-core-kit/internal/platform/redis"
 )
 
@@ -27,27 +30,35 @@ const dummyPassword = "dummy-password-for-timing"
 
 // Config carries the auth policy knobs from platform configuration.
 type Config struct {
-	AccessTokenTTL        time.Duration
-	SessionTTL            time.Duration
-	PasswordMinLength     int
-	LoginMaxAttempts      int
-	LoginWindow           time.Duration
-	LoginBlock            time.Duration
-	Issuer                string
-	Audience              string
-	SigningKeysJSON       string
-	SigningKeysJSONBase64 string
-	ProductionLike        bool
-	OIDCGoogleClientIDs   string
-	OIDCGoogleJWKSURL     string
+	AccessTokenTTL         time.Duration
+	SessionTTL             time.Duration
+	PasswordMinLength      int
+	LoginMaxAttempts       int
+	LoginWindow            time.Duration
+	LoginBlock             time.Duration
+	EmailResendMaxAttempts int
+	EmailResendWindow      time.Duration
+	EmailResendBlock       time.Duration
+	Issuer                 string
+	Audience               string
+	SigningKeysJSON        string
+	SigningKeysJSONBase64  string
+	ProductionLike         bool
+	OIDCGoogleClientIDs    string
+	OIDCGoogleJWKSURL      string
 }
 
 // Deps are the auth feature's dependencies.
 type Deps struct {
-	Database *db.Database
-	Redis    *redis.Client
-	Clock    clock.Clock
-	Config   Config
+	// Scheduler enqueues the resend job. Without it, or without a configured
+	// sender, the resend route answers the not-configured problem.
+	Scheduler ports.JobScheduler
+	// EmailEnabled mirrors the configured email sender.
+	EmailEnabled bool
+	Database     *db.Database
+	Redis        *redis.Client
+	Clock        clock.Clock
+	Config       Config
 }
 
 // Register mounts the auth feature on the router and returns the guard that
@@ -77,10 +88,19 @@ func Register(router *httpx.Router, deps Deps) (*platformauth.Guard, error) {
 			Tokens: issuerAdapter{issuer: platformauth.NewIssuer(
 				keyRing, deps.Clock, deps.Config.Issuer, deps.Config.Audience, deps.Config.AccessTokenTTL,
 			)},
-			Limiter:   infra.NewLoginLimiter(deps.Redis, deps.Config.LoginMaxAttempts, deps.Config.LoginWindow, deps.Config.LoginBlock),
-			Oidc:      infra.NewGoogleIDTokenVerifier(deps.Config.OIDCGoogleClientIDs, deps.Config.OIDCGoogleJWKSURL, deps.Clock),
-			Clock:     deps.Clock,
-			DummyHash: dummyHash,
+			Limiter: infra.NewLoginLimiter(deps.Redis, deps.Config.LoginMaxAttempts, deps.Config.LoginWindow, deps.Config.LoginBlock),
+			ResendLimiter: infra.NewLimiter(deps.Redis, infra.LimiterConfig{
+				Scope:       "auth:email_resend",
+				Detail:      "Too many verification email resend attempts. Try again later.",
+				MaxAttempts: deps.Config.EmailResendMaxAttempts,
+				Window:      deps.Config.EmailResendWindow,
+				Block:       deps.Config.EmailResendBlock,
+			}),
+			Scheduler:    deps.Scheduler,
+			EmailEnabled: deps.EmailEnabled,
+			Oidc:         infra.NewGoogleIDTokenVerifier(deps.Config.OIDCGoogleClientIDs, deps.Config.OIDCGoogleJWKSURL, deps.Clock),
+			Clock:        deps.Clock,
+			DummyHash:    dummyHash,
 		},
 	)
 	verifier, err := platformauth.NewVerifier(keyRing, deps.Clock, deps.Config.Issuer, deps.Config.Audience, deps.Config.ProductionLike)
@@ -89,15 +109,23 @@ func Register(router *httpx.Router, deps Deps) (*platformauth.Guard, error) {
 	}
 	guard := platformauth.NewGuard(verifier)
 	router.SetIdempotencyCaller(platformauth.IdempotencyCaller)
-	handlers := &handlers{service: service, keys: keyRing}
+	handlers := &handlers{
+		scheduler: deps.Scheduler,
+		clock:     deps.Clock, service: service, keys: keyRing,
+	}
 	router.HandleFunc(httpx.Operation{Method: http.MethodPost, Path: "/v1/auth/password/register", ID: "auth.password.register"}, handlers.register)
 	router.HandleFunc(httpx.Operation{Method: http.MethodPost, Path: "/v1/auth/password/login", ID: "auth.password.login"}, handlers.login)
 	router.HandleFunc(httpx.Operation{Method: http.MethodPost, Path: "/v1/auth/refresh", ID: "auth.refresh"}, handlers.refresh)
 	router.HandleFunc(httpx.Operation{Method: http.MethodPost, Path: "/v1/auth/logout", ID: "auth.logout"}, handlers.logout)
 	router.HandleFunc(httpx.Operation{Method: http.MethodGet, Path: "/.well-known/jwks.json", ID: "auth.jwks.get"}, handlers.jwks)
 	router.HandleFunc(httpx.Operation{Method: http.MethodPost, Path: "/v1/auth/oidc/exchange", ID: "auth.oidc.exchange"}, handlers.exchangeOidc)
+	// The verification token is the credential, so this route is public; it
+	// carries no idempotency key in the snapshot either.
+	router.HandleFunc(httpx.Operation{Method: http.MethodPost, Path: "/v1/auth/email/verify", ID: "auth.email.verify"}, handlers.verifyEmail)
 	changePassword := httpx.Operation{Method: http.MethodPost, Path: "/v1/auth/password/change", ID: "auth.password.change"}
 	router.Handle(changePassword, guard.Require(router.Idempotent(changePassword, handlers.changePassword)))
+	resendVerification := httpx.Operation{Method: http.MethodPost, Path: "/v1/auth/email/verification/resend", ID: "auth.email.verification.resend"}
+	router.Handle(resendVerification, guard.Require(http.HandlerFunc(handlers.resendVerificationEmail)))
 	connectOidc := httpx.Operation{Method: http.MethodPost, Path: "/v1/auth/oidc/connect", ID: "auth.oidc.connect"}
 	router.Handle(connectOidc, guard.Require(router.Idempotent(connectOidc, handlers.connectOidc)))
 	return guard, nil
@@ -121,8 +149,52 @@ func (a issuerAdapter) SignAccessToken(user domain.User, sessionID string) (stri
 }
 
 type handlers struct {
-	service *app.Service
-	keys    *platformauth.KeyRing
+	service   *app.Service
+	keys      *platformauth.KeyRing
+	scheduler ports.JobScheduler
+	clock     clock.Clock
+}
+
+// verifyEmailRequest carries the token from the verification email.
+type verifyEmailRequest struct {
+	Token string `json:"token" validate:"required"`
+}
+
+// resendVerificationEmail enqueues a fresh verification email for the caller.
+func (h *handlers) resendVerificationEmail(w http.ResponseWriter, r *http.Request) {
+	principal, ok := platformauth.PrincipalFrom(r.Context())
+	if !ok {
+		httpx.WriteError(w, r, &httpx.ProblemError{Status: http.StatusUnauthorized, Code: httpx.CodeUnauthorized})
+		return
+	}
+	shouldEnqueue, err := h.service.ResendVerificationEmail(r.Context(), principal.UserID)
+	if err != nil {
+		httpx.WriteError(w, r, err)
+		return
+	}
+	if shouldEnqueue {
+		// The service checked the gate, so a scheduler is present here.
+		meta := queue.Meta{RequestID: httpx.RequestID(r), TraceID: httpx.RequestID(r)}
+		if err := h.scheduler.EnqueueAt(r.Context(), email.Queue, EmailVerificationJob, EmailJobPayload{UserID: principal.UserID}, meta, h.clock.Now()); err != nil {
+			httpx.WriteError(w, r, fmt.Errorf("auth: enqueue verification email: %w", err))
+			return
+		}
+	}
+	httpx.NoContent(w)
+}
+
+// verifyEmail consumes a verification token and marks the account verified.
+func (h *handlers) verifyEmail(w http.ResponseWriter, r *http.Request) {
+	var body verifyEmailRequest
+	if err := httpx.Decode(r, &body); err != nil {
+		httpx.WriteError(w, r, err)
+		return
+	}
+	if err := h.service.VerifyEmail(r.Context(), body.Token); err != nil {
+		httpx.WriteError(w, r, err)
+		return
+	}
+	httpx.NoContent(w)
 }
 
 type passwordRequest struct {

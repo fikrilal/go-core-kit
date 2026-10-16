@@ -24,12 +24,16 @@ const (
 )
 
 type fakeRepository struct {
-	created    []ports.CreateUserInput
-	sessions   []ports.NewSessionInput
-	createErr  error
-	loginUser  domain.LoginUser
-	loginFound bool
-	loginErr   error
+	verificationToken      ports.EmailVerificationTokenState
+	verificationTokenFound bool
+	verificationConsumed   bool
+	verifiedUsers          []string
+	created                []ports.CreateUserInput
+	sessions               []ports.NewSessionInput
+	createErr              error
+	loginUser              domain.LoginUser
+	loginFound             bool
+	loginErr               error
 
 	refreshCreds domain.RefreshCredentials
 	refreshFound bool
@@ -72,6 +76,18 @@ type fakeRepository struct {
 	emailStateErr   error
 	createdTokens   []ports.CreateAuthTokenInput
 	tokenErr        error
+}
+
+func (f *fakeRepository) EmailVerificationTokenByHash(context.Context, string) (ports.EmailVerificationTokenState, bool, error) {
+	return f.verificationToken, f.verificationTokenFound, nil
+}
+
+func (f *fakeRepository) ConsumeEmailVerificationTokenAndVerifyEmail(_ context.Context, _, userID string, _ time.Time) (bool, error) {
+	if !f.verificationConsumed {
+		return false, nil
+	}
+	f.verifiedUsers = append(f.verifiedUsers, userID)
+	return true, nil
 }
 
 func (f *fakeRepository) CreateUserWithPassword(_ context.Context, in ports.CreateUserInput) (domain.User, error) {

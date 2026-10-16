@@ -712,3 +712,57 @@ func (r *Repository) CreateSession(ctx context.Context, in ports.NewSessionInput
 	}
 	return nil
 }
+
+// EmailVerificationTokenByHash loads one live verification token.
+func (r *Repository) EmailVerificationTokenByHash(ctx context.Context, tokenHash string) (ports.EmailVerificationTokenState, bool, error) {
+	row, err := r.queries.GetEmailVerificationTokenByHash(ctx, tokenHash)
+	if errors.Is(err, db.ErrNoRows) {
+		return ports.EmailVerificationTokenState{}, false, nil
+	}
+	if err != nil {
+		return ports.EmailVerificationTokenState{}, false, fmt.Errorf("find verification token: %w", err)
+	}
+	return ports.EmailVerificationTokenState{
+		ID:         row.ID,
+		UserID:     row.UserID,
+		ExpiresAt:  row.ExpiresAt.Time,
+		UsedAt:     row.UsedAt.Time,
+		UserStatus: row.UserStatus,
+	}, true, nil
+}
+
+// ConsumeEmailVerificationTokenAndVerifyEmail marks the token used and the
+// account verified in one transaction, so a failure cannot consume a token
+// without verifying the address it belonged to.
+func (r *Repository) ConsumeEmailVerificationTokenAndVerifyEmail(ctx context.Context, tokenID, userID string, now time.Time) (bool, error) {
+	stamp := utctime.Time{Time: now}
+	consumed := false
+	err := r.database.InTx(ctx, func(tx db.Tx) error {
+		queries := gen.New(tx)
+		updated, err := queries.MarkEmailVerificationTokenUsed(ctx, gen.MarkEmailVerificationTokenUsedParams{
+			UsedAt:    stamp,
+			UpdatedAt: stamp,
+			ID:        tokenID,
+		})
+		if err != nil {
+			return fmt.Errorf("consume verification token: %w", err)
+		}
+		if updated != 1 {
+			// A concurrent request consumed it; leave the account alone.
+			return nil
+		}
+		consumed = true
+		if _, err := queries.VerifyUserEmailIfUnset(ctx, gen.VerifyUserEmailIfUnsetParams{
+			EmailVerifiedAt: stamp,
+			UpdatedAt:       stamp,
+			ID:              userID,
+		}); err != nil {
+			return fmt.Errorf("mark email verified: %w", err)
+		}
+		return nil
+	})
+	if err != nil {
+		return false, fmt.Errorf("consume verification token: %w", err)
+	}
+	return consumed, nil
+}

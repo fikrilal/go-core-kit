@@ -66,6 +66,19 @@ func newAuthFixture(t *testing.T) *authFixture {
 
 func newAuthFixtureWith(t *testing.T, mutate func(cfg *config.Config)) *authFixture {
 	t.Helper()
+	return newAuthFixtureFull(t, mutate, false)
+}
+
+// newAuthFixtureWithQueue is newAuthFixtureWith plus a live queue. Only routes
+// that schedule jobs need one; the shared fixture leaves REDIS_URL unset so the
+// unconfigured paths stay testable.
+func newAuthFixtureWithQueue(t *testing.T, mutate func(cfg *config.Config)) *authFixture {
+	t.Helper()
+	return newAuthFixtureFull(t, mutate, true)
+}
+
+func newAuthFixtureFull(t *testing.T, mutate func(cfg *config.Config), queued bool) *authFixture {
+	t.Helper()
 	suite := contracttest.New(t)
 	database := db.MustOpen(filepath.Join(t.TempDir(), "auth.db"))
 	t.Cleanup(func() { _ = database.Close() })
@@ -76,6 +89,9 @@ func newAuthFixtureWith(t *testing.T, mutate func(cfg *config.Config)) *authFixt
 	rdb := redis.MustOpen("redis://" + mini.Addr() + "/0")
 	t.Cleanup(func() { _ = rdb.Close() })
 	cfg := testConfig(t)
+	if queued {
+		cfg.RedisURL = "redis://" + mini.Addr() + "/0"
+	}
 	if mutate != nil {
 		mutate(&cfg)
 	}

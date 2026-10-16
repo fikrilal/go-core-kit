@@ -17,8 +17,8 @@ type EmailVerificationToken struct {
 	UserID    string
 	TokenHash string
 	ExpiresAt utctime.Time
-	UsedAt    sql.NullTime
-	RevokedAt sql.NullTime
+	UsedAt    utctime.Time
+	RevokedAt utctime.Time
 	CreatedAt utctime.Time
 	UpdatedAt utctime.Time
 }
@@ -45,8 +45,8 @@ type PasswordResetToken struct {
 	UserID    string
 	TokenHash string
 	ExpiresAt utctime.Time
-	UsedAt    sql.NullTime
-	RevokedAt sql.NullTime
+	UsedAt    utctime.Time
+	RevokedAt utctime.Time
 	CreatedAt utctime.Time
 	UpdatedAt utctime.Time
 }

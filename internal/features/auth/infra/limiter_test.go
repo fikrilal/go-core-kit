@@ -96,3 +96,32 @@ func TestLoginLimiterImmediateBlockAfterThreshold(t *testing.T) {
 		t.Fatal("AssertAllowed() = nil after the threshold, want a 429")
 	}
 }
+
+// TestLimiterScopesAreIsolated proves the resend lane cannot block logins: its
+// attempts live under its own namespace.
+func TestLimiterScopesAreIsolated(t *testing.T) {
+	client := redis.MustOpen("redis://" + miniredis.RunT(t).Addr() + "/0")
+	t.Cleanup(func() { _ = client.Close() })
+	login := infra.NewLoginLimiter(client, 1, window, block)
+	resend := infra.NewLimiter(client, infra.LimiterConfig{
+		Scope: "auth:email_resend", Detail: "Too many verification email resend attempts.",
+		MaxAttempts: 1, Window: window, Block: block,
+	})
+	ctx := context.Background()
+
+	// Exhaust the resend lane for this subject.
+	if err := resend.AssertAllowed(ctx, "user-1", ""); err != nil {
+		t.Fatalf("resend.AssertAllowed() error = %v", err)
+	}
+	if err := resend.RecordFailure(ctx, "user-1", ""); err != nil {
+		t.Fatalf("resend.RecordFailure() error = %v", err)
+	}
+	if err := resend.AssertAllowed(ctx, "user-1", ""); rateLimited(t, err) == nil {
+		t.Fatal("the resend lane must block after its attempt")
+	}
+
+	// The same subject can still log in.
+	if err := login.AssertAllowed(ctx, "user-1", ""); err != nil {
+		t.Fatalf("login.AssertAllowed() error = %v, want the namespaces to differ", err)
+	}
+}
