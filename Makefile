@@ -6,6 +6,7 @@ GOLANGCI_LINT_VERSION ?= v2.14.0
 SQLC_VERSION ?= v1.31.1
 OAPI_CODEGEN_VERSION ?= v2.8.0
 VACUUM_VERSION ?= v0.33.0
+GOOSE_VERSION ?= v3.28.0
 
 .PHONY: verify fmt fmt-check vet lint test build build-pg tidy tools generate drift scaffold-smoke
 
@@ -28,10 +29,12 @@ tools:
 		case "$$arch" in x86_64) arch=x86_64 ;; aarch64 | arm64) arch=arm64 ;; esac; \
 		curl -sSfL "https://github.com/daveshanley/vacuum/releases/download/$(VACUUM_VERSION)/vacuum_$(VACUUM_VERSION:v%=%)_$${os}_$${arch}.tar.gz" | tar -xz -C "$$HOME/.local/bin" vacuum; \
 	}
+	@command -v goose >/dev/null 2>&1 || GOBIN="$$HOME/.local/bin" $(GO) install github.com/pressly/goose/v3/cmd/goose@$(GOOSE_VERSION)
 	@$(GOLANGCI_LINT) version | head -n 1
 	@sqlc version
 	@oapi-codegen --version
 	@vacuum version
+	@goose --version
 
 fmt:
 	$(GOLANGCI_LINT) fmt

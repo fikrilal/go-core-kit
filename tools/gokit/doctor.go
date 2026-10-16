@@ -10,11 +10,12 @@ import (
 )
 
 var (
-	makefilePinPattern = regexp.MustCompile(`(?m)^(GOLANGCI_LINT_VERSION|SQLC_VERSION|OAPI_CODEGEN_VERSION|VACUUM_VERSION) \?= (\S+)$`)
+	makefilePinPattern = regexp.MustCompile(`(?m)^(GOLANGCI_LINT_VERSION|SQLC_VERSION|OAPI_CODEGEN_VERSION|VACUUM_VERSION|GOOSE_VERSION) \?= (\S+)$`)
 	goDirectivePattern = regexp.MustCompile(`(?m)^go (\S+)$`)
 	goVersionPattern   = regexp.MustCompile(`\bgo(\d+\.\d+(?:\.\d+)?)\b`)
 	golangciPattern    = regexp.MustCompile(`version (\S+) built`)
 	versionOnlyPattern = regexp.MustCompile(`(?m)^v?(\d+\.\d+\.\d+)$`)
+	goosePattern       = regexp.MustCompile(`goose version: v?(\S+)`)
 )
 
 type doctorReport struct {
@@ -60,6 +61,9 @@ func runDoctor(ctx context.Context) error {
 	checkTool(ctx, report, "sqlc", []string{"version"}, versionOnlyPattern, pins["SQLC_VERSION"])
 	checkTool(ctx, report, "oapi-codegen", []string{"--version"}, versionOnlyPattern, pins["OAPI_CODEGEN_VERSION"])
 	checkTool(ctx, report, "vacuum", []string{"version"}, versionOnlyPattern, pins["VACUUM_VERSION"])
+	// The goose binary is an operator tool: migrations run in process, so a
+	// missing CLI warns rather than failing the check.
+	checkOptionalTool(ctx, report, "goose", []string{"--version"}, goosePattern, pins["GOOSE_VERSION"])
 
 	if _, err := commandOutput(ctx, "git", "rev-parse", "--show-toplevel"); err != nil {
 		report.warn("not a git work tree — the review loop and drift checks need one")
@@ -81,8 +85,8 @@ func readPins(report *doctorReport) map[string]string {
 		return nil
 	}
 	pins := parsePins(string(data))
-	if pins["GOLANGCI_LINT_VERSION"] == "" || pins["SQLC_VERSION"] == "" || pins["OAPI_CODEGEN_VERSION"] == "" || pins["VACUUM_VERSION"] == "" {
-		report.warn("Makefile pins not found (GOLANGCI_LINT_VERSION, SQLC_VERSION, OAPI_CODEGEN_VERSION, VACUUM_VERSION)")
+	if pins["GOLANGCI_LINT_VERSION"] == "" || pins["SQLC_VERSION"] == "" || pins["OAPI_CODEGEN_VERSION"] == "" || pins["VACUUM_VERSION"] == "" || pins["GOOSE_VERSION"] == "" {
+		report.warn("Makefile pins not found (GOLANGCI_LINT_VERSION, SQLC_VERSION, OAPI_CODEGEN_VERSION, VACUUM_VERSION, GOOSE_VERSION)")
 	}
 	return pins
 }
@@ -147,6 +151,26 @@ func checkTool(ctx context.Context, report *doctorReport, name string, args []st
 		return
 	}
 	report.pass(fmt.Sprintf("%s %s (Makefile pins %s)", name, installed, pinned))
+}
+
+// checkOptionalTool reports a tool that operational work uses but the build does
+// not require.
+func checkOptionalTool(ctx context.Context, report *doctorReport, name string, args []string, pattern *regexp.Regexp, pinned string) {
+	output, err := commandOutput(ctx, name, args...)
+	if err != nil {
+		report.warn(fmt.Sprintf("%s not installed — run `make tools` to use it for manual migrations", name))
+		return
+	}
+	match := pattern.FindStringSubmatch(output)
+	if match == nil {
+		report.warn(fmt.Sprintf("%s: unrecognized version output %q", name, firstLine(output)))
+		return
+	}
+	if pinned != "" && strings.TrimPrefix(pinned, "v") != match[1] {
+		report.warn(fmt.Sprintf("%s %s installed, Makefile pins %s — run `make tools`", name, match[1], pinned))
+		return
+	}
+	report.pass(fmt.Sprintf("%s %s (Makefile pins %s)", name, match[1], pinned))
 }
 
 func compareVersions(a, b string) int {

@@ -3,9 +3,9 @@ package main
 import "testing"
 
 func TestParsePins(t *testing.T) {
-	content := "GOLANGCI_LINT_VERSION ?= v2.14.0\nSQLC_VERSION ?= v1.31.1\nOAPI_CODEGEN_VERSION ?= v2.8.0\nVACUUM_VERSION ?= v0.33.0\nGO ?= go\n"
+	content := "GOLANGCI_LINT_VERSION ?= v2.14.0\nSQLC_VERSION ?= v1.31.1\nOAPI_CODEGEN_VERSION ?= v2.8.0\nVACUUM_VERSION ?= v0.33.0\nGOOSE_VERSION ?= v3.28.0\nGO ?= go\n"
 	pins := parsePins(content)
-	if pins["GOLANGCI_LINT_VERSION"] != "v2.14.0" || pins["SQLC_VERSION"] != "v1.31.1" || pins["OAPI_CODEGEN_VERSION"] != "v2.8.0" || pins["VACUUM_VERSION"] != "v0.33.0" {
+	if pins["GOLANGCI_LINT_VERSION"] != "v2.14.0" || pins["SQLC_VERSION"] != "v1.31.1" || pins["OAPI_CODEGEN_VERSION"] != "v2.8.0" || pins["VACUUM_VERSION"] != "v0.33.0" || pins["GOOSE_VERSION"] != "v3.28.0" {
 		t.Fatalf("parsePins() = %v", pins)
 	}
 	if _, ok := pins["GO"]; ok {
