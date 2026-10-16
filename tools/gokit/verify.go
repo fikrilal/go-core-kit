@@ -95,6 +95,15 @@ func gatesHonestyStep() step {
 	}
 }
 
+// secretsStep scans the tracked files for secret-shaped text.
+func secretsStep() step {
+	return step{
+		id:     "secrets",
+		budget: 30 * time.Second,
+		run:    runSecretsScan,
+	}
+}
+
 func fastSteps() []step {
 	return []step{
 		knowledgeStep(),
@@ -103,6 +112,7 @@ func fastSteps() []step {
 		execStep("vet", "go", "vet", "./..."),
 		execStep("lint", "golangci-lint", "run"),
 		execStep("test", "go", "test", "./..."),
+		secretsStep(),
 	}
 }
 

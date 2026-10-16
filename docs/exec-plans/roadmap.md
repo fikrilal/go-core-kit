@@ -177,7 +177,7 @@ Exit gate: acceptance criteria of both `_WIP` proposals satisfied.
 - [x] Strict lint/format baseline + `make tools` for golangci-lint (landed with 1.0)
 - [ ] Extend `make tools` pins for `sqlc`, `goose`, `oapi-codegen`, `vacuum`
 - [ ] Duplication policy: blocking core profile with reviewed allowlists (once features exist)
-- [ ] Secrets scan gate (pattern-based, `git ls-files` scoped) in CI
+- [x] Secrets scan gate — landed 2026-10-15; `gokit` scans `git ls-files` for private-key, AWS, Resend, service-account, and PEM shapes as a step of the fast profile (so CI runs it), reports file:line and pattern without echoing the match, and skips two reviewed entries: its own pattern definitions and the AWS-published SigV4 test vectors
 - [ ] Litestream backup + single-box deployment notes (`docs/engineering/`)
 - [ ] Export/import helper for cross-engine data moves (optional, later)
 - [ ] Evidence/oracles scaffolding once runtime flows exist
