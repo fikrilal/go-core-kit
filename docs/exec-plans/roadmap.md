@@ -27,7 +27,7 @@ Rules: findings gate on **new vs baseline**, and updating a baseline requires ex
 
 ## Current Focus
 
-**Phase 5: 5.1–5.4 landed, and its exit gate is satisfied** — 3.6 and 3.7 landed the verification and password-reset flows end to end (worker to wire), leaving the allowlist at 8 operations.
+**Phase 7 complete:** the pg lane builds, vets, lints, tests, and passes its contract suites against a live Postgres (7.1–7.3 checked). Next: **Phase 9** (allowlist to 8 → 0, the performance baseline, standards completion) and the remaining cross-cutting items.
 
 Readability note 01 has landed.
 
