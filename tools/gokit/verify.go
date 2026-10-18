@@ -111,6 +111,9 @@ func fastSteps() []step {
 		execStep("fmt-check", "golangci-lint", "fmt", "--diff"),
 		execStep("vet", "go", "vet", "./..."),
 		execStep("lint", "golangci-lint", "run"),
+		// The pg lane's files are invisible to the default lint run, so it gets
+		// its own step: a build-tag lane that is never linted is never checked.
+		execStep("lint-pg", "golangci-lint", "run", "--build-tags", "pg"),
 		execStep("test", "go", "test", "./..."),
 		secretsStep(),
 	}

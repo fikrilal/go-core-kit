@@ -6,7 +6,7 @@ decision list rather than a guess. Counts are asserted by
 `tools/gokit/portable_test.go`; they may shrink as the lane lands, never grow
 silently.
 
-**Totals: 29 lift, 9 stay, 1 switch (39 tagged paths).
+**Totals: 29 lift, 10 stay, 1 switch (40 tagged paths).
 
 ## Lifts (29)
 
@@ -43,7 +43,7 @@ lane compiles it unchanged.
 - `internal/features/me/infra/repository_push_test.go`
 - `internal/features/me/me.go`
 
-## Stays (9)
+## Stays (10)
 
 SQLite-specific by construction: the generated SQLite query half and the SQLite
 `Database` with its integration tests. The pg lane gets counterparts
@@ -58,6 +58,7 @@ their tag.
 - `internal/platform/db/auth_schema_test.go`
 - `internal/platform/db/gen_integration_test.go`
 - `internal/platform/db/sqlite.go`
+- `internal/platform/config/database_sqlite.go` — the SQLite lane's required-key check
 - `internal/platform/db/sqlite_test.go`
 
 ## Switches (1)

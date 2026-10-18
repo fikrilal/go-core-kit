@@ -12,7 +12,7 @@ import (
 // pg work; growing them needs a deliberate edit here and in the audit note.
 const (
 	taggedForPgLift   = 29
-	taggedForPgStay   = 9
+	taggedForPgStay   = 10
 	taggedForPgSwitch = 1
 )
 
@@ -37,6 +37,7 @@ func TestPortableSubsetCountsMatchTheTree(t *testing.T) {
 				counts["switch"]++
 			case strings.HasPrefix(relative, "internal/db/gen/sqlite_"),
 				relative == "internal/platform/db/sqlite.go",
+				relative == "internal/platform/config/database_sqlite.go",
 				strings.HasPrefix(relative, "internal/platform/db/") && strings.HasSuffix(relative, "_test.go"):
 				counts["stay"]++
 			default:

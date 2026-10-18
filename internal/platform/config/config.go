@@ -42,10 +42,14 @@ const (
 type Config struct {
 	AppEnv       Env       `env:"APP_ENV" envDefault:"dev"`
 	HTTPPort     int       `env:"HTTP_PORT" envDefault:"8080"`
-	DatabasePath string    `env:"DATABASE_PATH,required"`
+	DatabasePath string    `env:"DATABASE_PATH"`
 	RedisURL     string    `env:"REDIS_URL,required"`
 	LogLevel     LogLevel  `env:"LOG_LEVEL" envDefault:"info"`
 	LogFormat    LogFormat `env:"LOG_FORMAT" envDefault:"json"`
+
+	// DatabaseURL is the Postgres connection string the pg lane opens. The
+	// SQLite lane is selected by build tag and ignores it.
+	DatabaseURL string `env:"DATABASE_URL"`
 
 	AuthAccessTokenTTLSeconds  int `env:"AUTH_ACCESS_TOKEN_TTL_SECONDS" envDefault:"900"`
 	AuthRefreshTokenTTLSeconds int `env:"AUTH_REFRESH_TOKEN_TTL_SECONDS" envDefault:"2592000"`
@@ -134,6 +138,11 @@ func MustLoad() Config {
 
 // Validate checks enum values, ranges, and cross-field invariants.
 func (c Config) Validate() error {
+	// Which database key is required depends on the compiled engine: the lane's
+	// own file decides, and the missing key doubles as the wrong-build guard.
+	if err := c.validateDatabase(); err != nil {
+		return err
+	}
 	if !c.AppEnv.valid() {
 		return fmt.Errorf("APP_ENV %q is not one of: dev, staging, prod, test", c.AppEnv)
 	}
