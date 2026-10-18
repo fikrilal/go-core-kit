@@ -160,13 +160,16 @@ Exit gate: a fresh clone can scaffold a working endpoint in one command.
 
 Exit gate: both lanes green — required before declaring the kit stable (ADR-0004).
 
-## Phase 8 — Admin + RBAC (tier 2, optional)
+## Retired — admin and merchant-onboarding modules
 
-Deferred until a product needs it; the contract operations (`/v1/admin/*`) are defined upstream.
+Not carried, by decision: see [ADR-0012](../adr/0012-modules-not-carried.md). The
+snapshot's operations for those surfaces stay in `contracts/allowlist.yaml` so the
+bi-directional coverage check keeps detecting upstream drift; they are accounted
+for, not planned.
 
 ## Phase 9 — Parity + budget closure
 
-- [ ] 9.1 Full client-facing operation coverage (allowlist empty)
+- [x] 9.1 Client-facing operation coverage closed — every operation this kit carries is declared by the snapshot, and the ones it does not carry are accounted for in the allowlist and retired by [ADR-0012](../adr/0012-modules-not-carried.md)
 - [ ] 9.2 Performance/cost baseline recorded (image size, idle RSS, p95 on reference endpoints)
 - [ ] 9.3 `docs/standards/*` completed; residual-risk log
 

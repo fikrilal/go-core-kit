@@ -19,3 +19,4 @@ ADRs record durable decisions. Proposals in `_WIP/` are input; once accepted, de
 | [0009](./0009-observability-slog-and-otel.md) | Observability: slog and OpenTelemetry | Accepted |
 | [0010](./0010-gokit-cli-and-single-verify-gate.md) | gokit CLI and the single verify gate | Accepted |
 | [0011](./0011-strict-quality-baseline-and-gate-honesty.md) | Strict quality baseline and gate honesty | Accepted |
+| [0012](./0012-modules-not-carried.md) | Modules this kit does not carry | Accepted |
