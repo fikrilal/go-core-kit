@@ -178,7 +178,7 @@ Exit gate: acceptance criteria of both `_WIP` proposals satisfied.
 - [x] Extend `make tools` pins — landed 2026-10-15; `GOOSE_VERSION` joins the existing sqlc, oapi-codegen, and vacuum pins, `make tools` installs the CLI for manual migrations, and `doctor` reports it as an **optional** tool (warn, never fail) because migrations run in process as they land
 - [ ] Duplication policy: blocking core profile with reviewed allowlists (once features exist)
 - [x] Secrets scan gate — landed 2026-10-15; `gokit` scans `git ls-files` for private-key, AWS, Resend, service-account, and PEM shapes as a step of the fast profile (so CI runs it), reports file:line and pattern without echoing the match, and skips two reviewed entries: its own pattern definitions and the AWS-published SigV4 test vectors
-- [ ] Litestream backup + single-box deployment notes (`docs/engineering/`)
+- [x] Litestream backup + single-box deployment notes — landed 2026-10-15; `docs/engineering/single-box-deployment.md` records the process roles and start order, the Litestream replica and restore runbook, the Redis caveats (rate-limit and idempotency state is lost, scheduled deletion re-arms from the stored schedule), and the explicit non-goals (no HA, no pg lane yet)
 - [ ] Export/import helper for cross-engine data moves (optional, later)
 - [ ] Evidence/oracles scaffolding once runtime flows exist
 
