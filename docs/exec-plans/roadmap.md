@@ -171,7 +171,7 @@ for, not planned.
 
 - [x] 9.1 Client-facing operation coverage closed — every operation this kit carries is declared by the snapshot, and the ones it does not carry are accounted for in the allowlist and retired by [ADR-0012](../adr/0012-modules-not-carried.md)
 - [ ] 9.2 Performance/cost baseline recorded (image size, idle RSS, p95 on reference endpoints)
-- [ ] 9.3 `docs/standards/*` completed; residual-risk log
+- [x] 9.3 `docs/standards/*` completed — all nine planned standards are in place (api-response, error-codes, authentication, pagination-filtering-sorting, configuration, database, queues-jobs, observability, ci-cd) with the index flipped to in place, plus `docs/engineering/residual-risk.md` recording ten known gaps with their blast radius and what would close each
 
 Exit gate: acceptance criteria of both `_WIP` proposals satisfied.
 

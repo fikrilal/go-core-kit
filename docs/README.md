@@ -19,6 +19,7 @@ go-core-kit is a production-grade Go backend template that serves the same wire 
 - Engineering notes
   - `docs/engineering/single-box-deployment.md` — the default topology, start order, backup and restore with Litestream
   - `docs/engineering/pg-portable-subset.md` — which tagged files lift, stay, or switch when the pg lane lands
+  - `docs/engineering/residual-risk.md` — known gaps, where they bite, and what would close them
 - Execution plans
   - `docs/exec-plans/README.md`
   - `docs/exec-plans/roadmap.md` — high-level phases and task tracking
