@@ -1,5 +1,3 @@
-//go:build !pg
-
 package main
 
 import (
@@ -9,15 +7,13 @@ import (
 	"io"
 	"net"
 	"net/http"
-	"path/filepath"
 	"testing"
 	"time"
 
 	"github.com/alicebob/miniredis/v2"
 
-	"github.com/fikrilal/go-core-kit/db/migrations"
 	"github.com/fikrilal/go-core-kit/internal/platform/config"
-	"github.com/fikrilal/go-core-kit/internal/platform/db"
+	"github.com/fikrilal/go-core-kit/internal/platform/dbtest"
 	"github.com/fikrilal/go-core-kit/internal/platform/logging"
 	"github.com/fikrilal/go-core-kit/internal/platform/redis"
 )
@@ -28,14 +24,7 @@ func TestServeServesProbesAndShutsDown(t *testing.T) {
 
 	mini := miniredis.RunT(t)
 	rdb := redis.MustOpen("redis://" + mini.Addr() + "/0")
-	database := db.MustOpen(filepath.Join(t.TempDir(), "api.db"))
-	t.Cleanup(func() {
-		_ = database.Close()
-		_ = rdb.Close()
-	})
-	if err := database.Migrate(t.Context(), migrations.SQLite); err != nil {
-		t.Fatalf("Migrate() error = %v", err)
-	}
+	database := dbtest.Open(t)
 
 	httpServer, _, err := newServer(testConfig(t), logger, database, rdb)
 	if err != nil {

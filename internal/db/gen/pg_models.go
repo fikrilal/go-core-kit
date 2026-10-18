@@ -55,7 +55,7 @@ type RefreshToken struct {
 	ID           string
 	TokenHash    string
 	ExpiresAt    utctime.Time
-	RevokedAt    sql.NullTime
+	RevokedAt    utctime.Time
 	SessionID    string
 	ReplacedByID sql.NullString
 	CreatedAt    utctime.Time
@@ -69,14 +69,14 @@ type Session struct {
 	DeviceName         sql.NullString
 	PushPlatform       sql.NullString
 	PushToken          sql.NullString
-	PushTokenUpdatedAt sql.NullTime
-	PushTokenRevokedAt sql.NullTime
+	PushTokenUpdatedAt utctime.Time
+	PushTokenRevokedAt utctime.Time
 	Ip                 sql.NullString
 	UserAgent          sql.NullString
 	ActiveKey          sql.NullString
 	LastSeenAt         utctime.Time
 	ExpiresAt          utctime.Time
-	RevokedAt          sql.NullTime
+	RevokedAt          utctime.Time
 	CreatedAt          utctime.Time
 	UpdatedAt          utctime.Time
 }
@@ -90,8 +90,8 @@ type StoredFile struct {
 	ObjectKey   string
 	ContentType string
 	SizeBytes   int64
-	UploadedAt  sql.NullTime
-	DeletedAt   sql.NullTime
+	UploadedAt  utctime.Time
+	DeletedAt   utctime.Time
 	TraceID     sql.NullString
 	CreatedAt   utctime.Time
 	UpdatedAt   utctime.Time
@@ -102,16 +102,16 @@ type User struct {
 	Email                      string
 	CreatedAt                  utctime.Time
 	UpdatedAt                  utctime.Time
-	EmailVerifiedAt            sql.NullTime
+	EmailVerifiedAt            utctime.Time
 	Role                       string
 	Status                     string
-	SuspendedAt                sql.NullTime
+	SuspendedAt                utctime.Time
 	SuspendedReason            sql.NullString
-	DeletionRequestedAt        sql.NullTime
-	DeletionScheduledFor       sql.NullTime
+	DeletionRequestedAt        utctime.Time
+	DeletionScheduledFor       utctime.Time
 	DeletionRequestedSessionID sql.NullString
 	DeletionRequestedTraceID   sql.NullString
-	DeletedAt                  sql.NullTime
+	DeletedAt                  utctime.Time
 }
 
 type UserAccountDeletionAudit struct {

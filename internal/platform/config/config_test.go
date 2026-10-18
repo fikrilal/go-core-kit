@@ -10,7 +10,8 @@ import (
 
 func setRequired(t *testing.T) {
 	t.Helper()
-	t.Setenv("DATABASE_PATH", "./.data/test.db")
+	databaseKey, databaseValue := laneDatabaseEnv()
+	t.Setenv(databaseKey, databaseValue)
 	t.Setenv("REDIS_URL", "redis://localhost:6379/0")
 }
 
@@ -67,18 +68,27 @@ func TestLoadParsesValues(t *testing.T) {
 	if cfg.AppEnv != config.EnvStaging || cfg.HTTPPort != 9090 || cfg.LogLevel != config.LogLevelWarn || cfg.LogFormat != config.LogFormatText {
 		t.Errorf("Load() = %+v, want staging/9090/warn/text", cfg)
 	}
-	if cfg.DatabasePath != "./.data/test.db" || cfg.RedisURL != "redis://localhost:6379/0" {
+	if cfg.RedisURL != "redis://localhost:6379/0" {
 		t.Errorf("required values not parsed: %+v", cfg)
+	}
+	// Which field carries the database value depends on the compiled lane.
+	databaseKey, databaseValue := laneDatabaseEnv()
+	if databaseKey == "DATABASE_PATH" && cfg.DatabasePath != databaseValue {
+		t.Errorf("DatabasePath = %q, want %q", cfg.DatabasePath, databaseValue)
+	}
+	if databaseKey == "DATABASE_URL" && cfg.DatabaseURL != databaseValue {
+		t.Errorf("DatabaseURL = %q, want %q", cfg.DatabaseURL, databaseValue)
 	}
 }
 
 func TestLoadFailsOnMissingRequired(t *testing.T) {
-	unsetenv(t, "DATABASE_PATH")
+	databaseKey, _ := laneDatabaseEnv()
+	unsetenv(t, databaseKey)
 	t.Setenv("REDIS_URL", "redis://localhost:6379/0")
 
 	_, err := config.Load()
-	if err == nil || !strings.Contains(err.Error(), "DATABASE_PATH") {
-		t.Errorf("Load() error = %v, want DATABASE_PATH error", err)
+	if err == nil || !strings.Contains(err.Error(), databaseKey) {
+		t.Errorf("Load() error = %v, want the %s error", err, databaseKey)
 	}
 }
 

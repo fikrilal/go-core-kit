@@ -1,5 +1,3 @@
-//go:build !pg
-
 package main
 
 import (
@@ -14,6 +12,7 @@ import (
 
 	"github.com/fikrilal/go-core-kit/internal/platform/config"
 	"github.com/fikrilal/go-core-kit/internal/platform/contracttest"
+	"github.com/fikrilal/go-core-kit/internal/platform/dbtest"
 )
 
 const googleTestKid = "google-test-key"
@@ -121,16 +120,14 @@ func TestContractAuthOidcExchangeCreatesUser(t *testing.T) {
 	}
 
 	var verifiedAt *string
-	if err := f.database.SQL().QueryRowContext(t.Context(),
-		"SELECT email_verified_at FROM users WHERE id = ?", user.ID).Scan(&verifiedAt); err != nil {
+	if err := f.database.SQL().QueryRowContext(t.Context(), dbtest.Rebind("SELECT email_verified_at FROM users WHERE id = ?"), user.ID).Scan(&verifiedAt); err != nil {
 		t.Fatalf("user row: %v", err)
 	}
 	if verifiedAt == nil {
 		t.Error("user email not marked verified")
 	}
 	var subject string
-	if err := f.database.SQL().QueryRowContext(t.Context(),
-		"SELECT subject FROM external_identities WHERE user_id = ? AND provider = 'GOOGLE'", user.ID).Scan(&subject); err != nil {
+	if err := f.database.SQL().QueryRowContext(t.Context(), dbtest.Rebind("SELECT subject FROM external_identities WHERE user_id = ? AND provider = 'GOOGLE'"), user.ID).Scan(&subject); err != nil {
 		t.Fatalf("identity row: %v", err)
 	}
 	if subject != "google-subject-1" {
@@ -148,11 +145,11 @@ func TestContractAuthOidcExchangeReusesIdentity(t *testing.T) {
 	}
 
 	var users, identities, sessions int
-	if err := f.database.SQL().QueryRowContext(t.Context(), `
+	if err := f.database.SQL().QueryRowContext(t.Context(), dbtest.Rebind(`
 		SELECT
 			(SELECT COUNT(*) FROM users),
 			(SELECT COUNT(*) FROM external_identities),
-			(SELECT COUNT(*) FROM sessions)`).Scan(&users, &identities, &sessions); err != nil {
+			(SELECT COUNT(*) FROM sessions)`)).Scan(&users, &identities, &sessions); err != nil {
 		t.Fatalf("counts: %v", err)
 	}
 	if users != 1 || identities != 1 || sessions != 2 {
@@ -172,7 +169,7 @@ func TestContractAuthOidcExchangeLinkRequired(t *testing.T) {
 	f.suite.AssertErrorCodeDeclared(t, "auth.oidc.exchange", "AUTH_OIDC_LINK_REQUIRED")
 
 	var identities int
-	if err := f.database.SQL().QueryRowContext(t.Context(), "SELECT COUNT(*) FROM external_identities").Scan(&identities); err != nil {
+	if err := f.database.SQL().QueryRowContext(t.Context(), dbtest.Rebind("SELECT COUNT(*) FROM external_identities")).Scan(&identities); err != nil {
 		t.Fatalf("count identities: %v", err)
 	}
 	if identities != 0 {
@@ -212,8 +209,7 @@ func TestContractAuthOidcExchangeErrors(t *testing.T) {
 func TestContractAuthOidcExchangeSuspended(t *testing.T) {
 	f := newOIDCFixture(t)
 	decoded := decodeAuthResponse(t, mustExchangeOK(t, f, f.sign(nil)).Body)
-	if _, err := f.database.SQL().ExecContext(t.Context(),
-		"UPDATE users SET status = 'SUSPENDED' WHERE id = ?", decoded.Data.User.ID); err != nil {
+	if _, err := f.database.SQL().ExecContext(t.Context(), dbtest.Rebind("UPDATE users SET status = 'SUSPENDED' WHERE id = ?"), decoded.Data.User.ID); err != nil {
 		t.Fatalf("suspend user: %v", err)
 	}
 	_, resp := f.exchange(t, "GOOGLE", f.sign(nil))

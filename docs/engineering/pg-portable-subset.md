@@ -6,66 +6,28 @@ decision list rather than a guess. Counts are asserted by
 `tools/gokit/portable_test.go`; they may shrink as the lane lands, never grow
 silently.
 
-**Totals: 29 lift, 10 stay, 1 switch (40 tagged paths).
+**Totals: 3 lift, 6 stay, 0 switch (9 hand-written tagged paths; the generated half's tags are the generator's business and are not counted).**
 
-## Lifts (29)
+## Lifts (3)
 
-Engine-agnostic code: it talks to `ports`, `gen`, or the platform only, so the pg
-lane compiles it unchanged.
+Engine-agnostic code still carrying a tag: the lanes' bootstrap files and the integration tests that name an engine to run.
 
-- `cmd/api/contract_auth_test.go`
-- `cmd/api/contract_email_resend_test.go`
-- `cmd/api/contract_email_verify_test.go`
-- `cmd/api/contract_jwks_test.go`
-- `cmd/api/contract_me_deletion_test.go`
-- `cmd/api/contract_me_profile_image_test.go`
-- `cmd/api/contract_me_push_test.go`
-- `cmd/api/contract_me_sessions_test.go`
-- `cmd/api/contract_me_test.go`
-- `cmd/api/contract_oidc_connect_test.go`
-- `cmd/api/contract_oidc_test.go`
-- `cmd/api/contract_password_change_test.go`
-- `cmd/api/contract_password_reset_request_test.go`
-- `cmd/api/contract_password_reset_test.go`
-- `cmd/api/contract_refresh_test.go`
-- `cmd/api/contract_test.go`
-- `cmd/api/coverage_test.go`
-- `cmd/api/helpers_test.go`
-- `cmd/api/server.go`
-- `cmd/api/server_test.go`
-- `cmd/worker/main.go`
 - `cmd/worker/main_test.go`
-- `cmd/worker/server.go`
-- `internal/features/auth/auth.go`
-- `internal/features/auth/infra/repository.go`
-- `internal/features/auth/jobs.go`
-- `internal/features/me/infra/repository.go`
-- `internal/features/me/infra/repository_push_test.go`
-- `internal/features/me/me.go`
-
-## Stays (10)
-
-SQLite-specific by construction: the generated SQLite query half and the SQLite
-`Database` with its integration tests. The pg lane gets counterparts
-(`pg_*.go`, `pg.go`, and its own guarded tests) rather than these files losing
-their tag.
-
-- `internal/db/gen/sqlite_auth.sql.go`
-- `internal/db/gen/sqlite_db.go`
-- `internal/db/gen/sqlite_me.sql.go`
-- `internal/db/gen/sqlite_models.go`
-- `internal/db/gen/sqlite_users.sql.go`
 - `internal/platform/db/auth_schema_test.go`
 - `internal/platform/db/gen_integration_test.go`
+## Stays (6)
+
+SQLite-specific by construction: the SQLite `Database`, the lane files that name an engine, and the tests that assert engine-owned behaviour. The pg lane has counterparts.
+
+- `internal/platform/config/database_sqlite.go`
+- `internal/platform/config/lane_sqlite_test.go`
 - `internal/platform/db/sqlite.go`
-- `internal/platform/config/database_sqlite.go` — the SQLite lane's required-key check
 - `internal/platform/db/sqlite_test.go`
+- `internal/platform/dblane/lane_sqlite.go`
+- `internal/platform/dbtest/sqlite.go`
+## Switches (0)
 
-## Switches (1)
-
-Tag-free in the end, selecting its engine by build tag instead:
-
-- `cmd/api/main.go` — applies the embedded migrations; it must pick `migrations.SQLite` or `migrations.Postgres` per lane instead of naming one.
+Tag-free in the end; `internal/platform/dblane` carries the choice, so this bucket is empty.
 
 ## Notes
 
@@ -74,3 +36,25 @@ Tag-free in the end, selecting its engine by build tag instead:
   then and the audit records that as the sequencing, not the verdict.
 - Nothing here changes behaviour on the SQLite lane: the tag work is additive, and
   `make verify` keeps running the SQLite profile unchanged.
+
+## Update — after the lane switch (2026-10-15)
+
+`cmd/api/main.go` is no longer a switch: `internal/platform/dblane` exposes `Open`
+and `Migrations` per build tag, and both composition roots use it, so the switch
+bucket is empty and the roots are tag-free. The remaining lifts are the `cmd/api`
+contract tests and the me-feature integration test, which keep their tag until
+their hand-written SQL routes through `dbtest.Rebind`.
+
+## Update — the contract suites lifted (2026-10-15)
+
+The `cmd/api` contract tests and the me-feature integration test now run on **both**
+lanes: their hand-written SQL goes through `dbtest.Rebind`, and `platform/db`
+exports `Rebind` per engine so production code that builds SQL by hand (the me
+sessions page query) is portable too. Verified against a live `postgres:17`: the
+whole `cmd/api` contract suite passes under `-tags pg` with `DATABASE_URL` set.
+
+What remains tagged (4 lift) is the lane's own tests:
+- `cmd/worker/main_test.go`
+- `internal/features/me/infra/repository_push_test.go`
+- `internal/platform/db/auth_schema_test.go`
+- `internal/platform/db/gen_integration_test.go`

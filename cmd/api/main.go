@@ -1,7 +1,4 @@
-//go:build !pg
-
 // Command api is the HTTP process bootstrap.
-// This build is SQLite until a pg process exists.
 package main
 
 import (
@@ -13,9 +10,8 @@ import (
 	"os/signal"
 	"syscall"
 
-	"github.com/fikrilal/go-core-kit/db/migrations"
 	"github.com/fikrilal/go-core-kit/internal/platform/config"
-	"github.com/fikrilal/go-core-kit/internal/platform/db"
+	"github.com/fikrilal/go-core-kit/internal/platform/dblane"
 	"github.com/fikrilal/go-core-kit/internal/platform/logging"
 	"github.com/fikrilal/go-core-kit/internal/platform/redis"
 )
@@ -45,13 +41,13 @@ func runMain() int {
 
 // run migrates before listen. Redis Open does not dial. /ready is the connectivity check.
 func run(ctx context.Context, cfg config.Config, logger *slog.Logger) error {
-	database, err := db.Open(cfg.DatabasePath)
+	database, err := dblane.Open(cfg)
 	if err != nil {
 		return fmt.Errorf("open database: %w", err)
 	}
 	defer closeAndLog(database.Close, logger, "database")
 
-	if err := database.Migrate(ctx, migrations.SQLite); err != nil {
+	if err := database.Migrate(ctx, dblane.Migrations()); err != nil {
 		return fmt.Errorf("migrate database: %w", err)
 	}
 

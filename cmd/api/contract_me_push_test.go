@@ -1,5 +1,3 @@
-//go:build !pg
-
 package main
 
 import (
@@ -11,6 +9,7 @@ import (
 
 	"github.com/fikrilal/go-core-kit/internal/platform/config"
 	"github.com/fikrilal/go-core-kit/internal/platform/contracttest"
+	"github.com/fikrilal/go-core-kit/internal/platform/dbtest"
 )
 
 const pushTokenFixture = "fcm-registration-token-1"
@@ -55,8 +54,7 @@ func (f *authFixture) revokePushToken(t *testing.T, token string) (*http.Request
 func sessionIDForDevice(t *testing.T, f *authFixture, deviceID string) string {
 	t.Helper()
 	var id string
-	if err := f.database.SQL().QueryRowContext(t.Context(),
-		"SELECT id FROM sessions WHERE device_id = ?", deviceID).Scan(&id); err != nil {
+	if err := f.database.SQL().QueryRowContext(t.Context(), dbtest.Rebind("SELECT id FROM sessions WHERE device_id = ?"), deviceID).Scan(&id); err != nil {
 		t.Fatalf("session for %s: %v", deviceID, err)
 	}
 	return id
@@ -64,8 +62,7 @@ func sessionIDForDevice(t *testing.T, f *authFixture, deviceID string) string {
 
 func storedPushToken(t *testing.T, f *authFixture, sessionID string) (platform, token, revokedAt *string) {
 	t.Helper()
-	if err := f.database.SQL().QueryRowContext(t.Context(),
-		"SELECT push_platform, push_token, push_token_revoked_at FROM sessions WHERE id = ?", sessionID).
+	if err := f.database.SQL().QueryRowContext(t.Context(), dbtest.Rebind("SELECT push_platform, push_token, push_token_revoked_at FROM sessions WHERE id = ?"), sessionID).
 		Scan(&platform, &token, &revokedAt); err != nil {
 		t.Fatalf("push columns: %v", err)
 	}
@@ -268,8 +265,7 @@ func TestContractUsersMePushTokenUnauthorized(t *testing.T) {
 
 	t.Run("deleted user", func(t *testing.T) {
 		leaving := f.register(t, "push-deleted@example.com", "")
-		if _, err := f.database.SQL().ExecContext(t.Context(),
-			"UPDATE users SET status = 'DELETED' WHERE id = ?", leaving.Data.User.ID); err != nil {
+		if _, err := f.database.SQL().ExecContext(t.Context(), dbtest.Rebind("UPDATE users SET status = 'DELETED' WHERE id = ?"), leaving.Data.User.ID); err != nil {
 			t.Fatalf("delete user: %v", err)
 		}
 		_, resp := f.upsertPushToken(t, leaving.Data.AccessToken, map[string]any{"platform": "ANDROID", "token": pushTokenFixture})

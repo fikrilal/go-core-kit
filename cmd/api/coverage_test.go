@@ -1,18 +1,15 @@
-//go:build !pg
-
 package main
 
 import (
 	"io"
 	"os"
-	"path/filepath"
 	"slices"
 	"testing"
 
 	"github.com/fikrilal/go-core-kit/contracts"
 	"github.com/fikrilal/go-core-kit/internal/platform/config"
 	"github.com/fikrilal/go-core-kit/internal/platform/contracttest"
-	"github.com/fikrilal/go-core-kit/internal/platform/db"
+	"github.com/fikrilal/go-core-kit/internal/platform/dbtest"
 	"github.com/fikrilal/go-core-kit/internal/platform/httpx"
 	"github.com/fikrilal/go-core-kit/internal/platform/logging"
 	"github.com/fikrilal/go-core-kit/internal/platform/redis"
@@ -41,8 +38,7 @@ func TestContractCoverage(t *testing.T) {
 
 func coverageRouter(t *testing.T) *httpx.Router {
 	t.Helper()
-	database := db.MustOpen(filepath.Join(t.TempDir(), "coverage.db"))
-	t.Cleanup(func() { _ = database.Close() })
+	database := dbtest.Open(t)
 	rdb := redis.MustOpen("redis://127.0.0.1:1/0")
 	t.Cleanup(func() { _ = rdb.Close() })
 	logger := logging.New(config.LogLevelError, config.LogFormatJSON, io.Discard)

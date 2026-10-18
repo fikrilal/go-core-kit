@@ -11,9 +11,9 @@ import (
 // Tagged path counts for the pg lane audit. Shrinking these is the point of the
 // pg work; growing them needs a deliberate edit here and in the audit note.
 const (
-	taggedForPgLift   = 29
-	taggedForPgStay   = 10
-	taggedForPgSwitch = 1
+	taggedForPgLift   = 3
+	taggedForPgStay   = 6
+	taggedForPgSwitch = 0
 )
 
 func TestPortableSubsetCountsMatchTheTree(t *testing.T) {
@@ -31,17 +31,8 @@ func TestPortableSubsetCountsMatchTheTree(t *testing.T) {
 			if !strings.Contains(string(data), "//go:build !pg") {
 				return nil
 			}
-			relative := filepath.ToSlash(strings.TrimPrefix(path, "../../"))
-			switch {
-			case relative == "cmd/api/main.go":
-				counts["switch"]++
-			case strings.HasPrefix(relative, "internal/db/gen/sqlite_"),
-				relative == "internal/platform/db/sqlite.go",
-				relative == "internal/platform/config/database_sqlite.go",
-				strings.HasPrefix(relative, "internal/platform/db/") && strings.HasSuffix(relative, "_test.go"):
-				counts["stay"]++
-			default:
-				counts["lift"]++
+			if kind := classifyTaggedPath(filepath.ToSlash(strings.TrimPrefix(path, "../../"))); kind != "" {
+				counts[kind]++
 			}
 			return nil
 		})
@@ -52,5 +43,20 @@ func TestPortableSubsetCountsMatchTheTree(t *testing.T) {
 	if counts["lift"] != taggedForPgLift || counts["stay"] != taggedForPgStay || counts["switch"] != taggedForPgSwitch {
 		t.Fatalf("tagged paths = %v, want lift=%d stay=%d switch=%d — update the audit note when this changes",
 			counts, taggedForPgLift, taggedForPgStay, taggedForPgSwitch)
+	}
+}
+
+// classifyTaggedPath names the bucket a hand-written tagged path belongs to, and
+// returns "" for paths the audit does not count: generated code owns its own tags.
+func classifyTaggedPath(relative string) string {
+	switch {
+	case strings.HasPrefix(relative, "internal/db/gen/"):
+		return ""
+	case relative == "cmd/api/main.go":
+		return "switch"
+	case strings.Contains(relative, "sqlite"):
+		return "stay"
+	default:
+		return "lift"
 	}
 }

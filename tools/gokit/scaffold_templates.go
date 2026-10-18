@@ -26,9 +26,7 @@ type Repository interface{}
 
 // featureRepositoryTemplate is the repository over the generated queries.
 func featureRepositoryTemplate(name string) string {
-	return fmt.Sprintf(`//go:build !pg
-
-// Package infra implements the %s feature's persistence.
+	return fmt.Sprintf(`// Package infra implements the %s feature's persistence.
 // This build is SQLite until a pg repository exists.
 package infra
 
@@ -84,9 +82,7 @@ func New(deps Deps) *Service {
 
 // featureRootTemplate is the feature's HTTP surface and wiring.
 func featureRootTemplate(name string) string {
-	return fmt.Sprintf(`//go:build !pg
-
-// Package %[1]s implements the %[1]s feature's HTTP surface and wiring.
+	return fmt.Sprintf(`// Package %[1]s implements the %[1]s feature's HTTP surface and wiring.
 // This build is SQLite until a pg repository exists.
 package %[1]s
 
@@ -116,19 +112,16 @@ func Register(router *httpx.Router, deps Deps) {
 
 // featureRootTestTemplate proves the skeleton mounts without routes.
 func featureRootTestTemplate(name string) string {
-	return fmt.Sprintf(`//go:build !pg
-
-package %[1]s_test
+	return fmt.Sprintf(`package %[1]s_test
 
 import (
 	"io"
 	"log/slog"
-	"path/filepath"
 	"testing"
 
 	"github.com/fikrilal/go-core-kit/internal/features/%[1]s"
 	"github.com/fikrilal/go-core-kit/internal/platform/clock"
-	"github.com/fikrilal/go-core-kit/internal/platform/db"
+	"github.com/fikrilal/go-core-kit/internal/platform/dbtest"
 	"github.com/fikrilal/go-core-kit/internal/platform/httpx"
 )
 
@@ -137,8 +130,7 @@ import (
 // coverage test's job, not this one's.
 func TestRegisterWires(t *testing.T) {
 	logger := slog.New(slog.NewTextHandler(io.Discard, nil))
-	database := db.MustOpen(filepath.Join(t.TempDir(), "feature.db"))
-	t.Cleanup(func() { _ = database.Close() })
+	database := dbtest.Open(t)
 	router := httpx.NewRouter(logger)
 	%[1]s.Register(router, %[1]s.Deps{Database: database, Clock: clock.System{}})
 	t.Log("feature registered")
@@ -183,9 +175,7 @@ func (s *Service) %[1]s(ctx context.Context, in %[1]sInput) (%[1]sResult, error)
 // endpointRepositoryTemplate is the repository call the use case needs.
 func endpointRepositoryTemplate(feature string, spec operationSpec) string {
 	useCase := spec.useCase()
-	return fmt.Sprintf(`//go:build !pg
-
-package infra
+	return fmt.Sprintf(`package infra
 
 import (
 	"context"
@@ -248,9 +238,7 @@ SELECT id FROM users WHERE id = sqlc.arg(id);
 // It names the operation and the fixture work the caller must finish, and skips
 // until then so the suite stays honest.
 func endpointContractTestTemplate(_ string, spec operationSpec) string {
-	return fmt.Sprintf(`//go:build !pg
-
-package main
+	return fmt.Sprintf(`package main
 
 import "testing"
 

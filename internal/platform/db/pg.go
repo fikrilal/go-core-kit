@@ -10,6 +10,7 @@ import (
 	"fmt"
 	"io/fs"
 	"math/rand/v2"
+	"strconv"
 	"time"
 
 	"github.com/jackc/pgx/v5/pgconn"
@@ -79,6 +80,28 @@ type Tx interface {
 	PrepareContext(ctx context.Context, query string) (*sql.Stmt, error)
 	QueryContext(ctx context.Context, query string, args ...any) (*sql.Rows, error)
 	QueryRowContext(ctx context.Context, query string, args ...any) *sql.Row
+}
+
+// Rebind converts `?` placeholders to Postgres' numbered form, so hand-built SQL
+// can be written once for both engines. Generated queries do not need it: sqlc
+// already emits the lane's style.
+//
+// The translation is positional and literal-blind: a `?` inside a string literal
+// or a comment would be numbered like a placeholder, so hand-built SQL must keep
+// question marks out of everything but placeholders.
+func Rebind(query string) string {
+	rebound := make([]byte, 0, len(query)+8)
+	n := 0
+	for i := 0; i < len(query); i++ {
+		if query[i] == '?' {
+			n++
+			rebound = append(rebound, '$')
+			rebound = append(rebound, strconv.Itoa(n)...)
+			continue
+		}
+		rebound = append(rebound, query[i])
+	}
+	return string(rebound)
 }
 
 // ErrNoRows reports that a query returned no rows.

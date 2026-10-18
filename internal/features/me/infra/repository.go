@@ -1,7 +1,4 @@
-//go:build !pg
-
 // Package infra implements the me feature's adapters.
-// This build is SQLite until a pg repository exists.
 package infra
 
 import (
@@ -647,7 +644,7 @@ func sessionPageQuery(in ports.ListSessionsInput, sort []ports.SortField) (strin
 	}
 	args = append(args, cursorArgs...)
 	args = append(args, in.Limit+1)
-	return sessionPageSelect + where + " ORDER BY " + sessionOrderBy(sort) + " LIMIT ?", args, nil
+	return db.Rebind(sessionPageSelect + where + " ORDER BY " + sessionOrderBy(sort) + " LIMIT ?"), args, nil
 }
 
 // sessionKeyset builds the keyset predicate: for each sort field, a lexicographic

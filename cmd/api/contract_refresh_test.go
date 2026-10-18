@@ -1,5 +1,3 @@
-//go:build !pg
-
 package main
 
 import (
@@ -8,6 +6,7 @@ import (
 	"testing"
 
 	"github.com/fikrilal/go-core-kit/internal/platform/contracttest"
+	"github.com/fikrilal/go-core-kit/internal/platform/dbtest"
 )
 
 type refreshRequest struct {
@@ -68,17 +67,14 @@ func TestContractAuthRefreshRotates(t *testing.T) {
 
 	var revokedAt *string
 	var replacedByID *string
-	if err := f.database.SQL().QueryRowContext(t.Context(),
-		"SELECT revoked_at, replaced_by_id FROM refresh_tokens WHERE token_hash = ?",
-		hashRefreshTokenValue(oldRefresh)).Scan(&revokedAt, &replacedByID); err != nil {
+	if err := f.database.SQL().QueryRowContext(t.Context(), dbtest.Rebind("SELECT revoked_at, replaced_by_id FROM refresh_tokens WHERE token_hash = ?"), hashRefreshTokenValue(oldRefresh)).Scan(&revokedAt, &replacedByID); err != nil {
 		t.Fatalf("old token row: %v", err)
 	}
 	if revokedAt == nil || replacedByID == nil {
 		t.Fatalf("old token revoked/replacedBy = %v/%v, want both set", revokedAt, replacedByID)
 	}
 	var successorHash string
-	if err := f.database.SQL().QueryRowContext(t.Context(),
-		"SELECT token_hash FROM refresh_tokens WHERE id = ?", *replacedByID).Scan(&successorHash); err != nil {
+	if err := f.database.SQL().QueryRowContext(t.Context(), dbtest.Rebind("SELECT token_hash FROM refresh_tokens WHERE id = ?"), *replacedByID).Scan(&successorHash); err != nil {
 		t.Fatalf("successor token row: %v", err)
 	}
 	if successorHash != hashRefreshTokenValue(decoded.Data.RefreshToken) {
@@ -118,9 +114,7 @@ func TestContractAuthRefreshExpired(t *testing.T) {
 	f := newAuthFixture(t)
 	registered := f.register(t, "expired@example.com", "")
 
-	if _, err := f.database.SQL().ExecContext(t.Context(),
-		"UPDATE refresh_tokens SET expires_at = ? WHERE token_hash = ?",
-		"2000-01-01T00:00:00.000000000Z", hashRefreshTokenValue(registered.Data.RefreshToken)); err != nil {
+	if _, err := f.database.SQL().ExecContext(t.Context(), dbtest.Rebind("UPDATE refresh_tokens SET expires_at = ? WHERE token_hash = ?"), "2000-01-01T00:00:00.000000000Z", hashRefreshTokenValue(registered.Data.RefreshToken)); err != nil {
 		t.Fatalf("expire token: %v", err)
 	}
 	_, resp := f.refresh(t, registered.Data.RefreshToken)
@@ -159,8 +153,7 @@ func TestContractAuthRefreshSuspensionAndDeletion(t *testing.T) {
 
 	update := func(status string) {
 		t.Helper()
-		if _, err := f.database.SQL().ExecContext(t.Context(),
-			"UPDATE users SET status = ? WHERE email = ?", status, "moderated2@example.com"); err != nil {
+		if _, err := f.database.SQL().ExecContext(t.Context(), dbtest.Rebind("UPDATE users SET status = ? WHERE email = ?"), status, "moderated2@example.com"); err != nil {
 			t.Fatalf("update status: %v", err)
 		}
 	}
@@ -197,15 +190,13 @@ func TestContractAuthLogout(t *testing.T) {
 
 	var sessionRevoked *string
 	var tokensRevoked int
-	if err := f.database.SQL().QueryRowContext(t.Context(),
-		"SELECT revoked_at, active_key FROM sessions WHERE user_id = ?", registered.Data.User.ID).Scan(&sessionRevoked, new(*string)); err != nil {
+	if err := f.database.SQL().QueryRowContext(t.Context(), dbtest.Rebind("SELECT revoked_at, active_key FROM sessions WHERE user_id = ?"), registered.Data.User.ID).Scan(&sessionRevoked, new(*string)); err != nil {
 		t.Fatalf("session row: %v", err)
 	}
 	if sessionRevoked == nil {
 		t.Error("session not revoked after logout")
 	}
-	if err := f.database.SQL().QueryRowContext(t.Context(),
-		"SELECT COUNT(*) FROM refresh_tokens WHERE revoked_at IS NULL").Scan(&tokensRevoked); err != nil {
+	if err := f.database.SQL().QueryRowContext(t.Context(), dbtest.Rebind("SELECT COUNT(*) FROM refresh_tokens WHERE revoked_at IS NULL")).Scan(&tokensRevoked); err != nil {
 		t.Fatalf("count tokens: %v", err)
 	}
 	if tokensRevoked != 0 {

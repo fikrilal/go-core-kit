@@ -1,5 +1,3 @@
-//go:build !pg
-
 package main
 
 import (
@@ -10,6 +8,7 @@ import (
 	"testing"
 
 	"github.com/fikrilal/go-core-kit/internal/platform/contracttest"
+	"github.com/fikrilal/go-core-kit/internal/platform/dbtest"
 )
 
 type meEnvelope struct {
@@ -95,8 +94,7 @@ func profilePatch(profile map[string]any) map[string]any {
 func storedProfileName(t *testing.T, f *authFixture, userID string) *string {
 	t.Helper()
 	var name *string
-	if err := f.database.SQL().QueryRowContext(t.Context(),
-		"SELECT display_name FROM user_profiles WHERE user_id = ?", userID).Scan(&name); err != nil {
+	if err := f.database.SQL().QueryRowContext(t.Context(), dbtest.Rebind("SELECT display_name FROM user_profiles WHERE user_id = ?"), userID).Scan(&name); err != nil {
 		t.Fatalf("profile row: %v", err)
 	}
 	return name
@@ -141,8 +139,7 @@ func TestContractUsersMeGetUnauthorized(t *testing.T) {
 	f.suite.AssertErrorCodeDeclared(t, "users.me.get", "UNAUTHORIZED")
 
 	registered := f.register(t, "gone@example.com", "")
-	if _, err := f.database.SQL().ExecContext(t.Context(),
-		"UPDATE users SET status = 'DELETED' WHERE id = ?", registered.Data.User.ID); err != nil {
+	if _, err := f.database.SQL().ExecContext(t.Context(), dbtest.Rebind("UPDATE users SET status = 'DELETED' WHERE id = ?"), registered.Data.User.ID); err != nil {
 		t.Fatalf("delete user: %v", err)
 	}
 	_, resp = f.getMe(t, registered.Data.AccessToken)
@@ -210,7 +207,7 @@ func TestContractUsersMePatchCreatesProfileRow(t *testing.T) {
 	registered := f.register(t, "fresh@example.com", "")
 
 	var before int
-	if err := f.database.SQL().QueryRowContext(t.Context(), "SELECT COUNT(*) FROM user_profiles").Scan(&before); err != nil {
+	if err := f.database.SQL().QueryRowContext(t.Context(), dbtest.Rebind("SELECT COUNT(*) FROM user_profiles")).Scan(&before); err != nil {
 		t.Fatalf("count profiles: %v", err)
 	}
 	if before != 0 {
@@ -223,7 +220,7 @@ func TestContractUsersMePatchCreatesProfileRow(t *testing.T) {
 	}
 
 	var after int
-	if err := f.database.SQL().QueryRowContext(t.Context(), "SELECT COUNT(*) FROM user_profiles").Scan(&after); err != nil {
+	if err := f.database.SQL().QueryRowContext(t.Context(), dbtest.Rebind("SELECT COUNT(*) FROM user_profiles")).Scan(&after); err != nil {
 		t.Fatalf("count profiles: %v", err)
 	}
 	if after != 1 {
@@ -285,8 +282,7 @@ func TestContractUsersMePatchUnauthorized(t *testing.T) {
 	f.suite.AssertErrorCodeDeclared(t, "users.me.patch", "UNAUTHORIZED")
 
 	registered := f.register(t, "gone-patch@example.com", "")
-	if _, err := f.database.SQL().ExecContext(t.Context(),
-		"UPDATE users SET status = 'DELETED' WHERE id = ?", registered.Data.User.ID); err != nil {
+	if _, err := f.database.SQL().ExecContext(t.Context(), dbtest.Rebind("UPDATE users SET status = 'DELETED' WHERE id = ?"), registered.Data.User.ID); err != nil {
 		t.Fatalf("delete user: %v", err)
 	}
 	_, resp = f.patchMe(t, registered.Data.AccessToken, "", body)

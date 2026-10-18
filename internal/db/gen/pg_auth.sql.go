@@ -26,7 +26,7 @@ WHERE id = $2
 `
 
 type ClearSessionDeviceStateParams struct {
-	Now sql.NullTime
+	Now utctime.Time
 	ID  string
 }
 
@@ -388,11 +388,11 @@ WHERE u.id = $1
 type GetMeViewRow struct {
 	UserID                   string
 	UserEmail                string
-	UserEmailVerifiedAt      sql.NullTime
+	UserEmailVerifiedAt      utctime.Time
 	UserRole                 string
 	UserStatus               string
-	UserDeletionRequestedAt  sql.NullTime
-	UserDeletionScheduledFor sql.NullTime
+	UserDeletionRequestedAt  utctime.Time
+	UserDeletionScheduledFor utctime.Time
 	ProfileDisplayName       sql.NullString
 	ProfileGivenName         sql.NullString
 	ProfileFamilyName        sql.NullString
@@ -478,14 +478,14 @@ WHERE t.token_hash = $1
 type GetRefreshTokenWithSessionRow struct {
 	TokenID             string
 	TokenExpiresAt      utctime.Time
-	TokenRevokedAt      sql.NullTime
+	TokenRevokedAt      utctime.Time
 	TokenReplacedByID   sql.NullString
 	SessionID           string
 	SessionExpiresAt    utctime.Time
-	SessionRevokedAt    sql.NullTime
+	SessionRevokedAt    utctime.Time
 	UserID              string
 	UserEmail           string
-	UserEmailVerifiedAt sql.NullTime
+	UserEmailVerifiedAt utctime.Time
 	UserRole            string
 	UserStatus          string
 }
@@ -536,7 +536,7 @@ type GetUserByExternalIdentityParams struct {
 type GetUserByExternalIdentityRow struct {
 	ID              string
 	Email           string
-	EmailVerifiedAt sql.NullTime
+	EmailVerifiedAt utctime.Time
 	Role            string
 	Status          string
 }
@@ -563,7 +563,7 @@ WHERE id = $1
 type GetUserEmailStateRow struct {
 	ID              string
 	Email           string
-	EmailVerifiedAt sql.NullTime
+	EmailVerifiedAt utctime.Time
 	Status          string
 }
 
@@ -614,7 +614,7 @@ WHERE u.email = $1
 type GetUserForLoginRow struct {
 	ID              string
 	Email           string
-	EmailVerifiedAt sql.NullTime
+	EmailVerifiedAt utctime.Time
 	Role            string
 	Status          string
 	PasswordHash    sql.NullString
@@ -694,7 +694,7 @@ WHERE id = $3 AND revoked_at IS NULL AND replaced_by_id IS NULL
 `
 
 type MarkRefreshTokenRotatedParams struct {
-	RevokedAt    sql.NullTime
+	RevokedAt    utctime.Time
 	ReplacedByID interface{}
 	ID           string
 }
@@ -720,7 +720,7 @@ WHERE revoked_at IS NULL
 `
 
 type RevokeActiveSessionTokensParams struct {
-	RevokedAt sql.NullTime
+	RevokedAt utctime.Time
 	ActiveKey interface{}
 	UserID    string
 }
@@ -744,7 +744,7 @@ WHERE revoked_at IS NULL
 `
 
 type RevokeOtherSessionRefreshTokensParams struct {
-	RevokedAt sql.NullTime
+	RevokedAt utctime.Time
 	UserID    string
 	SessionID string
 }
@@ -772,7 +772,7 @@ WHERE user_id = $2
 `
 
 type RevokeOtherSessionsParams struct {
-	RevokedAt sql.NullTime
+	RevokedAt utctime.Time
 	UserID    string
 	SessionID string
 }
@@ -792,7 +792,7 @@ WHERE id = $2 AND revoked_at IS NULL
 `
 
 type RevokeSessionParams struct {
-	RevokedAt sql.NullTime
+	RevokedAt utctime.Time
 	ID        string
 }
 
@@ -819,7 +819,7 @@ WHERE active_key = NULLIF($2, '')
 `
 
 type RevokeSessionByActiveKeyParams struct {
-	RevokedAt sql.NullTime
+	RevokedAt utctime.Time
 	ActiveKey interface{}
 	UserID    string
 }
@@ -839,7 +839,7 @@ WHERE session_id = $2 AND revoked_at IS NULL
 `
 
 type RevokeSessionRefreshTokensParams struct {
-	RevokedAt sql.NullTime
+	RevokedAt utctime.Time
 	SessionID string
 }
 
@@ -858,7 +858,7 @@ WHERE id = $3
 `
 
 type SetUserEmailVerifiedParams struct {
-	EmailVerifiedAt sql.NullTime
+	EmailVerifiedAt utctime.Time
 	UpdatedAt       utctime.Time
 	ID              string
 }
@@ -920,7 +920,7 @@ WHERE id = $3 AND email_verified_at IS NULL
 `
 
 type VerifyUserEmailIfUnsetParams struct {
-	EmailVerifiedAt sql.NullTime
+	EmailVerifiedAt utctime.Time
 	UpdatedAt       utctime.Time
 	ID              string
 }

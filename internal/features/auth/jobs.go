@@ -1,5 +1,3 @@
-//go:build !pg
-
 package auth
 
 import (

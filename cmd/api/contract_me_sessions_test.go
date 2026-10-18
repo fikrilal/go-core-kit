@@ -1,5 +1,3 @@
-//go:build !pg
-
 package main
 
 import (
@@ -8,6 +6,7 @@ import (
 	"testing"
 
 	"github.com/fikrilal/go-core-kit/internal/platform/contracttest"
+	"github.com/fikrilal/go-core-kit/internal/platform/dbtest"
 )
 
 type meSessionsEnvelope struct {
@@ -311,8 +310,7 @@ func TestContractUsersMeSessionsRevokeErrors(t *testing.T) {
 
 	t.Run("deleted user", func(t *testing.T) {
 		leaving := f.register(t, "leaving@example.com", "")
-		if _, err := f.database.SQL().ExecContext(t.Context(),
-			"UPDATE users SET status = 'DELETED' WHERE id = ?", leaving.Data.User.ID); err != nil {
+		if _, err := f.database.SQL().ExecContext(t.Context(), dbtest.Rebind("UPDATE users SET status = 'DELETED' WHERE id = ?"), leaving.Data.User.ID); err != nil {
 			t.Fatalf("delete user: %v", err)
 		}
 		_, resp := f.revokeSession(t, leaving.Data.AccessToken, "0f8b9d3e-1a2b-4c3d-8e4f-5a6b7c8d9e0f")

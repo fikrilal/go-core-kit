@@ -25,7 +25,7 @@ WHERE push_token = NULLIF($2, '') AND id != $3
 `
 
 type ClearOtherSessionPushTokenParams struct {
-	Now       sql.NullTime
+	Now       utctime.Time
 	PushToken interface{}
 	ID        string
 }
@@ -49,7 +49,7 @@ WHERE id = $2 AND user_id = $3
 `
 
 type ClearSessionPushTokenParams struct {
-	Now    sql.NullTime
+	Now    utctime.Time
 	ID     string
 	UserID string
 }
@@ -73,7 +73,7 @@ WHERE id = $2 AND push_token = NULLIF($3, '')
 `
 
 type ClearSessionPushTokenIfMatchesParams struct {
-	Now       sql.NullTime
+	Now       utctime.Time
 	ID        string
 	PushToken interface{}
 }
@@ -290,7 +290,7 @@ WHERE id = $2 AND owner_user_id = $3 AND status = 'UPLOADING'
 `
 
 type ExpireStoredFileIfUploadingParams struct {
-	Now         sql.NullTime
+	Now         utctime.Time
 	ID          string
 	OwnerUserID string
 }
@@ -322,7 +322,7 @@ WHERE id = $4
 
 type FinalizeUserDeletionParams struct {
 	Email     string
-	DeletedAt sql.NullTime
+	DeletedAt utctime.Time
 	UpdatedAt utctime.Time
 	ID        string
 }
@@ -366,7 +366,7 @@ WHERE s.id = $1
 type GetSessionForPushRow struct {
 	ID         string
 	PushToken  sql.NullString
-	RevokedAt  sql.NullTime
+	RevokedAt  utctime.Time
 	ExpiresAt  utctime.Time
 	UserStatus string
 }
@@ -456,7 +456,7 @@ type GetUserDeletionEmailStateRow struct {
 	ID                   string
 	Email                string
 	Status               string
-	DeletionScheduledFor sql.NullTime
+	DeletionScheduledFor utctime.Time
 }
 
 func (q *Queries) GetUserDeletionEmailState(ctx context.Context, id string) (GetUserDeletionEmailStateRow, error) {
@@ -480,8 +480,8 @@ WHERE id = $1
 type GetUserDeletionStateRow struct {
 	Role                 string
 	Status               string
-	DeletionRequestedAt  sql.NullTime
-	DeletionScheduledFor sql.NullTime
+	DeletionRequestedAt  utctime.Time
+	DeletionScheduledFor utctime.Time
 }
 
 func (q *Queries) GetUserDeletionState(ctx context.Context, id string) (GetUserDeletionStateRow, error) {
@@ -508,10 +508,10 @@ type GetUserForFinalizeRow struct {
 	Email                      string
 	Role                       string
 	Status                     string
-	DeletionScheduledFor       sql.NullTime
+	DeletionScheduledFor       utctime.Time
 	DeletionRequestedSessionID sql.NullString
 	DeletionRequestedTraceID   sql.NullString
-	DeletedAt                  sql.NullTime
+	DeletedAt                  utctime.Time
 }
 
 func (q *Queries) GetUserForFinalize(ctx context.Context, id string) (GetUserForFinalizeRow, error) {
@@ -569,7 +569,7 @@ WHERE id = $1
 type GetUserSessionRow struct {
 	ID        string
 	UserID    string
-	RevokedAt sql.NullTime
+	RevokedAt utctime.Time
 }
 
 func (q *Queries) GetUserSession(ctx context.Context, id string) (GetUserSessionRow, error) {
@@ -586,7 +586,7 @@ WHERE id = $2 AND owner_user_id = $3
 `
 
 type MarkStoredFileActiveParams struct {
-	Now         sql.NullTime
+	Now         utctime.Time
 	ID          string
 	OwnerUserID string
 }
@@ -606,7 +606,7 @@ WHERE id = $2 AND owner_user_id = $3
 `
 
 type MarkStoredFileDeletedParams struct {
-	Now         sql.NullTime
+	Now         utctime.Time
 	ID          string
 	OwnerUserID string
 }
@@ -632,7 +632,7 @@ WHERE id = $4
 type SetSessionPushTokenParams struct {
 	PushPlatform interface{}
 	PushToken    interface{}
-	Now          sql.NullTime
+	Now          utctime.Time
 	ID           string
 }
 
@@ -657,8 +657,8 @@ WHERE id = $6 AND status != 'DELETED'
 `
 
 type SetUserDeletionRequestParams struct {
-	RequestedAt  sql.NullTime
-	ScheduledFor sql.NullTime
+	RequestedAt  utctime.Time
+	ScheduledFor utctime.Time
 	SessionID    interface{}
 	TraceID      interface{}
 	UpdatedAt    utctime.Time
@@ -709,7 +709,7 @@ WHERE id = $2
 `
 
 type TouchSessionPushTokenParams struct {
-	Now    sql.NullTime
+	Now    utctime.Time
 	ID     string
 	UserID string
 }

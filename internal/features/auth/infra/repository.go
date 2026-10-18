@@ -1,7 +1,4 @@
-//go:build !pg
-
 // Package infra implements the auth feature's adapters.
-// This build is SQLite until a pg repository exists.
 package infra
 
 import (

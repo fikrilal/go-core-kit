@@ -1,5 +1,3 @@
-//go:build !pg
-
 package main
 
 import (
@@ -9,6 +7,7 @@ import (
 	"testing"
 
 	"github.com/fikrilal/go-core-kit/internal/platform/contracttest"
+	"github.com/fikrilal/go-core-kit/internal/platform/dbtest"
 )
 
 // jsonRequest posts a JSON body with optional bearer and idempotency headers.
@@ -71,16 +70,14 @@ func TestContractAuthOidcConnectHappyPath(t *testing.T) {
 	_ = replayReq
 
 	var verifiedAt *string
-	if err := f.database.SQL().QueryRowContext(t.Context(),
-		"SELECT email_verified_at FROM users WHERE id = ?", registered.Data.User.ID).Scan(&verifiedAt); err != nil {
+	if err := f.database.SQL().QueryRowContext(t.Context(), dbtest.Rebind("SELECT email_verified_at FROM users WHERE id = ?"), registered.Data.User.ID).Scan(&verifiedAt); err != nil {
 		t.Fatalf("user row: %v", err)
 	}
 	if verifiedAt == nil {
 		t.Error("email not marked verified although the identity email matches")
 	}
 	var subject, email string
-	if err := f.database.SQL().QueryRowContext(t.Context(),
-		"SELECT subject, email FROM external_identities WHERE user_id = ? AND provider = 'GOOGLE'", registered.Data.User.ID).Scan(&subject, &email); err != nil {
+	if err := f.database.SQL().QueryRowContext(t.Context(), dbtest.Rebind("SELECT subject, email FROM external_identities WHERE user_id = ? AND provider = 'GOOGLE'"), registered.Data.User.ID).Scan(&subject, &email); err != nil {
 		t.Fatalf("identity row: %v", err)
 	}
 	if subject != "google-subject-1" || email != "dante@example.com" {
@@ -94,16 +91,14 @@ func TestContractAuthOidcConnectDoesNotVerifyOtherEmail(t *testing.T) {
 	f.mustConnectOK(t, registered.Data.AccessToken)
 
 	var verifiedAt *string
-	if err := f.database.SQL().QueryRowContext(t.Context(),
-		"SELECT email_verified_at FROM users WHERE id = ?", registered.Data.User.ID).Scan(&verifiedAt); err != nil {
+	if err := f.database.SQL().QueryRowContext(t.Context(), dbtest.Rebind("SELECT email_verified_at FROM users WHERE id = ?"), registered.Data.User.ID).Scan(&verifiedAt); err != nil {
 		t.Fatalf("user row: %v", err)
 	}
 	if verifiedAt != nil {
 		t.Errorf("email_verified_at = %q, want null: the identity email does not match", *verifiedAt)
 	}
 	var profiles int
-	if err := f.database.SQL().QueryRowContext(t.Context(),
-		"SELECT COUNT(*) FROM user_profiles").Scan(&profiles); err != nil {
+	if err := f.database.SQL().QueryRowContext(t.Context(), dbtest.Rebind("SELECT COUNT(*) FROM user_profiles")).Scan(&profiles); err != nil {
 		t.Fatalf("count profiles: %v", err)
 	}
 	if profiles != 0 {
@@ -118,8 +113,7 @@ func TestContractAuthOidcConnectRepeatIsIdempotent(t *testing.T) {
 	f.mustConnectOK(t, registered.Data.AccessToken)
 
 	var identities int
-	if err := f.database.SQL().QueryRowContext(t.Context(),
-		"SELECT COUNT(*) FROM external_identities").Scan(&identities); err != nil {
+	if err := f.database.SQL().QueryRowContext(t.Context(), dbtest.Rebind("SELECT COUNT(*) FROM external_identities")).Scan(&identities); err != nil {
 		t.Fatalf("count identities: %v", err)
 	}
 	if identities != 1 {
@@ -190,8 +184,7 @@ func TestContractAuthOidcConnectErrors(t *testing.T) {
 func TestContractAuthOidcConnectDeletedUserIsUnauthorized(t *testing.T) {
 	f := newOIDCFixture(t)
 	registered := f.register(t, "dante@example.com", "")
-	if _, err := f.database.SQL().ExecContext(t.Context(),
-		"UPDATE users SET status = 'DELETED' WHERE id = ?", registered.Data.User.ID); err != nil {
+	if _, err := f.database.SQL().ExecContext(t.Context(), dbtest.Rebind("UPDATE users SET status = 'DELETED' WHERE id = ?"), registered.Data.User.ID); err != nil {
 		t.Fatalf("delete user: %v", err)
 	}
 	_, resp := f.connect(t, registered.Data.AccessToken, "", "GOOGLE", f.sign(nil))

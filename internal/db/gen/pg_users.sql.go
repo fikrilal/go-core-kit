@@ -9,7 +9,6 @@ package gen
 
 import (
 	"context"
-	"database/sql"
 
 	utctime "github.com/fikrilal/go-core-kit/internal/platform/db/utctime"
 )
@@ -85,7 +84,7 @@ WHERE id = $1
 type GetUserForIdentityLinkRow struct {
 	ID              string
 	Email           string
-	EmailVerifiedAt sql.NullTime
+	EmailVerifiedAt utctime.Time
 }
 
 func (q *Queries) GetUserForIdentityLink(ctx context.Context, id string) (GetUserForIdentityLinkRow, error) {

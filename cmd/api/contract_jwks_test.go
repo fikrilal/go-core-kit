@@ -1,5 +1,3 @@
-//go:build !pg
-
 package main
 
 import (
@@ -12,6 +10,7 @@ import (
 	platformauth "github.com/fikrilal/go-core-kit/internal/platform/auth"
 	"github.com/fikrilal/go-core-kit/internal/platform/clock"
 	"github.com/fikrilal/go-core-kit/internal/platform/contracttest"
+	"github.com/fikrilal/go-core-kit/internal/platform/dbtest"
 )
 
 func tamperToken(token string) string {
@@ -86,8 +85,7 @@ func TestContractAccessTokenVerifiesEndToEnd(t *testing.T) {
 	}
 
 	var storedSessionID string
-	if err := f.database.SQL().QueryRowContext(t.Context(),
-		"SELECT id FROM sessions WHERE user_id = ?", registered.Data.User.ID).Scan(&storedSessionID); err != nil {
+	if err := f.database.SQL().QueryRowContext(t.Context(), dbtest.Rebind("SELECT id FROM sessions WHERE user_id = ?"), registered.Data.User.ID).Scan(&storedSessionID); err != nil {
 		t.Fatalf("session row: %v", err)
 	}
 	if principal.SessionID != storedSessionID {

@@ -101,3 +101,17 @@ func TestRetryDelayIsJittered(t *testing.T) {
 		}
 	}
 }
+
+// TestRebindNumbersPlaceholders checks the translation callers rely on.
+func TestRebind(t *testing.T) {
+	tests := []struct{ in, want string }{
+		{"SELECT 1", "SELECT 1"},
+		{"SELECT * FROM users WHERE id = ?", "SELECT * FROM users WHERE id = $1"},
+		{"UPDATE t SET a = ?, b = ? WHERE id = ?", "UPDATE t SET a = $1, b = $2 WHERE id = $3"},
+	}
+	for _, tt := range tests {
+		if got := db.Rebind(tt.in); got != tt.want {
+			t.Errorf("Rebind(%q) = %q, want %q", tt.in, got, tt.want)
+		}
+	}
+}

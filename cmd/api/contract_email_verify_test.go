@@ -1,5 +1,3 @@
-//go:build !pg
-
 package main
 
 import (
@@ -10,6 +8,7 @@ import (
 	"time"
 
 	"github.com/fikrilal/go-core-kit/internal/platform/contracttest"
+	"github.com/fikrilal/go-core-kit/internal/platform/dbtest"
 )
 
 func TestContractAuthEmailVerify(t *testing.T) {
@@ -47,8 +46,7 @@ func seedAuthToken(t *testing.T, f *authFixture, table, id, email, token string,
 	hash := base64.RawURLEncoding.EncodeToString(sum[:])
 	stamp := time.Now().UTC().Format("2006-01-02T15:04:05.000000000Z")
 	query := "INSERT INTO " + table + " (id, user_id, token_hash, expires_at, created_at, updated_at) VALUES (?, (SELECT id FROM users WHERE email = ?), ?, ?, ?, ?)"
-	if _, err := f.database.SQL().ExecContext(t.Context(), query,
-		id, email, hash, expiresAt.UTC().Format("2006-01-02T15:04:05.000000000Z"), stamp, stamp); err != nil {
+	if _, err := f.database.SQL().ExecContext(t.Context(), dbtest.Rebind(query), id, email, hash, expiresAt.UTC().Format("2006-01-02T15:04:05.000000000Z"), stamp, stamp); err != nil {
 		t.Fatalf("seed %s: %v", table, err)
 	}
 }

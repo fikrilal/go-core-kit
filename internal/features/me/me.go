@@ -1,7 +1,4 @@
-//go:build !pg
-
 // Package me implements the me feature's HTTP surface and wiring.
-// This build is SQLite until a pg repository exists.
 package me
 
 import (

@@ -1,5 +1,3 @@
-//go:build !pg
-
 package main
 
 import (
@@ -9,6 +7,7 @@ import (
 	"testing"
 
 	"github.com/fikrilal/go-core-kit/internal/platform/contracttest"
+	"github.com/fikrilal/go-core-kit/internal/platform/dbtest"
 )
 
 const changedPassword = "brand-new-horse-battery"
@@ -157,7 +156,7 @@ func TestContractAuthChangePasswordErrors(t *testing.T) {
 
 	t.Run("password not set", func(t *testing.T) {
 		f, token := newFixtureWithUser(t)
-		if _, err := f.database.SQL().ExecContext(t.Context(), "DELETE FROM password_credentials"); err != nil {
+		if _, err := f.database.SQL().ExecContext(t.Context(), dbtest.Rebind("DELETE FROM password_credentials")); err != nil {
 			t.Fatalf("delete credential: %v", err)
 		}
 		_, resp := f.changePassword(t, token, "", body)

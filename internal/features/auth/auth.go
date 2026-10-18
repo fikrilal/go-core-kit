@@ -1,7 +1,4 @@
-//go:build !pg
-
 // Package auth implements the auth feature's HTTP surface and wiring.
-// This build is SQLite until a pg repository exists.
 package auth
 
 import (

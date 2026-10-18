@@ -1,5 +1,3 @@
-//go:build !pg
-
 package main
 
 import (
@@ -14,6 +12,7 @@ import (
 	"github.com/fikrilal/go-core-kit/internal/platform/config"
 	"github.com/fikrilal/go-core-kit/internal/platform/contracttest"
 	"github.com/fikrilal/go-core-kit/internal/platform/db"
+	"github.com/fikrilal/go-core-kit/internal/platform/dbtest"
 	"github.com/fikrilal/go-core-kit/internal/platform/storage/storagetest"
 )
 
@@ -130,12 +129,10 @@ func putObject(t *testing.T, plan profileImagePlan, body string, contentType str
 
 func storedFileState(t *testing.T, f *authFixture, fileID string) (status string, pointer *string) {
 	t.Helper()
-	if err := f.database.SQL().QueryRowContext(t.Context(),
-		"SELECT status FROM stored_files WHERE id = ?", fileID).Scan(&status); err != nil {
+	if err := f.database.SQL().QueryRowContext(t.Context(), dbtest.Rebind("SELECT status FROM stored_files WHERE id = ?"), fileID).Scan(&status); err != nil {
 		t.Fatalf("stored file: %v", err)
 	}
-	err := f.database.SQL().QueryRowContext(t.Context(),
-		"SELECT profile_image_file_id FROM user_profiles WHERE user_id = (SELECT owner_user_id FROM stored_files WHERE id = ?)", fileID).
+	err := f.database.SQL().QueryRowContext(t.Context(), dbtest.Rebind("SELECT profile_image_file_id FROM user_profiles WHERE user_id = (SELECT owner_user_id FROM stored_files WHERE id = ?)"), fileID).
 		Scan(&pointer)
 	if err != nil && !errors.Is(err, db.ErrNoRows) {
 		t.Fatalf("profile pointer: %v", err)
@@ -243,7 +240,7 @@ func TestContractUsersMeProfileImageFlow(t *testing.T) {
 		t.Errorf("Idempotency-Replayed = %q, want true", replayed)
 	}
 	var files int
-	if err := f.database.SQL().QueryRowContext(t.Context(), "SELECT COUNT(*) FROM stored_files").Scan(&files); err != nil {
+	if err := f.database.SQL().QueryRowContext(t.Context(), dbtest.Rebind("SELECT COUNT(*) FROM stored_files")).Scan(&files); err != nil {
 		t.Fatalf("count files: %v", err)
 	}
 	if files != 1 {

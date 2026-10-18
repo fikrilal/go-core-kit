@@ -8,10 +8,13 @@ OAPI_CODEGEN_VERSION ?= v2.8.0
 VACUUM_VERSION ?= v0.33.0
 GOOSE_VERSION ?= v3.28.0
 
-.PHONY: verify fmt fmt-check vet lint test build build-pg tidy tools generate drift scaffold-smoke
+.PHONY: verify verify-pg fmt fmt-check vet lint test build build-pg tidy tools generate drift scaffold-smoke
 
 verify:
 	$(GO) run ./tools/gokit verify --profile full
+
+verify-pg:
+	$(GO) run ./tools/gokit verify --profile pg
 
 tools:
 	@command -v $(GOLANGCI_LINT) >/dev/null 2>&1 || \

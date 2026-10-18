@@ -1,5 +1,3 @@
-//go:build !pg
-
 package main
 
 import (
@@ -9,6 +7,7 @@ import (
 	"time"
 
 	"github.com/fikrilal/go-core-kit/internal/platform/contracttest"
+	"github.com/fikrilal/go-core-kit/internal/platform/dbtest"
 )
 
 type meDeletionEnvelope struct {
@@ -46,8 +45,7 @@ func decodeMeDeletion(t *testing.T, f *authFixture, token string) meDeletionEnve
 func auditCount(t *testing.T, f *authFixture, action string) int {
 	t.Helper()
 	var count int
-	if err := f.database.SQL().QueryRowContext(t.Context(),
-		"SELECT COUNT(*) FROM user_account_deletion_audits WHERE action = ?", action).Scan(&count); err != nil {
+	if err := f.database.SQL().QueryRowContext(t.Context(), dbtest.Rebind("SELECT COUNT(*) FROM user_account_deletion_audits WHERE action = ?"), action).Scan(&count); err != nil {
 		t.Fatalf("count audits: %v", err)
 	}
 	return count
@@ -87,8 +85,7 @@ func TestContractUsersMeAccountDeletionRequest(t *testing.T) {
 	}
 
 	var actor, traceID string
-	if err := f.database.SQL().QueryRowContext(t.Context(),
-		"SELECT actor_user_id, COALESCE(trace_id, '') FROM user_account_deletion_audits WHERE action = 'REQUESTED'").Scan(&actor, &traceID); err != nil {
+	if err := f.database.SQL().QueryRowContext(t.Context(), dbtest.Rebind("SELECT actor_user_id, COALESCE(trace_id, '') FROM user_account_deletion_audits WHERE action = 'REQUESTED'")).Scan(&actor, &traceID); err != nil {
 		t.Fatalf("audit row: %v", err)
 	}
 	if actor != registered.Data.User.ID || traceID == "" {
@@ -154,8 +151,7 @@ func TestContractUsersMeAccountDeletionLastAdmin(t *testing.T) {
 	f := newAuthFixture(t)
 	registered := f.register(t, "admin@example.com", "")
 	token := registered.Data.AccessToken
-	if _, err := f.database.SQL().ExecContext(t.Context(),
-		"UPDATE users SET role = 'ADMIN' WHERE id = ?", registered.Data.User.ID); err != nil {
+	if _, err := f.database.SQL().ExecContext(t.Context(), dbtest.Rebind("UPDATE users SET role = 'ADMIN' WHERE id = ?"), registered.Data.User.ID); err != nil {
 		t.Fatalf("promote admin: %v", err)
 	}
 
@@ -170,8 +166,7 @@ func TestContractUsersMeAccountDeletionLastAdmin(t *testing.T) {
 	}
 
 	second := f.register(t, "admin2@example.com", "")
-	if _, err := f.database.SQL().ExecContext(t.Context(),
-		"UPDATE users SET role = 'ADMIN' WHERE id = ?", second.Data.User.ID); err != nil {
+	if _, err := f.database.SQL().ExecContext(t.Context(), dbtest.Rebind("UPDATE users SET role = 'ADMIN' WHERE id = ?"), second.Data.User.ID); err != nil {
 		t.Fatalf("promote second admin: %v", err)
 	}
 	if _, resp := f.deletionRequest(t, token, ""); resp.Status != http.StatusNoContent {
@@ -194,8 +189,7 @@ func TestContractUsersMeAccountDeletionUnauthorized(t *testing.T) {
 	}
 
 	leaving := f.register(t, "leaving-deletion@example.com", "")
-	if _, err := f.database.SQL().ExecContext(t.Context(),
-		"UPDATE users SET status = 'DELETED' WHERE id = ?", leaving.Data.User.ID); err != nil {
+	if _, err := f.database.SQL().ExecContext(t.Context(), dbtest.Rebind("UPDATE users SET status = 'DELETED' WHERE id = ?"), leaving.Data.User.ID); err != nil {
 		t.Fatalf("delete user: %v", err)
 	}
 	_, deletedRequest := f.deletionRequest(t, leaving.Data.AccessToken, "")

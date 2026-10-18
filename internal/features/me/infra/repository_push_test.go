@@ -1,34 +1,27 @@
-//go:build !pg
-
 package infra_test
 
 import (
 	"context"
 	"errors"
-	"path/filepath"
 	"strings"
 	"testing"
 	"time"
 
-	"github.com/fikrilal/go-core-kit/db/migrations"
 	"github.com/fikrilal/go-core-kit/internal/features/me/domain"
 	"github.com/fikrilal/go-core-kit/internal/features/me/infra"
 	"github.com/fikrilal/go-core-kit/internal/features/me/ports"
 	"github.com/fikrilal/go-core-kit/internal/platform/db"
+	"github.com/fikrilal/go-core-kit/internal/platform/dbtest"
 )
 
 const pushTestStamp = "2026-01-01T00:00:00.000000000Z"
 
 func TestSessionForPushAndClear(t *testing.T) {
-	database := db.MustOpen(filepath.Join(t.TempDir(), "push.db"))
-	t.Cleanup(func() { _ = database.Close() })
-	if err := database.Migrate(t.Context(), migrations.SQLite); err != nil {
-		t.Fatalf("Migrate() error = %v", err)
-	}
+	database := dbtest.Open(t)
 	ctx := t.Context()
 	exec := func(query string, args ...any) {
 		t.Helper()
-		if _, err := database.SQL().ExecContext(ctx, query, args...); err != nil {
+		if _, err := database.SQL().ExecContext(ctx, dbtest.Rebind(query), args...); err != nil {
 			t.Fatalf("exec %s: %v", query, err)
 		}
 	}
@@ -50,7 +43,7 @@ func TestSessionForPushAndClear(t *testing.T) {
 		t.Fatalf("ClearSessionPushTokenIfMatches(stale) error = %v", err)
 	}
 	var token *string
-	if err := database.SQL().QueryRowContext(ctx, "SELECT push_token FROM sessions WHERE id = 'session-1'").Scan(&token); err != nil {
+	if err := database.SQL().QueryRowContext(ctx, dbtest.Rebind("SELECT push_token FROM sessions WHERE id = 'session-1'")).Scan(&token); err != nil {
 		t.Fatalf("read token: %v", err)
 	}
 	if token == nil || *token != "device-token-1" {
@@ -60,7 +53,7 @@ func TestSessionForPushAndClear(t *testing.T) {
 	if err := repository.ClearSessionPushTokenIfMatches(ctx, "session-1", "device-token-1", time.Now()); err != nil {
 		t.Fatalf("ClearSessionPushTokenIfMatches() error = %v", err)
 	}
-	if err := database.SQL().QueryRowContext(ctx, "SELECT push_token FROM sessions WHERE id = 'session-1'").Scan(&token); err != nil && !errors.Is(err, db.ErrNoRows) {
+	if err := database.SQL().QueryRowContext(ctx, dbtest.Rebind("SELECT push_token FROM sessions WHERE id = 'session-1'")).Scan(&token); err != nil && !errors.Is(err, db.ErrNoRows) {
 		t.Fatalf("read token: %v", err)
 	}
 	if token != nil {
@@ -73,15 +66,11 @@ func TestSessionForPushAndClear(t *testing.T) {
 }
 
 func TestFinalizeDeletionScrubsAndCascades(t *testing.T) {
-	database := db.MustOpen(filepath.Join(t.TempDir(), "finalize.db"))
-	t.Cleanup(func() { _ = database.Close() })
-	if err := database.Migrate(t.Context(), migrations.SQLite); err != nil {
-		t.Fatalf("Migrate() error = %v", err)
-	}
+	database := dbtest.Open(t)
 	ctx := t.Context()
 	exec := func(query string, args ...any) {
 		t.Helper()
-		if _, err := database.SQL().ExecContext(ctx, query, args...); err != nil {
+		if _, err := database.SQL().ExecContext(ctx, dbtest.Rebind(query), args...); err != nil {
 			t.Fatalf("exec %s: %v", query, err)
 		}
 	}
@@ -113,8 +102,7 @@ func TestFinalizeDeletionScrubsAndCascades(t *testing.T) {
 	var email, role, status string
 	var verified, scheduled *string
 	var deletedAt string
-	if err := database.SQL().QueryRowContext(ctx,
-		"SELECT email, role, status, email_verified_at, deletion_scheduled_for, deleted_at FROM users WHERE id = 'user-1'").
+	if err := database.SQL().QueryRowContext(ctx, dbtest.Rebind("SELECT email, role, status, email_verified_at, deletion_scheduled_for, deleted_at FROM users WHERE id = 'user-1'")).
 		Scan(&email, &role, &status, &verified, &scheduled, &deletedAt); err != nil {
 		t.Fatalf("read user: %v", err)
 	}
@@ -127,8 +115,7 @@ func TestFinalizeDeletionScrubsAndCascades(t *testing.T) {
 	assertFinalizedRows(t, database)
 
 	var action, sessionID, traceID string
-	if err := database.SQL().QueryRowContext(ctx,
-		"SELECT action, actor_session_id, trace_id FROM user_account_deletion_audits WHERE target_user_id = 'user-1'").
+	if err := database.SQL().QueryRowContext(ctx, dbtest.Rebind("SELECT action, actor_session_id, trace_id FROM user_account_deletion_audits WHERE target_user_id = 'user-1'")).
 		Scan(&action, &sessionID, &traceID); err != nil {
 		t.Fatalf("read audit: %v", err)
 	}
@@ -138,17 +125,11 @@ func TestFinalizeDeletionScrubsAndCascades(t *testing.T) {
 }
 
 func TestRequestAccountDeletionRoundTrip(t *testing.T) {
-	database := db.MustOpen(filepath.Join(t.TempDir(), "request.db"))
-	t.Cleanup(func() { _ = database.Close() })
-	if err := database.Migrate(t.Context(), migrations.SQLite); err != nil {
-		t.Fatalf("Migrate() error = %v", err)
-	}
+	database := dbtest.Open(t)
 	ctx := t.Context()
 	now := time.Date(2026, 10, 15, 12, 0, 0, 0, time.UTC)
 	repository := infra.NewRepository(database)
-	if _, err := database.SQL().ExecContext(ctx,
-		"INSERT INTO users (id, email, created_at, updated_at) VALUES ('user-1', 'user@example.com', ?, ?)",
-		pushTestStamp, pushTestStamp); err != nil {
+	if _, err := database.SQL().ExecContext(ctx, dbtest.Rebind("INSERT INTO users (id, email, created_at, updated_at) VALUES ('user-1', 'user@example.com', ?, ?)"), pushTestStamp, pushTestStamp); err != nil {
 		t.Fatalf("seed user: %v", err)
 	}
 	kind, _, err := repository.RequestAccountDeletion(ctx, ports.RequestAccountDeletionInput{
@@ -188,7 +169,7 @@ func assertFinalizedRows(t *testing.T, database *db.Database) {
 		{"password_reset_tokens", "user_id = 'user-1'", 0},
 	} {
 		var count int
-		if err := database.SQL().QueryRowContext(ctx, "SELECT COUNT(*) FROM "+check.table+" WHERE "+check.where).Scan(&count); err != nil {
+		if err := database.SQL().QueryRowContext(ctx, dbtest.Rebind("SELECT COUNT(*) FROM "+check.table+" WHERE "+check.where)).Scan(&count); err != nil {
 			t.Fatalf("count %s: %v", check.table, err)
 		}
 		if count != check.want {
@@ -211,11 +192,7 @@ func TestFinalizeDeletionLastAdminGuard(t *testing.T) {
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			database := db.MustOpen(filepath.Join(t.TempDir(), "guard.db"))
-			t.Cleanup(func() { _ = database.Close() })
-			if err := database.Migrate(t.Context(), migrations.SQLite); err != nil {
-				t.Fatalf("Migrate() error = %v", err)
-			}
+			database := dbtest.Open(t)
 			ctx := t.Context()
 			seedGuardUser(t, database, tt.role, tt.status, tt.otherAdmin)
 			repository := infra.NewRepository(database)
@@ -243,13 +220,13 @@ func seedGuardUser(t *testing.T, database *db.Database, role, status string, oth
 	ctx := t.Context()
 	exec := func(query string, args ...any) {
 		t.Helper()
-		if _, err := database.SQL().ExecContext(ctx, query, args...); err != nil {
+		if _, err := database.SQL().ExecContext(ctx, dbtest.Rebind(query), args...); err != nil {
 			t.Fatalf("exec %s: %v", query, err)
 		}
 	}
 	exec(`INSERT INTO users (id, email, role, status, created_at, updated_at, deletion_requested_at, deletion_scheduled_for, deletion_requested_session_id, deletion_requested_trace_id)
 	      VALUES ('user-1', 'admin@example.com', ?, ?, ?, ?, ?, ?, 'session-1', 'trace-1')`,
-		role, status, pushTestStamp, pushTestStamp, pushTestStamp, pushTestStamp, pushTestStamp)
+		role, status, pushTestStamp, pushTestStamp, pushTestStamp, pushTestStamp)
 	if otherAdmin {
 		exec(`INSERT INTO users (id, email, role, status, created_at, updated_at)
 		      VALUES ('user-2', 'peer@example.com', 'ADMIN', 'ACTIVE', ?, ?)`, pushTestStamp, pushTestStamp)
@@ -261,11 +238,11 @@ func assertGuardOutcome(t *testing.T, database *db.Database, wantKind domain.Fin
 	t.Helper()
 	ctx := t.Context()
 	var status, email string
-	if err := database.SQL().QueryRowContext(ctx, "SELECT status, email FROM users WHERE id = 'user-1'").Scan(&status, &email); err != nil {
+	if err := database.SQL().QueryRowContext(ctx, dbtest.Rebind("SELECT status, email FROM users WHERE id = 'user-1'")).Scan(&status, &email); err != nil {
 		t.Fatalf("read user: %v", err)
 	}
 	var auditAction *string
-	_ = database.SQL().QueryRowContext(ctx, "SELECT action FROM user_account_deletion_audits WHERE target_user_id = 'user-1'").Scan(&auditAction)
+	_ = database.SQL().QueryRowContext(ctx, dbtest.Rebind("SELECT action FROM user_account_deletion_audits WHERE target_user_id = 'user-1'")).Scan(&auditAction)
 	if wantKind == domain.FinalizeBlockedLastAdmin {
 		if status != "ACTIVE" || email != "admin@example.com" {
 			t.Errorf("user = %s/%s, want the account kept", status, email)

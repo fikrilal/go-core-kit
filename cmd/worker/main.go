@@ -1,7 +1,4 @@
-//go:build !pg
-
 // Command worker is the background jobs bootstrap.
-// This build is SQLite until a pg process exists.
 package main
 
 import (
@@ -22,6 +19,7 @@ import (
 	"github.com/fikrilal/go-core-kit/internal/platform/clock"
 	"github.com/fikrilal/go-core-kit/internal/platform/config"
 	"github.com/fikrilal/go-core-kit/internal/platform/db"
+	"github.com/fikrilal/go-core-kit/internal/platform/dblane"
 	"github.com/fikrilal/go-core-kit/internal/platform/email"
 	"github.com/fikrilal/go-core-kit/internal/platform/logging"
 	"github.com/fikrilal/go-core-kit/internal/platform/push"
@@ -56,7 +54,7 @@ func runMain() int {
 // run wires the worker. The API owns migrations, Redis Open does not dial, and
 // /ready is the connectivity check. No job handlers exist yet; 5.2 adds them.
 func run(ctx context.Context, cfg config.Config, logger *slog.Logger) error {
-	database, err := db.Open(cfg.DatabasePath)
+	database, err := dblane.Open(cfg)
 	if err != nil {
 		return fmt.Errorf("open database: %w", err)
 	}

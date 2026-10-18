@@ -134,10 +134,24 @@ func ciSteps() []step {
 	return fullSteps()
 }
 
+// pgSteps is the Postgres lane: the same checks the SQLite lane runs, against the
+// compiled pg build. The guarded integration tests in the lane run when
+// DATABASE_URL points at a server and skip loudly when it does not.
+func pgSteps() []step {
+	return []step{
+		execStep("fmt-check-pg", "golangci-lint", "fmt", "--diff"),
+		execStep("vet-pg", "go", "vet", "-tags", "pg", "./..."),
+		execStep("lint-pg", "golangci-lint", "run", "--build-tags", "pg"),
+		execStep("test-pg", "go", "test", "-tags", "pg", "./..."),
+		execStep("build-pg", "go", "build", "-tags", "pg", "./..."),
+	}
+}
+
 var profiles = map[string][]step{
 	"fast": fastSteps(),
 	"full": fullSteps(),
 	"ci":   ciSteps(),
+	"pg":   pgSteps(),
 }
 
 func runProfile(ctx context.Context, name string) error {

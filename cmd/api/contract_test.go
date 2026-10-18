@@ -1,5 +1,3 @@
-//go:build !pg
-
 package main
 
 import (
@@ -7,15 +5,13 @@ import (
 	"io"
 	"net/http"
 	"net/http/httptest"
-	"path/filepath"
 	"testing"
 
 	"github.com/alicebob/miniredis/v2"
 
-	"github.com/fikrilal/go-core-kit/db/migrations"
 	"github.com/fikrilal/go-core-kit/internal/platform/config"
 	"github.com/fikrilal/go-core-kit/internal/platform/contracttest"
-	"github.com/fikrilal/go-core-kit/internal/platform/db"
+	"github.com/fikrilal/go-core-kit/internal/platform/dbtest"
 	"github.com/fikrilal/go-core-kit/internal/platform/logging"
 	"github.com/fikrilal/go-core-kit/internal/platform/redis"
 )
@@ -24,11 +20,7 @@ func TestContractProbes(t *testing.T) {
 	suite := contracttest.New(t)
 	client := testClient()
 
-	database := db.MustOpen(filepath.Join(t.TempDir(), "contract.db"))
-	t.Cleanup(func() { _ = database.Close() })
-	if err := database.Migrate(t.Context(), migrations.SQLite); err != nil {
-		t.Fatalf("Migrate() error = %v", err)
-	}
+	database := dbtest.Open(t)
 	mini := miniredis.RunT(t)
 	rdb := redis.MustOpen("redis://" + mini.Addr() + "/0")
 	t.Cleanup(func() { _ = rdb.Close() })

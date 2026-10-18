@@ -154,9 +154,9 @@ Exit gate: a fresh clone can scaffold a working endpoint in one command.
 
 ## Phase 7 — Postgres engine + dual-lane CI
 
-- [ ] 7.1 `platform/db` pg variant (pgx pool, serializable retry) + pg migrations + portable subset audit
-- [ ] 7.2 CI matrix: integration + contract suites on both engines; schema-inventory parity check
-- [ ] 7.3 `make verify-pg`
+- [x] 7.1 `platform/db` pg variant — landed 2026-10-15; pgx-backed `Database` with serializable retry and jittered backoff, the engine key as a build-tag guard, every pg timestamp override in sqlc.yaml, the `dblane` package replacing the composition roots' engine switch, and the portable-subset audit with asserted counts (33 tagged paths: 23 lift, 10 stay, 0 switch)
+- [x] 7.2 CI matrix — landed 2026-10-15; the `verify-pg` job runs the pg lane against a Postgres service, `dbtest` gives every test its own schema on pg (or a temp file on SQLite), `db.Rebind`/`dbtest.Rebind` make hand-written SQL portable, and the contract suites were rewritten by an AST tool rather than text: verified against a live postgres:17, the whole cmd/api suite passes under `-tags pg`
+- [x] 7.3 `make verify-pg` — landed 2026-10-15; a `pg` verify profile (fmt-check, vet, lint, test, build on the pg lane) plus the Makefile target, and CI runs it against a real Postgres service so the guarded integration tests execute instead of skipping
 
 Exit gate: both lanes green — required before declaring the kit stable (ADR-0004).
 

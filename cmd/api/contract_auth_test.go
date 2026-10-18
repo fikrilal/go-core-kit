@@ -1,5 +1,3 @@
-//go:build !pg
-
 package main
 
 import (
@@ -10,17 +8,16 @@ import (
 	"io"
 	"net/http"
 	"net/http/httptest"
-	"path/filepath"
 	"testing"
 
 	"github.com/alicebob/miniredis/v2"
 	"github.com/lestrrat-go/jwx/v3/jwa"
 	"github.com/lestrrat-go/jwx/v3/jws"
 
-	"github.com/fikrilal/go-core-kit/db/migrations"
 	"github.com/fikrilal/go-core-kit/internal/platform/config"
 	"github.com/fikrilal/go-core-kit/internal/platform/contracttest"
 	"github.com/fikrilal/go-core-kit/internal/platform/db"
+	"github.com/fikrilal/go-core-kit/internal/platform/dbtest"
 	"github.com/fikrilal/go-core-kit/internal/platform/logging"
 	"github.com/fikrilal/go-core-kit/internal/platform/redis"
 )
@@ -80,11 +77,7 @@ func newAuthFixtureWithQueue(t *testing.T, mutate func(cfg *config.Config)) *aut
 func newAuthFixtureFull(t *testing.T, mutate func(cfg *config.Config), queued bool) *authFixture {
 	t.Helper()
 	suite := contracttest.New(t)
-	database := db.MustOpen(filepath.Join(t.TempDir(), "auth.db"))
-	t.Cleanup(func() { _ = database.Close() })
-	if err := database.Migrate(t.Context(), migrations.SQLite); err != nil {
-		t.Fatalf("Migrate() error = %v", err)
-	}
+	database := dbtest.Open(t)
 	mini := miniredis.RunT(t)
 	rdb := redis.MustOpen("redis://" + mini.Addr() + "/0")
 	t.Cleanup(func() { _ = rdb.Close() })
@@ -225,8 +218,7 @@ func TestContractAuthRegisterIssuesSession(t *testing.T) {
 	}
 
 	var deviceID, activeKey string
-	if err := f.database.SQL().QueryRowContext(t.Context(),
-		"SELECT device_id, active_key FROM sessions WHERE id = ?", sessionID).Scan(&deviceID, &activeKey); err != nil {
+	if err := f.database.SQL().QueryRowContext(t.Context(), dbtest.Rebind("SELECT device_id, active_key FROM sessions WHERE id = ?"), sessionID).Scan(&deviceID, &activeKey); err != nil {
 		t.Fatalf("session row: %v", err)
 	}
 	if deviceID != "device-a" || activeKey != user.ID+":device-a" {
@@ -234,8 +226,7 @@ func TestContractAuthRegisterIssuesSession(t *testing.T) {
 	}
 
 	var storedHash string
-	if err := f.database.SQL().QueryRowContext(t.Context(),
-		"SELECT token_hash FROM refresh_tokens WHERE session_id = ?", sessionID).Scan(&storedHash); err != nil {
+	if err := f.database.SQL().QueryRowContext(t.Context(), dbtest.Rebind("SELECT token_hash FROM refresh_tokens WHERE session_id = ?"), sessionID).Scan(&storedHash); err != nil {
 		t.Fatalf("refresh token row: %v", err)
 	}
 	if storedHash != hashRefreshTokenValue(decoded.Data.RefreshToken) {
@@ -259,8 +250,7 @@ func TestContractAuthLoginAndEmailNormalization(t *testing.T) {
 	assertAccessToken(t, decoded.Data.AccessToken, registered.Data.User.ID, false)
 
 	var count int
-	if err := f.database.SQL().QueryRowContext(t.Context(),
-		"SELECT COUNT(*) FROM sessions WHERE user_id = ?", registered.Data.User.ID).Scan(&count); err != nil {
+	if err := f.database.SQL().QueryRowContext(t.Context(), dbtest.Rebind("SELECT COUNT(*) FROM sessions WHERE user_id = ?"), registered.Data.User.ID).Scan(&count); err != nil {
 		t.Fatalf("count sessions: %v", err)
 	}
 	if count != 2 {
@@ -339,8 +329,7 @@ func TestContractAuthSuspensionAndDeletion(t *testing.T) {
 
 	update := func(status string) {
 		t.Helper()
-		if _, err := f.database.SQL().ExecContext(t.Context(),
-			"UPDATE users SET status = ? WHERE email = ?", status, "moderated@example.com"); err != nil {
+		if _, err := f.database.SQL().ExecContext(t.Context(), dbtest.Rebind("UPDATE users SET status = ? WHERE email = ?"), status, "moderated@example.com"); err != nil {
 			t.Fatalf("update status: %v", err)
 		}
 	}
@@ -422,13 +411,13 @@ func TestContractAuthSameDeviceRevokesPreviousSession(t *testing.T) {
 		active   int
 		keyCount int
 	)
-	row := f.database.SQL().QueryRowContext(t.Context(), `
+	row := f.database.SQL().QueryRowContext(t.Context(), dbtest.Rebind(`
 		SELECT
 			COUNT(*),
 			SUM(CASE WHEN revoked_at IS NOT NULL THEN 1 ELSE 0 END),
 			SUM(CASE WHEN revoked_at IS NULL THEN 1 ELSE 0 END),
 			SUM(CASE WHEN active_key IS NOT NULL THEN 1 ELSE 0 END)
-		FROM sessions WHERE user_id = ?`, userID)
+		FROM sessions WHERE user_id = ?`), userID)
 	if err := row.Scan(&total, &revoked, &active, &keyCount); err != nil {
 		t.Fatalf("session aggregate: %v", err)
 	}
@@ -437,8 +426,7 @@ func TestContractAuthSameDeviceRevokesPreviousSession(t *testing.T) {
 	}
 
 	var revokedTokens int
-	if err := f.database.SQL().QueryRowContext(t.Context(),
-		"SELECT COUNT(*) FROM refresh_tokens WHERE revoked_at IS NOT NULL").Scan(&revokedTokens); err != nil {
+	if err := f.database.SQL().QueryRowContext(t.Context(), dbtest.Rebind("SELECT COUNT(*) FROM refresh_tokens WHERE revoked_at IS NOT NULL")).Scan(&revokedTokens); err != nil {
 		t.Fatalf("revoked refresh tokens: %v", err)
 	}
 	if revokedTokens != 1 {

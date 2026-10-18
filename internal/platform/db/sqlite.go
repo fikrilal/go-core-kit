@@ -76,6 +76,10 @@ type Tx interface {
 	QueryRowContext(ctx context.Context, query string, args ...any) *sql.Row
 }
 
+// Rebind returns query unchanged: SQLite's placeholders are already `?`. It
+// exists so hand-built SQL can be written once for both engines.
+func Rebind(query string) string { return query }
+
 // ErrNoRows reports that a query returned no rows.
 var ErrNoRows = sql.ErrNoRows
 
