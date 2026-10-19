@@ -84,3 +84,23 @@ memory, read RSS after boot: `ps -o rss= -p <pid>`.
 - Migration cost at boot, cold-start time, and anything about a real network.
 - Cost: this is a single-box template, so the cost model is the box plus object
   storage; the numbers that matter there are the binary and RSS figures above.
+
+## Deployment footprint
+
+Idle resident memory and on-disk size per option, on the same box as the numbers
+above. Measured values are marked; the rest are arithmetic from them.
+
+| Option | On disk | Idle RAM | Notes |
+| --- | --- | --- | --- |
+| Bare binaries + systemd (measured binaries) | 78 MiB (67 stripped) | 44 + 24 = **68 MiB** | No runtime to install; add a Redis package |
+| \+ Redis 7 (measured container) | 182 MB image (`redis:7-alpine` 57.8 MB) | **+10 MiB** (14 with container overhead) | The one external service the kit needs |
+| **Lightest complete stack** | ~90–150 MiB | **~78–85 MiB** | One API, one worker, one Redis, a SQLite file |
+| Docker images instead of bare binaries | ~27 MiB per image (stripped binary + certs) | same + ~1–2 MiB per container | On Linux a container is namespaces and cgroups, not a VM: no runtime tax |
+| Compose on one host | same as the images | same as the images | A CLI convenience, not a runtime cost |
+| **Postgres lane** instead of SQLite | +646 MB image (measured) | +28–65 MiB measured RSS, and ~128 MiB of `shared_buffers` by default | The honest price of the second engine |
+| Kubernetes | images + kubelet/containerd (~200–500 MiB per node) | plus control-plane components if self-hosted | And single-writer SQLite does not fit replicas anyway |
+
+Read the table as floor, not peak: idle RSS excludes the SQLite page cache, which
+grows with the working set, and Redis grows with its keys. The two numbers that
+decide a small deployment are these: the whole SQLite stack idles under ~85 MiB, and
+adding Postgres roughly doubles that while adding 646 MB of image.

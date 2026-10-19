@@ -1,0 +1,17 @@
+# Litestream replicates the SQLite file next to the process that writes it. The
+# replica settings come from the environment, so no credential lives in git:
+#   LITESTREAM_BUCKET, LITESTREAM_REGION, LITESTREAM_ENDPOINT,
+#   LITESTREAM_ACCESS_KEY_ID, LITESTREAM_SECRET_ACCESS_KEY, optionally LITESTREAM_PREFIX.
+# They are deployment keys for this sidecar, not application configuration, so they
+# stay out of env.example (which the knowledge check holds to the config struct).
+dbs:
+  - path: /data/gokit.db
+    replicas:
+      - type: s3
+        bucket: ${LITESTREAM_BUCKET}
+        path: ${LITESTREAM_PREFIX:-gokit}
+        region: ${LITESTREAM_REGION}
+        endpoint: ${LITESTREAM_ENDPOINT}
+        access-key-id: ${LITESTREAM_ACCESS_KEY_ID}
+        secret-access-key: ${LITESTREAM_SECRET_ACCESS_KEY}
+        force-path-style: true

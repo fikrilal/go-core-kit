@@ -1,0 +1,88 @@
+# One project per application: api, worker, its own Redis, and the SQLite file on a
+# bind mount. Litestream runs behind the `backup` profile because it needs a replica
+# configured; the stack works without it and gains backups with it:
+#   docker compose --profile backup up -d
+#
+# The bind mount must be writable by the images' nonroot user (uid 65532):
+#   mkdir -p data && sudo chown 65532:65532 data
+name: gokit
+
+services:
+  # A bind mount is created root-owned, while the images run as uid 65532. This
+  # hands the directory over once, so a fresh checkout boots with no manual step.
+  init:
+    image: busybox:stable
+    command: ["sh", "-c", "mkdir -p /data && chown -R 65532:65532 /data"]
+    volumes:
+      - ./data:/data
+    restart: "no"
+
+  redis:
+    image: redis:7-alpine
+    # Limiter counters, idempotency records, and the queue live here. Disabling
+    # persistence keeps Redis a cache by intent rather than by accident; the
+    # deployment note records what that costs.
+    command: ["redis-server", "--save", "", "--appendonly", "no"]
+    restart: unless-stopped
+    mem_limit: 64m
+
+  api:
+    build:
+      context: .
+      target: api
+    env_file:
+      - path: .env
+        required: false
+    environment:
+      APP_ENV: ${APP_ENV:-dev}
+      HTTP_PORT: "8080"
+      DATABASE_PATH: /data/gokit.db
+      REDIS_URL: redis://redis:6379/0
+    volumes:
+      - ./data:/data
+    ports:
+      - "${API_PORT:-8080}:8080"
+    depends_on:
+      init:
+        condition: service_completed_successfully
+      redis:
+        condition: service_started
+    restart: unless-stopped
+    mem_limit: 128m
+
+  worker:
+    build:
+      context: .
+      target: worker
+    env_file:
+      - path: .env
+        required: false
+    environment:
+      APP_ENV: ${APP_ENV:-dev}
+      WORKER_HTTP_PORT: "8081"
+      DATABASE_PATH: /data/gokit.db
+      REDIS_URL: redis://redis:6379/0
+    volumes:
+      - ./data:/data
+    # The API migrates at boot; the worker assumes the schema.
+    depends_on:
+      init:
+        condition: service_completed_successfully
+      api:
+        condition: service_started
+    restart: unless-stopped
+    mem_limit: 96m
+
+  litestream:
+    image: litestream/litestream
+    command: ["replicate"]
+    volumes:
+      - ./data:/data
+      - ./litestream.yml:/etc/litestream.yml:ro
+    env_file:
+      - path: .env
+        required: false
+    depends_on: [api]
+    profiles: ["backup"]
+    restart: unless-stopped
+    mem_limit: 64m

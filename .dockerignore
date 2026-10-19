@@ -1,0 +1,12 @@
+.git
+.github
+data
+*.db
+*.db-wal
+*.db-shm
+*.tmp
+/worker
+/api
+/gokit
+_WIP
+docs
