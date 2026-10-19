@@ -51,3 +51,17 @@ Time in services and repositories comes from the injected clock; `time.Now()` is
 lint failure in feature code. Values cross the database boundary through
 `utctime.Time`, which stores a fixed-width UTC text form so ordering and cursor
 comparisons are exact.
+
+## Moving data between engines
+
+`gokit db export --out <file>` writes the compiled lane's tables as JSON lines: a
+versioned header per table, then one line per row with values in their stored text
+form (null stays null). `gokit db import --in <file>` applies it, one transaction
+per table, in dependency order; it refuses a target that already holds rows unless
+`--replace` is passed, and `--dry-run` reports the row counts without writing.
+
+There is no `--lane` flag, because one binary is one engine: the SQLite build
+exports, the pg build imports, and a cross-engine move is two invocations. The table
+list in `tools/gokit/dbmove.go` is the kit's schema in dependency order — a future
+migration adds its table there, since portable table discovery would have to name an
+engine.

@@ -11,6 +11,9 @@ const usageText = `gokit commands:
   verify --profile fast|full|ci   run a verification profile (default: full)
   doctor                          inspect local prerequisites
   db generate                     regenerate sqlc output into internal/db/gen
+  db export --out <file>          write the compiled lane's tables as a snapshot
+  db import --in <file> [--replace] [--dry-run]
+                                  apply a snapshot to the compiled lane
   drift check                     regenerate and fail on uncommitted or stale artifacts
   contract sync|check|generate    pin the backend snapshot; verify digest; regenerate types
   gates honesty                   prove the verification gates fail on injected violations
@@ -113,10 +116,7 @@ func parseCommand(args []string) (command, error) {
 		}
 		return doctorCommand{}, nil
 	case "db":
-		if len(args) != 2 || args[1] != "generate" {
-			return nil, usagef("db expects: gokit db generate")
-		}
-		return dbGenerateCommand{}, nil
+		return parseDB(args[1:])
 	case "knowledge":
 		if len(args) != 2 || args[1] != "check" {
 			return nil, usagef("knowledge expects: gokit knowledge check")
@@ -174,6 +174,52 @@ func parseScaffold(args []string) (command, error) {
 		return scaffoldEndpointCommand{feature: feature, operation: operation}, nil
 	}
 	return nil, usagef("scaffold expects: gokit scaffold feature|endpoint")
+}
+
+func parseDB(args []string) (command, error) {
+	if len(args) == 0 {
+		return nil, usagef("db expects: gokit db generate|export|import")
+	}
+	switch args[0] {
+	case "generate":
+		if len(args) != 1 {
+			return nil, usagef("db generate takes no arguments")
+		}
+		return dbGenerateCommand{}, nil
+	case "export":
+		values, err := parseFlags("db export", args[1:], "--out")
+		if err != nil {
+			return nil, err
+		}
+		out := values["--out"]
+		if out == "" {
+			return nil, usagef("db export: --out is required")
+		}
+		return dbExportCommand{out: out}, nil
+	case "import":
+		replace, dryRun := false, false
+		rest := make([]string, 0, len(args))
+		for _, arg := range args[1:] {
+			switch arg {
+			case "--replace":
+				replace = true
+			case "--dry-run":
+				dryRun = true
+			default:
+				rest = append(rest, arg)
+			}
+		}
+		values, err := parseFlags("db import", rest, "--in")
+		if err != nil {
+			return nil, err
+		}
+		in := values["--in"]
+		if in == "" {
+			return nil, usagef("db import: --in is required")
+		}
+		return dbImportCommand{in: in, replace: replace, dryRun: dryRun}, nil
+	}
+	return nil, usagef("db expects: gokit db generate|export|import")
 }
 
 func parseRemove(args []string) (command, error) {
