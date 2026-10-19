@@ -179,7 +179,7 @@ Exit gate: acceptance criteria of both `_WIP` proposals satisfied.
 
 - [x] Strict lint/format baseline + `make tools` for golangci-lint (landed with 1.0)
 - [x] Extend `make tools` pins — landed 2026-10-15; `GOOSE_VERSION` joins the existing sqlc, oapi-codegen, and vacuum pins, `make tools` installs the CLI for manual migrations, and `doctor` reports it as an **optional** tool (warn, never fail) because migrations run in process as they land
-- [ ] Duplication policy: blocking core profile with reviewed allowlists (once features exist)
+- [x] Duplication policy — landed 2026-10-17; `docs/standards/duplication.md` states the rule, the non-duplication shapes, and the (empty) exceptions table, `dupl` stays blocking at threshold 100 with the standard behind it, and `gates honesty` grew a probe that writes a threshold-crossing duplicate into a temp package and asserts the lint gate fails
 - [x] Secrets scan gate — landed 2026-10-15; `gokit` scans `git ls-files` for private-key, AWS, Resend, service-account, and PEM shapes as a step of the fast profile (so CI runs it), reports file:line and pattern without echoing the match, and skips two reviewed entries: its own pattern definitions and the AWS-published SigV4 test vectors
 - [x] Litestream backup + single-box deployment notes — landed 2026-10-15; `docs/engineering/single-box-deployment.md` records the process roles and start order, the Litestream replica and restore runbook, the Redis caveats (rate-limit and idempotency state is lost, scheduled deletion re-arms from the stored schedule), and the explicit non-goals (no HA, no pg lane yet)
 - [ ] Export/import helper for cross-engine data moves (optional, later)

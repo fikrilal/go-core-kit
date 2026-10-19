@@ -19,6 +19,7 @@ const (
 	markerRawJSON            = "use httpx decode/respond helpers instead of raw JSON in features"
 	markerClockInjection     = "inject a clock"
 	markerPlatformNoFeatures = "platform must not depend on features"
+	markerDuplication        = "lines are duplicate of"
 )
 
 const driversViolationSource = `// Package drivers is a gate-honesty fixture.
@@ -139,6 +140,7 @@ func runGatesHonesty(ctx context.Context) error {
 	scenarios := []honestyScenario{
 		{name: "stale snapshot fails the digest gate", verify: verifyDigestHonesty},
 		{name: "undeclared operation fails the coverage gate", verify: verifyCoverageHonesty},
+		{name: "a duplicated function fails the lint gate", verify: verifyDuplicationHonesty},
 	}
 	for _, fixture := range violationFixtures {
 		scenarios = append(scenarios, honestyScenario{
@@ -249,4 +251,91 @@ func expectGateFailure(ctx context.Context, marker string, env []string, name st
 
 func withEnv(extra ...string) []string {
 	return append(os.Environ(), extra...)
+}
+
+// verifyDuplicationHonesty writes two identical functions into a temporary package
+// inside the module and asserts the lint gate reports the duplication. The package
+// has to live in the module for the linter to resolve it, and it is removed on the
+// way out.
+func verifyDuplicationHonesty(ctx context.Context) error {
+	dir, err := os.MkdirTemp("internal", "gokit-dup-probe-")
+	if err != nil {
+		return fmt.Errorf("create probe package: %w", err)
+	}
+	defer func() { _ = os.RemoveAll(dir) }()
+
+	body := `package probe
+
+import "strings"
+
+// first and second are deliberately identical, and long enough to cross the
+// configured duplication threshold.
+func first(values []string, prefix string) []string {
+	cleaned := make([]string, 0, len(values))
+	seen := make(map[string]bool, len(values))
+	for _, value := range values {
+		trimmed := strings.TrimSpace(value)
+		if trimmed == "" {
+			continue
+		}
+		if seen[trimmed] {
+			continue
+		}
+		seen[trimmed] = true
+		if prefix != "" && !strings.HasPrefix(trimmed, prefix) {
+			trimmed = prefix + trimmed
+		}
+		cleaned = append(cleaned, trimmed)
+	}
+	if len(cleaned) == 0 {
+		return []string{}
+	}
+	sortable := append([]string{}, cleaned...)
+	for i := 0; i < len(sortable); i++ {
+		for j := i + 1; j < len(sortable); j++ {
+			if sortable[j] < sortable[i] {
+				sortable[i], sortable[j] = sortable[j], sortable[i]
+			}
+		}
+	}
+	return sortable
+}
+
+func second(values []string, prefix string) []string {
+	cleaned := make([]string, 0, len(values))
+	seen := make(map[string]bool, len(values))
+	for _, value := range values {
+		trimmed := strings.TrimSpace(value)
+		if trimmed == "" {
+			continue
+		}
+		if seen[trimmed] {
+			continue
+		}
+		seen[trimmed] = true
+		if prefix != "" && !strings.HasPrefix(trimmed, prefix) {
+			trimmed = prefix + trimmed
+		}
+		cleaned = append(cleaned, trimmed)
+	}
+	if len(cleaned) == 0 {
+		return []string{}
+	}
+	sortable := append([]string{}, cleaned...)
+	for i := 0; i < len(sortable); i++ {
+		for j := i + 1; j < len(sortable); j++ {
+			if sortable[j] < sortable[i] {
+				sortable[i], sortable[j] = sortable[j], sortable[i]
+			}
+		}
+	}
+	return sortable
+}
+`
+	probeFile := filepath.Join(dir, "probe.go")
+	if err := os.WriteFile(probeFile, []byte(body), 0o600); err != nil {
+		return fmt.Errorf("write probe package: %w", err)
+	}
+	return expectGateFailure(ctx, markerDuplication, os.Environ(),
+		"golangci-lint", "run", "./"+filepath.ToSlash(dir)+"/...")
 }
