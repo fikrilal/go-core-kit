@@ -89,3 +89,32 @@ jobs, whose state machines are larger and worth their own matrices if they need 
 
 Verification: `golangci-lint run` 0 issues, the full suite green, `make verify` full
 profile passed, `make verify-pg` passed.
+
+## Review round 1 — findings recorded, not yet fixed (2026-10-17)
+
+An independent review of the commits that landed this slice confirmed the mechanism
+works and found four gaps in it. They are recorded here because they would otherwise
+disappear with the review transcript:
+
+- **`States()` can drift from the matrices.** It is a hand-written slice while
+  `Verification` and `PasswordReset` are separate maps, so adding a row to a matrix
+  without editing `States()` leaves it unasserted — the drift the oracle exists to
+  prevent, and the reason this plan's acceptance check 2 is not yet met. Derive
+  `States()` from the matrices, or assert that every key appears in it and that both
+  matrices share a key set.
+- **The golden key ignores the HTTP method.** `GET /v1/me` and `PATCH /v1/me` share
+  `v1.me.200.json`, so today they are one oracle entry: a shape change in either fails
+  the other's test. Include the method in the name.
+- **An orphan capture is committed.** `.well-known.jwks.json.json` is byte-identical
+  to `.well-known.jwks.json.200.json` and is never read; `-update-golden` never prunes,
+  so a renamed route leaves its old file behind. Delete it, and consider asserting that
+  every file under `testdata/golden` was read.
+- **The refusal half is advertised but unwired.** No capture contains a `code`, so a
+  wrong error code on a 4xx is still not caught, and the counts in this plan
+  (25 call sites, 21 captures) are the plain-`ls` numbers: the tree holds 23 golden
+  files, 22 live keys plus the orphan, and 26 `ValidateResponse` call sites — the
+  26th being the health-probe loop, deliberately outside the sweep.
+
+Also noted: `Verification` and `PasswordReset` are currently identical maps, which the
+duplication standard landed in the same range would call two copies of one decision;
+data literals are invisible to `dupl`.
