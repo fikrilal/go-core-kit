@@ -170,7 +170,7 @@ for, not planned.
 ## Phase 9 — Parity + budget closure
 
 - [x] 9.1 Client-facing operation coverage closed — every operation this kit carries is declared by the snapshot, and the ones it does not carry are accounted for in the allowlist and retired by [ADR-0012](../adr/0012-modules-not-carried.md)
-- [ ] 9.2 Performance/cost baseline recorded (image size, idle RSS, p95 on reference endpoints)
+- [x] 9.2 Performance/cost baseline — landed 2026-10-17; `docs/engineering/performance-baseline.md` records binary size (api 39.0 MiB, stripped 26.9 MiB, worker 38.4 MiB), idle RSS (api 44.1 MiB, worker 23.8 MiB), and p50/p95/p99 for `/health`, `/v1/me`, and `/v1/me/sessions` on the SQLite lane, with `tools/bench` kept in the repository so the run is reproducible
 - [x] 9.3 `docs/standards/*` completed — all nine planned standards are in place (api-response, error-codes, authentication, pagination-filtering-sorting, configuration, database, queues-jobs, observability, ci-cd) with the index flipped to in place, plus `docs/engineering/residual-risk.md` recording ten known gaps with their blast radius and what would close each
 
 Exit gate: acceptance criteria of both `_WIP` proposals satisfied.
