@@ -6,6 +6,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"os"
+	"slices"
 	"strconv"
 	"strings"
 	"time"
@@ -24,13 +25,20 @@ var dbMoveTables = []string{
 	"users",
 	"password_credentials",
 	"external_identities",
-	"user_profiles",
 	"stored_files",
+	"user_profiles",
 	"sessions",
 	"refresh_tokens",
 	"email_verification_tokens",
 	"password_reset_tokens",
 	"user_account_deletion_audits",
+}
+
+// dbMoveSelfReferences names the columns that point back at their own table. They are
+// inserted null and filled in a second pass, because a row's parent may follow it in
+// the snapshot.
+var dbMoveSelfReferences = map[string]string{
+	"refresh_tokens": "replaced_by_id",
 }
 
 // dbMoveHeader opens a table in the snapshot; each following line is one row.
@@ -77,11 +85,19 @@ func (c dbImportCommand) execute(ctx context.Context) error {
 
 // runDBExport writes every table of the compiled lane to out as JSON lines.
 func runDBExport(ctx context.Context, database *db.Database, out string) error {
-	file, err := os.Create(out) //nolint:gosec // the operator names the output path
+	temp := out + ".tmp"
+	file, err := os.Create(temp) //nolint:gosec // the operator names the output path
 	if err != nil {
 		return fmt.Errorf("create snapshot: %w", err)
 	}
 	writer := bufio.NewWriter(file)
+	// A failed export must not leave a partial file beside the destination.
+	committed := false
+	defer func() {
+		if !committed {
+			_ = os.Remove(temp)
+		}
+	}()
 	exported := 0
 	for _, table := range dbMoveTables {
 		count, err := exportTable(ctx, database, writer, table)
@@ -98,6 +114,10 @@ func runDBExport(ctx context.Context, database *db.Database, out string) error {
 	if err := file.Close(); err != nil {
 		return fmt.Errorf("close snapshot: %w", err)
 	}
+	if err := os.Rename(temp, out); err != nil {
+		return fmt.Errorf("publish snapshot: %w", err)
+	}
+	committed = true
 	fmt.Printf("export: %d rows from %d tables into %s\n", exported, len(dbMoveTables), out)
 	return nil
 }
@@ -196,7 +216,7 @@ func runDBImport(ctx context.Context, database *db.Database, in string, replace,
 	}
 
 	if !replace {
-		held, err := heldTables(ctx, database, snapshot)
+		held, err := heldTables(ctx, database)
 		if err != nil {
 			return err
 		}
@@ -204,15 +224,94 @@ func runDBImport(ctx context.Context, database *db.Database, in string, replace,
 			return fmt.Errorf("target already holds rows in %s — pass --replace to overwrite", strings.Join(held, ", "))
 		}
 	}
-	inserted := 0
-	for _, table := range dbMoveTables {
-		count, err := importTable(ctx, database, table, snapshot[table], replace)
-		if err != nil {
-			return err
-		}
-		inserted += count
+	inserted, err := writeSnapshot(ctx, database, snapshot, replace)
+	if err != nil {
+		return err
 	}
 	fmt.Printf("import: %d rows into %d tables\n", inserted, len(dbMoveTables))
+	return nil
+}
+
+// writeSnapshot applies the whole snapshot in one transaction: a failure anywhere
+// leaves the target exactly as it was, which matters most for --replace, where the
+// deletes would otherwise commit table by table and cascade rows away for good.
+func writeSnapshot(ctx context.Context, database *db.Database, snapshot map[string]dbMoveTable, replace bool) (int, error) {
+	// The count is assigned from the attempt that commits, not accumulated across
+	// attempts: InTx may retry a serializable conflict and rerun this closure.
+	inserted := 0
+	err := database.InTx(ctx, func(tx db.Tx) error {
+		attemptRows := 0
+		defer func() { inserted = attemptRows }()
+		if replace {
+			for i := len(dbMoveTables) - 1; i >= 0; i-- {
+				if _, err := tx.ExecContext(ctx, "DELETE FROM "+dbMoveTables[i]); err != nil {
+					return fmt.Errorf("clear %s: %w", dbMoveTables[i], err)
+				}
+			}
+		}
+		for _, table := range dbMoveTables {
+			count, deferred, err := insertRows(ctx, tx, table, snapshot[table])
+			if err != nil {
+				return err
+			}
+			attemptRows += count
+			if err := applySelfReferences(ctx, tx, table, deferred); err != nil {
+				return err
+			}
+		}
+		return nil
+	})
+	if err != nil {
+		return 0, fmt.Errorf("import: %w", err)
+	}
+	return inserted, nil
+}
+
+// insertRows writes one table's rows, returning the self-references it deferred.
+func insertRows(ctx context.Context, tx db.Tx, table string, data dbMoveTable) (int, [][2]string, error) {
+	if len(data.rows) == 0 {
+		return 0, nil, nil
+	}
+	statement := db.Rebind(insertStatement(table, data.columns))
+	selfColumn := dbMoveSelfReferences[table]
+	var deferred [][2]string
+	for _, row := range data.rows {
+		values := make([]any, len(row))
+		for i, value := range row {
+			if value == nil {
+				continue
+			}
+			if selfColumn != "" && data.columns[i] == selfColumn {
+				idIndex := slices.Index(data.columns, "id")
+				if idIndex < 0 || row[idIndex] == nil {
+					return 0, nil, fmt.Errorf("row in %s has no id to link", table)
+				}
+				// The link is filled in once every row exists, keyed by the row's own
+				// id wherever the snapshot put that column.
+				deferred = append(deferred, [2]string{*row[idIndex], *value})
+				continue
+			}
+			values[i] = *value
+		}
+		if _, err := tx.ExecContext(ctx, statement, values...); err != nil {
+			return 0, nil, fmt.Errorf("insert into %s: %w", table, err)
+		}
+	}
+	return len(data.rows), deferred, nil
+}
+
+// applySelfReferences fills in the columns deferred during insert.
+func applySelfReferences(ctx context.Context, tx db.Tx, table string, deferred [][2]string) error {
+	selfColumn := dbMoveSelfReferences[table]
+	if selfColumn == "" || len(deferred) == 0 {
+		return nil
+	}
+	statement := db.Rebind("UPDATE " + table + " SET " + selfColumn + " = ? WHERE id = ?")
+	for _, pair := range deferred {
+		if _, err := tx.ExecContext(ctx, statement, pair[1], pair[0]); err != nil {
+			return fmt.Errorf("link %s.%s: %w", table, selfColumn, err)
+		}
+	}
 	return nil
 }
 
@@ -235,6 +334,9 @@ func readSnapshot(in string) (map[string]dbMoveTable, error) {
 		}
 		var header dbMoveHeader
 		if err := json.Unmarshal([]byte(line), &header); err == nil && header.Table != "" {
+			if !slices.Contains(dbMoveTables, header.Table) {
+				return nil, fmt.Errorf("snapshot names a table this kit does not carry: %s", header.Table)
+			}
 			current = header.Table
 			tables[current] = dbMoveTable{columns: header.Columns}
 			continue
@@ -247,6 +349,9 @@ func readSnapshot(in string) (map[string]dbMoveTable, error) {
 			return nil, fmt.Errorf("decode %s row: %w", current, err)
 		}
 		table := tables[current]
+		if len(row) != len(table.columns) {
+			return nil, fmt.Errorf("row in %s has %d values for %d columns", current, len(row), len(table.columns))
+		}
 		table.rows = append(table.rows, row)
 		tables[current] = table
 	}
@@ -256,13 +361,11 @@ func readSnapshot(in string) (map[string]dbMoveTable, error) {
 	return tables, nil
 }
 
-// heldTables reports which tables the snapshot would write into already have rows.
-func heldTables(ctx context.Context, database *db.Database, snapshot map[string]dbMoveTable) ([]string, error) {
+// heldTables reports which managed tables already hold rows. Any of them triggers the
+// --replace requirement, not only the ones the snapshot would touch.
+func heldTables(ctx context.Context, database *db.Database) ([]string, error) {
 	var held []string
 	for _, table := range dbMoveTables {
-		if len(snapshot[table].rows) == 0 {
-			continue
-		}
 		var count int64
 		if err := database.SQL().QueryRowContext(ctx, "SELECT COUNT(*) FROM "+table).Scan(&count); err != nil {
 			return nil, fmt.Errorf("count %s: %w", table, err)
@@ -272,37 +375,6 @@ func heldTables(ctx context.Context, database *db.Database, snapshot map[string]
 		}
 	}
 	return held, nil
-}
-
-// importTable writes one table inside a transaction, replacing when asked.
-func importTable(ctx context.Context, database *db.Database, table string, data dbMoveTable, replace bool) (int, error) {
-	if len(data.rows) == 0 {
-		return 0, nil
-	}
-	statement := insertStatement(table, data.columns)
-	err := database.InTx(ctx, func(tx db.Tx) error {
-		if replace {
-			if _, err := tx.ExecContext(ctx, "DELETE FROM "+table); err != nil {
-				return fmt.Errorf("clear %s: %w", table, err)
-			}
-		}
-		for _, row := range data.rows {
-			values := make([]any, len(row))
-			for i, value := range row {
-				if value != nil {
-					values[i] = *value
-				}
-			}
-			if _, err := tx.ExecContext(ctx, db.Rebind(statement), values...); err != nil {
-				return fmt.Errorf("insert into %s: %w", table, err)
-			}
-		}
-		return nil
-	})
-	if err != nil {
-		return 0, fmt.Errorf("import %s: %w", table, err)
-	}
-	return len(data.rows), nil
 }
 
 // insertStatement builds an insert with the portable placeholder form.
