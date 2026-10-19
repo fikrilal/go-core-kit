@@ -14,6 +14,7 @@ The wire-contract behaviors are owned by backend-core-kit's standards. This kit 
 | database | in place | landed with the platform, auth, worker, and dual-lane phases |
 | queues-jobs | in place | landed with the platform, auth, worker, and dual-lane phases |
 | observability | in place | landed with the platform, auth, worker, and dual-lane phases |
+| duplication | in place | landed with the cross-cutting follow-ups |
 | testing-strategy | in place | landed with 2.3 (contract suite harness) |
 | ci-cd | in place | landed with the platform, auth, worker, and dual-lane phases |
 

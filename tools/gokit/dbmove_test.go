@@ -16,11 +16,11 @@ func TestDBMoveRoundTrip(t *testing.T) {
 	source := dbtest.Open(t)
 	ctx := t.Context()
 	const stamp = "2026-01-01T00:00:00.000000000Z"
-	if _, err := source.SQL().ExecContext(ctx, "INSERT INTO users (id, email, created_at, updated_at) VALUES (?, ?, ?, ?)",
+	if _, err := source.SQL().ExecContext(ctx, dbtest.Rebind("INSERT INTO users (id, email, created_at, updated_at) VALUES (?, ?, ?, ?)"),
 		"user-1", "move@example.com", stamp, stamp); err != nil {
 		t.Fatalf("seed user: %v", err)
 	}
-	if _, err := source.SQL().ExecContext(ctx, "INSERT INTO password_credentials (user_id, password_hash, created_at, updated_at) VALUES (?, ?, ?, ?)",
+	if _, err := source.SQL().ExecContext(ctx, dbtest.Rebind("INSERT INTO password_credentials (user_id, password_hash, created_at, updated_at) VALUES (?, ?, ?, ?)"),
 		"user-1", "hash-1", stamp, stamp); err != nil {
 		t.Fatalf("seed credential: %v", err)
 	}

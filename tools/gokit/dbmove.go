@@ -6,10 +6,13 @@ import (
 	"encoding/json"
 	"fmt"
 	"os"
+	"strconv"
 	"strings"
+	"time"
 
 	"github.com/fikrilal/go-core-kit/internal/platform/config"
 	"github.com/fikrilal/go-core-kit/internal/platform/db"
+	"github.com/fikrilal/go-core-kit/internal/platform/db/utctime"
 	"github.com/fikrilal/go-core-kit/internal/platform/dblane"
 )
 
@@ -140,6 +143,9 @@ func exportTable(ctx context.Context, database *db.Database, writer *bufio.Write
 }
 
 // snapshotValue renders a scanned value as the text both engines store, or null.
+// Timestamps take the canonical stored form: the pg driver hands them back as
+// time.Time, and %v would write the operator's local zone — text the pg lanes reject
+// and this kit's readers cannot parse.
 func snapshotValue(value any) *string {
 	text := ""
 	switch typed := value.(type) {
@@ -149,6 +155,14 @@ func snapshotValue(value any) *string {
 		text = string(typed)
 	case string:
 		text = typed
+	case time.Time:
+		text = utctime.Time{Time: typed}.Stored()
+	case int64:
+		text = strconv.FormatInt(typed, 10)
+	case float64:
+		text = strconv.FormatFloat(typed, 'f', -1, 64)
+	case bool:
+		text = strconv.FormatBool(typed)
 	default:
 		text = fmt.Sprintf("%v", typed)
 	}

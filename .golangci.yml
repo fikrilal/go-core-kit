@@ -61,6 +61,8 @@ linters:
             - pkg: "encoding/json"
               desc: use httpx decode/respond helpers instead of raw JSON in features
     dupl:
+      # See docs/standards/duplication.md: high enough to catch a copied decision,
+      # low enough to ignore incidental symmetry between short functions.
       threshold: 100
     exhaustive:
       default-signifies-exhaustive: true

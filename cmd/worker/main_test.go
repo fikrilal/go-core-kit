@@ -276,8 +276,13 @@ func seedWorkerUser(t *testing.T, state oracle.AccountState) *db.Database {
 		return database
 	}
 	status := "ACTIVE"
-	if state == oracle.Deleted {
+	switch state {
+	case oracle.Missing, oracle.Active:
+		// The default is right for these; the loop skips the insert for Missing.
+	case oracle.Deleted:
 		status = "DELETED"
+	case oracle.Suspended:
+		status = "SUSPENDED"
 	}
 	if _, err := database.SQL().ExecContext(t.Context(),
 		"INSERT INTO users (id, email, status, created_at, updated_at) VALUES (?, ?, ?, ?, ?)",

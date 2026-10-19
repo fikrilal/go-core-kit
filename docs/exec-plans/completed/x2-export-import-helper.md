@@ -82,6 +82,21 @@ The table list is a constant in dependency order rather than schema discovery, w
 the cost written down in `docs/standards/database.md`: a new migration adds its table
 there.
 
-Verification: `go test ./tools/gokit/` green (SQLite lane), `golangci-lint run` 0
-issues, `make verify` full profile passed, `make verify-pg` passed — and the pg lane
-runs the same round trip against a live server in the CI matrix.
+**Correction (review round 1).** The paragraph above originally claimed the pg lane
+ran the round trip. It did not: the test seeded with SQLite `?` placeholders and no
+`dbtest.Rebind`, so `make verify-pg` with a live `DATABASE_URL` — the command CI's
+`verify-pg` job runs — failed with `syntax error at or near ","`, and the lane only
+looked green because the guarded tests skip without a URL. A reviewer reproduced it
+against a real server. Both seeds now rebind, and `snapshotValue` renders timestamps
+through `utctime.Stored()`: the pg driver hands them back as `time.Time`, and `%v`
+wrote the operator's local zone — text pg rejects and this kit's readers cannot
+parse. Verified this time by running the lane with a live `postgres:17`; the
+cross-engine round trip is still unproven and stays on the follow-up list below.
+
+**Open from that review, not fixed here:** the import order breaks two real foreign
+keys (`stored_files` before `user_profiles`; `refresh_tokens.replaced_by_id` needs a
+second pass), a failed `--replace` can leave a target with cascaded rows gone because
+each table commits separately, unknown tables in a snapshot are dropped silently, the
+export truncates its destination before reading, and no counts or checksums are
+compared on the way in. Each is recorded with its reproduction in the review round's
+findings rather than implied fixed.
