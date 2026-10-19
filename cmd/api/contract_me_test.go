@@ -109,6 +109,7 @@ func TestContractUsersMeGet(t *testing.T) {
 		t.Fatalf("me status = %d, want 200\nbody: %s", resp.Status, resp.Body)
 	}
 	f.suite.ValidateResponse(t, req, resp)
+	assertGoldenShapePath(t, req, resp.Status, resp.Body)
 	contracttest.AssertRequestID(t, resp)
 
 	me := decodeMe(t, resp.Body)
@@ -159,6 +160,7 @@ func TestContractUsersMePatchSetsTrimsAndClears(t *testing.T) {
 		t.Fatalf("patch status = %d, want 200\nbody: %s", resp.Status, resp.Body)
 	}
 	f.suite.ValidateResponse(t, req, resp)
+	assertGoldenShapePath(t, req, resp.Status, resp.Body)
 	contracttest.AssertRequestID(t, resp)
 	me := decodeMe(t, resp.Body)
 	if me.Data.Profile.DisplayName == nil || *me.Data.Profile.DisplayName != "Dante" {

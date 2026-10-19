@@ -41,6 +41,7 @@ func TestContractAuthRefreshRotates(t *testing.T) {
 		t.Fatalf("refresh status = %d, want 200\nbody: %s", resp.Status, resp.Body)
 	}
 	f.suite.ValidateResponse(t, req, resp)
+	assertGoldenShapePath(t, req, resp.Status, resp.Body)
 	contracttest.AssertRequestID(t, resp)
 
 	var raw map[string]any
@@ -183,6 +184,7 @@ func TestContractAuthLogout(t *testing.T) {
 		t.Fatalf("logout status = %d, want 204\nbody: %s", resp.Status, resp.Body)
 	}
 	f.suite.ValidateResponse(t, req, resp)
+	assertGoldenShapePath(t, req, resp.Status, resp.Body)
 	contracttest.AssertRequestID(t, resp)
 	if len(resp.Body) != 0 {
 		t.Errorf("logout body = %q, want empty", resp.Body)

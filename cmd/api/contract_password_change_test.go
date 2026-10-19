@@ -53,6 +53,7 @@ func TestContractAuthChangePasswordHappyPath(t *testing.T) {
 		t.Fatalf("change status = %d, want 204\nbody: %s", resp.Status, resp.Body)
 	}
 	f.suite.ValidateResponse(t, req, resp)
+	assertGoldenShapePath(t, req, resp.Status, resp.Body)
 	contracttest.AssertRequestID(t, resp)
 	if len(resp.Body) != 0 {
 		t.Errorf("change body = %q, want empty", resp.Body)

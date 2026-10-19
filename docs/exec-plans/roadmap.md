@@ -183,7 +183,7 @@ Exit gate: acceptance criteria of both `_WIP` proposals satisfied.
 - [x] Secrets scan gate — landed 2026-10-15; `gokit` scans `git ls-files` for private-key, AWS, Resend, service-account, and PEM shapes as a step of the fast profile (so CI runs it), reports file:line and pattern without echoing the match, and skips two reviewed entries: its own pattern definitions and the AWS-published SigV4 test vectors
 - [x] Litestream backup + single-box deployment notes — landed 2026-10-15; `docs/engineering/single-box-deployment.md` records the process roles and start order, the Litestream replica and restore runbook, the Redis caveats (rate-limit and idempotency state is lost, scheduled deletion re-arms from the stored schedule), and the explicit non-goals (no HA, no pg lane yet)
 - [x] Export/import helper — landed 2026-10-17; `gokit db export`/`import` move the compiled lane's tables through a JSON-lines snapshot (versioned header per table, stored text or null, one transaction per table, non-empty-target refusal with `--replace`, `--dry-run`), with the lane-follows-the-build design recorded and a round-trip test that runs on both lanes
-- [ ] Evidence/oracles scaffolding once runtime flows exist
+- [x] Evidence/oracles — landed 2026-10-17; the contract suite captures every validated response's wire shape into `cmd/api/testdata/golden/` (25 call sites, 21 captures, path+status+code keyed, `-update-golden` to regenerate), and `internal/features/auth/oracle` holds the account-state matrix both the feature tests (outcomes) and the worker tests (effects) assert against
 
 ## Open Items Kept Visible
 

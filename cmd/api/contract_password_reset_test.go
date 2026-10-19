@@ -25,6 +25,7 @@ func TestContractAuthPasswordResetConfirm(t *testing.T) {
 		t.Fatalf("confirm status = %d, want 204\nbody: %s", resp.Status, resp.Body)
 	}
 	f.suite.ValidateResponse(t, req, resp)
+	assertGoldenShapePath(t, req, resp.Status, resp.Body)
 	contracttest.AssertRequestID(t, resp)
 
 	// A replayed token is expired, and the new password works.

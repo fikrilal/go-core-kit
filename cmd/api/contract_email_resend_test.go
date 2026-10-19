@@ -58,6 +58,7 @@ func TestContractAuthEmailVerificationResendEnqueues(t *testing.T) {
 		t.Fatalf("resend status = %d, want 204\nbody: %s", resp.Status, resp.Body)
 	}
 	f.suite.ValidateResponse(t, req, resp)
+	assertGoldenShapePath(t, req, resp.Status, resp.Body)
 
 	_, limited := postAuthed(t, f, "/v1/auth/email/verification/resend", session.Data.AccessToken)
 	if limited.Status != http.StatusTooManyRequests {

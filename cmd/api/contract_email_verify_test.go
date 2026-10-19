@@ -26,6 +26,7 @@ func TestContractAuthEmailVerify(t *testing.T) {
 		t.Fatalf("verify status = %d, want 204\nbody: %s", resp.Status, resp.Body)
 	}
 	f.suite.ValidateResponse(t, req, resp)
+	assertGoldenShapePath(t, req, resp.Status, resp.Body)
 
 	// A replayed token is expired, not invalid: the kit distinguishes the two.
 	_, replayed := f.post(t, "/v1/auth/email/verify", map[string]string{"token": token})

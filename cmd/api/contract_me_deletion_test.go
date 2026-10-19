@@ -61,6 +61,7 @@ func TestContractUsersMeAccountDeletionRequest(t *testing.T) {
 		t.Fatalf("request status = %d, want 204\nbody: %s", resp.Status, resp.Body)
 	}
 	f.suite.ValidateResponse(t, req, resp)
+	assertGoldenShapePath(t, req, resp.Status, resp.Body)
 	contracttest.AssertRequestID(t, resp)
 	if len(resp.Body) != 0 {
 		t.Errorf("request body = %q, want empty", resp.Body)
@@ -130,6 +131,7 @@ func TestContractUsersMeAccountDeletionCancel(t *testing.T) {
 		t.Fatalf("cancel status = %d, want 204\nbody: %s", resp.Status, resp.Body)
 	}
 	f.suite.ValidateResponse(t, cancelReq, resp)
+	assertGoldenShapePath(t, cancelReq, resp.Status, resp.Body)
 	if count := auditCount(t, f, "CANCELED"); count != 1 {
 		t.Errorf("CANCELED audits = %d, want 1", count)
 	}

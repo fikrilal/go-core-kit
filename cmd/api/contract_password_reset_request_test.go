@@ -32,6 +32,7 @@ func TestContractAuthPasswordResetRequest(t *testing.T) {
 		t.Fatalf("request status = %d, want 204\nbody: %s", resp.Status, resp.Body)
 	}
 	f.suite.ValidateResponse(t, req, resp)
+	assertGoldenShapePath(t, req, resp.Status, resp.Body)
 	contracttest.AssertRequestID(t, resp)
 
 	// The address is metered, so the next attempt is the declared limit problem.

@@ -55,6 +55,7 @@ func TestContractAuthOidcConnectHappyPath(t *testing.T) {
 		t.Fatalf("connect status = %d, want 204\nbody: %s", resp.Status, resp.Body)
 	}
 	f.suite.ValidateResponse(t, req, resp)
+	assertGoldenShapePath(t, req, resp.Status, resp.Body)
 	contracttest.AssertRequestID(t, resp)
 	if len(resp.Body) != 0 {
 		t.Errorf("connect body = %q, want empty", resp.Body)

@@ -94,6 +94,7 @@ func TestContractAuthOidcExchangeCreatesUser(t *testing.T) {
 		t.Fatalf("exchange status = %d, want 200\nbody: %s", resp.Status, resp.Body)
 	}
 	f.suite.ValidateResponse(t, req, resp)
+	assertGoldenShapePath(t, req, resp.Status, resp.Body)
 	contracttest.AssertRequestID(t, resp)
 
 	decoded := decodeAuthResponse(t, resp.Body)

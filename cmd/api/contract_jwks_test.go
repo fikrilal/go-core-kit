@@ -30,6 +30,7 @@ func TestContractJWKS(t *testing.T) {
 		t.Fatalf("jwks status = %d, want 200\nbody: %s", resp.Status, resp.Body)
 	}
 	f.suite.ValidateResponse(t, req, resp)
+	assertGoldenShapePath(t, req, resp.Status, resp.Body)
 	contracttest.AssertRequestID(t, resp)
 
 	var document struct {

@@ -97,6 +97,7 @@ func TestContractUsersMePushTokenUpsert(t *testing.T) {
 		t.Fatalf("upsert status = %d, want 204\nbody: %s", resp.Status, resp.Body)
 	}
 	f.suite.ValidateResponse(t, req, resp)
+	assertGoldenShapePath(t, req, resp.Status, resp.Body)
 	contracttest.AssertRequestID(t, resp)
 	if len(resp.Body) != 0 {
 		t.Errorf("upsert body = %q, want empty", resp.Body)
@@ -228,6 +229,7 @@ func TestContractUsersMePushTokenRevoke(t *testing.T) {
 		t.Fatalf("revoke status = %d, want 204\nbody: %s", resp.Status, resp.Body)
 	}
 	f.suite.ValidateResponse(t, req, resp)
+	assertGoldenShapePath(t, req, resp.Status, resp.Body)
 	if len(resp.Body) != 0 {
 		t.Errorf("revoke body = %q, want empty", resp.Body)
 	}

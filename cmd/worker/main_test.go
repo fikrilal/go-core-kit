@@ -16,6 +16,7 @@ import (
 
 	"github.com/fikrilal/go-core-kit/db/migrations"
 	"github.com/fikrilal/go-core-kit/internal/features/auth"
+	"github.com/fikrilal/go-core-kit/internal/features/auth/oracle"
 	meapp "github.com/fikrilal/go-core-kit/internal/features/me/app"
 	"github.com/fikrilal/go-core-kit/internal/platform/config"
 	"github.com/fikrilal/go-core-kit/internal/platform/db"
@@ -213,4 +214,75 @@ func TestWorkerServesProbesAndShutsDown(t *testing.T) {
 	case <-time.After(15 * time.Second):
 		t.Fatal("worker did not stop after cancel")
 	}
+}
+
+// TestVerificationJobFollowsTheOracle drives the composed worker handler from the
+// same account-state matrix the feature's tests use, and asserts the *effects* the
+// queue cares about: an email leaves only for states the oracle says send, and a
+// token is minted only then.
+func TestVerificationJobFollowsTheOracle(t *testing.T) {
+	for _, state := range oracle.States() {
+		t.Run(string(state), func(t *testing.T) {
+			runVerificationForState(t, state)
+		})
+	}
+}
+
+// runVerificationForState seeds one state, runs the handler through its composition,
+// and checks the effects against the oracle's row.
+func runVerificationForState(t *testing.T, state oracle.AccountState) {
+	t.Helper()
+	logger := logging.New(config.LogLevelError, config.LogFormatJSON, io.Discard)
+	database := seedWorkerUser(t, state)
+	sender := &stubEmailSender{}
+	handlers := composeHandlers(config.Config{
+		AuthEmailVerificationTTLSeconds: 86400,
+		AuthPasswordResetTTLSeconds:     1800,
+		PublicAppURL:                    "https://app.example.com",
+	}, database, logger, sender, &stubPushSender{}, nil, nil)
+
+	payload, err := queue.WithMeta(auth.EmailJobPayload{UserID: "user-1"}, queue.Meta{})
+	if err != nil {
+		t.Fatalf("WithMeta() error = %v", err)
+	}
+	if err := handlers[auth.EmailVerificationJob](t.Context(), asynq.NewTask(auth.EmailVerificationJob, payload)); err != nil {
+		t.Fatalf("handler error = %v, want a successful run", err)
+	}
+
+	want := oracle.Verification[state]
+	if sent := len(sender.sent) > 0; sent != want.Sends {
+		t.Errorf("sent = %t, want %t for the %s state", sent, want.Sends, state)
+	}
+	var tokens int
+	if err := database.SQL().QueryRowContext(t.Context(), "SELECT COUNT(*) FROM email_verification_tokens").Scan(&tokens); err != nil {
+		t.Fatalf("count tokens: %v", err)
+	}
+	if (tokens > 0) != want.Sends {
+		t.Errorf("tokens = %d, want sends=%t", tokens, want.Sends)
+	}
+}
+
+// seedWorkerUser opens a migrated database seeded for the oracle's state, and leaves
+// it empty for the missing account.
+func seedWorkerUser(t *testing.T, state oracle.AccountState) *db.Database {
+	t.Helper()
+	const stamp = "2026-01-01T00:00:00.000000000Z"
+	database := db.MustOpen(filepath.Join(t.TempDir(), "oracle.db"))
+	t.Cleanup(func() { _ = database.Close() })
+	if err := database.Migrate(t.Context(), migrations.SQLite); err != nil {
+		t.Fatalf("Migrate() error = %v", err)
+	}
+	if state == oracle.Missing {
+		return database
+	}
+	status := "ACTIVE"
+	if state == oracle.Deleted {
+		status = "DELETED"
+	}
+	if _, err := database.SQL().ExecContext(t.Context(),
+		"INSERT INTO users (id, email, status, created_at, updated_at) VALUES (?, ?, ?, ?, ?)",
+		"user-1", "oracle@example.com", status, stamp, stamp); err != nil {
+		t.Fatalf("seed user: %v", err)
+	}
+	return database
 }

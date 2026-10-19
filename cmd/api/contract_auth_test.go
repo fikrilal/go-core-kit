@@ -121,6 +121,7 @@ func (f *authFixture) register(t *testing.T, email string, deviceID string) auth
 		t.Fatalf("register status = %d, want 200\nbody: %s", resp.Status, resp.Body)
 	}
 	f.suite.ValidateResponse(t, req, resp)
+	assertGoldenShapePath(t, req, resp.Status, resp.Body)
 	return decodeAuthResponse(t, resp.Body)
 }
 
@@ -198,6 +199,7 @@ func TestContractAuthRegisterIssuesSession(t *testing.T) {
 		t.Fatalf("register status = %d, want 200\nbody: %s", resp.Status, resp.Body)
 	}
 	f.suite.ValidateResponse(t, req, resp)
+	assertGoldenShapePath(t, req, resp.Status, resp.Body)
 	contracttest.AssertRequestID(t, resp)
 
 	decoded := decodeAuthResponse(t, resp.Body)
@@ -243,6 +245,7 @@ func TestContractAuthLoginAndEmailNormalization(t *testing.T) {
 		t.Fatalf("login status = %d, want 200\nbody: %s", resp.Status, resp.Body)
 	}
 	f.suite.ValidateResponse(t, req, resp)
+	assertGoldenShapePath(t, req, resp.Status, resp.Body)
 	decoded := decodeAuthResponse(t, resp.Body)
 	if decoded.Data.User.ID != registered.Data.User.ID {
 		t.Errorf("login user id = %q, want %q", decoded.Data.User.ID, registered.Data.User.ID)

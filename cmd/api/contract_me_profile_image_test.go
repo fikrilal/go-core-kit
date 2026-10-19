@@ -167,6 +167,7 @@ func TestContractUsersMeProfileImageURLAndClear(t *testing.T) {
 		t.Fatalf("url status = %d, want 200\nbody: %s", resp.Status, resp.Body)
 	}
 	f.suite.ValidateResponse(t, req, resp)
+	assertGoldenShapePath(t, req, resp.Status, resp.Body)
 	var view profileImageURL
 	if err := json.Unmarshal(resp.Body, &view); err != nil {
 		t.Fatalf("decode url: %v", err)
@@ -189,6 +190,7 @@ func TestContractUsersMeProfileImageURLAndClear(t *testing.T) {
 		t.Fatalf("clear status = %d, want 204\nbody: %s", resp.Status, resp.Body)
 	}
 	f.suite.ValidateResponse(t, clearReq, resp)
+	assertGoldenShapePath(t, clearReq, resp.Status, resp.Body)
 	status, pointer := storedFileState(t, f, plan.Data.FileID)
 	if status != "DELETED" || pointer != nil {
 		t.Fatalf("after clear = %s/%v, want DELETED and detached", status, pointer)
@@ -215,6 +217,7 @@ func TestContractUsersMeProfileImageFlow(t *testing.T) {
 		t.Fatalf("upload status = %d, want 200\nbody: %s", resp.Status, resp.Body)
 	}
 	f.suite.ValidateResponse(t, req, resp)
+	assertGoldenShapePath(t, req, resp.Status, resp.Body)
 	contracttest.AssertRequestID(t, resp)
 	plan := decodePlan(t, resp.Body)
 	if plan.Data.FileID == "" || plan.Data.Upload.Method != http.MethodPut {
@@ -253,6 +256,7 @@ func TestContractUsersMeProfileImageFlow(t *testing.T) {
 		t.Fatalf("complete status = %d, want 204\nbody: %s", resp.Status, resp.Body)
 	}
 	f.suite.ValidateResponse(t, completeReq, resp)
+	assertGoldenShapePath(t, completeReq, resp.Status, resp.Body)
 	status, pointer := storedFileState(t, f, plan.Data.FileID)
 	if status != "ACTIVE" || pointer == nil || *pointer != plan.Data.FileID {
 		t.Fatalf("state = %s/%v, want ACTIVE attached to the profile", status, pointer)
