@@ -17,7 +17,8 @@ workdir="$(mktemp -d)"
 trap 'rm -rf "$workdir"' EXIT
 
 echo "scaffold-smoke: copying the working tree to $workdir"
-cp -a "$repo_root/." "$workdir/repo"
+mkdir -p "$workdir/repo"
+cp -a "$repo_root/." "$workdir/repo" || { echo "scaffold-smoke: copy failed" >&2; exit 1; }
 cd "$workdir/repo"
 rm -rf .cache
 
