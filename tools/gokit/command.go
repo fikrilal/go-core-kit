@@ -22,6 +22,8 @@ const usageText = `gokit commands:
   scaffold endpoint --feature <f> --operation <id>
                                   implement one allowlisted snapshot operation
   remove feature --name <name>    delete a feature and unwire it
+  clone <dir> --module <path> [--name <n>] [--dry-run]
+                                  generate a new project from this kit
   help                            show this message`
 
 type command interface {
@@ -138,6 +140,8 @@ func parseCommand(args []string) (command, error) {
 		return parseScaffold(args[1:])
 	case "remove":
 		return parseRemove(args[1:])
+	case "clone":
+		return parseClone(args[1:])
 	case "help":
 		if len(args) != 1 {
 			return nil, usagef("help takes no arguments")
@@ -174,6 +178,34 @@ func parseScaffold(args []string) (command, error) {
 		return scaffoldEndpointCommand{feature: feature, operation: operation}, nil
 	}
 	return nil, usagef("scaffold expects: gokit scaffold feature|endpoint")
+}
+
+func parseClone(args []string) (command, error) {
+	if len(args) == 0 {
+		return nil, usagef("clone expects: gokit clone <dir> --module <module path>")
+	}
+	dir := args[0]
+	if strings.HasPrefix(dir, "-") {
+		return nil, usagef("clone: the destination directory comes first")
+	}
+	dryRun := false
+	rest := make([]string, 0, len(args))
+	for _, arg := range args[1:] {
+		if arg == "--dry-run" {
+			dryRun = true
+			continue
+		}
+		rest = append(rest, arg)
+	}
+	values, err := parseFlags("clone", rest, "--module", "--name")
+	if err != nil {
+		return nil, err
+	}
+	module := values["--module"]
+	if module == "" {
+		return nil, usagef("clone: --module is required (for example github.com/you/project)")
+	}
+	return cloneCommand{dir: dir, name: values["--name"], module: module, dryRun: dryRun}, nil
 }
 
 func parseDB(args []string) (command, error) {
