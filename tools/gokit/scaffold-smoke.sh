@@ -24,6 +24,10 @@ rm -rf .cache
 
 commit() {
 	git add -A
+	# A clean checkout has nothing to commit at the baseline, which is not a failure.
+	if git diff --cached --quiet; then
+		return 0
+	fi
 	git -c user.email=smoke@example.invalid -c user.name="scaffold smoke" commit -q -m "$1"
 }
 
