@@ -1,0 +1,6 @@
+# Caddy owns 80 and 443: it obtains and renews the certificate for the hostname and
+# proxies to the API over the compose network, so the API itself is never published.
+api.fikril.dev {
+	encode zstd gzip
+	reverse_proxy api:8080
+}

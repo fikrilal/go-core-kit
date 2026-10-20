@@ -40,8 +40,10 @@ services:
       REDIS_URL: redis://redis:6379/0
     volumes:
       - ./data:/data
-    ports:
-      - "${API_PORT:-8080}:8080"
+    # Not published: Caddy terminates TLS and proxies to api:8080 on the compose
+    # network, so the API never listens on a public port.
+    expose:
+      - "8080"
     depends_on:
       init:
         condition: service_completed_successfully
@@ -73,6 +75,19 @@ services:
     restart: unless-stopped
     mem_limit: 96m
 
+  caddy:
+    image: caddy:2
+    ports:
+      - "80:80"
+      - "443:443"
+    volumes:
+      - ./Caddyfile:/etc/caddy/Caddyfile:ro
+      - caddy_data:/data
+      - caddy_config:/config
+    depends_on: [api]
+    restart: unless-stopped
+    mem_limit: 96m
+
   litestream:
     image: litestream/litestream
     command: ["replicate"]
@@ -86,3 +101,7 @@ services:
     profiles: ["backup"]
     restart: unless-stopped
     mem_limit: 64m
+
+volumes:
+  caddy_data:
+  caddy_config:

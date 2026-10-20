@@ -126,7 +126,10 @@ and the signing keys in `.env` before exposing the stack.
 - **redis** — no persistence by intent (`--save "" --appendonly no`): the limiter
   counters, idempotency records, and the queue are caches, and the deployment note
   above records what losing them costs.
-- **api** — migrates at boot and serves `HTTP_PORT`; the only published port.
+- **caddy** — the only published ports (80 and 443). It obtains and renews the
+  certificate for the hostname in `Caddyfile` and proxies to `api:8080` over the
+  compose network, so the API is never exposed directly.
+- **api** — migrates at boot and serves `HTTP_PORT` on the compose network only.
 - **worker** — `depends_on: [api]`, because it assumes the schema the API applied.
 - **litestream** — behind the `backup` profile, because it needs a replica
   configured (`docker compose --profile backup up -d`). Its `LITESTREAM_*` keys are
