@@ -25,6 +25,15 @@ func cloneFixture(t *testing.T) string {
 		t.Fatalf("chdir: %v", err)
 	}
 	t.Cleanup(func() { _ = os.Chdir(previous) })
+	// The generated project's commit needs an identity; CI has none configured.
+	for key, value := range map[string]string{
+		"GIT_AUTHOR_NAME":     "clone test",
+		"GIT_AUTHOR_EMAIL":    "clone-test@example.invalid",
+		"GIT_COMMITTER_NAME":  "clone test",
+		"GIT_COMMITTER_EMAIL": "clone-test@example.invalid",
+	} {
+		t.Setenv(key, value)
+	}
 	return root
 }
 
