@@ -59,3 +59,50 @@ jobs:
             | sh -s -- -b "$(go env GOPATH)/bin" v2.14.0
       - name: Verify the Postgres lane
         run: make verify-pg
+
+  deploy:
+    name: Deploy to Production
+    needs: [verify, verify-pg]
+    if: github.ref == 'refs/heads/main' && github.event_name == 'push'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup SSH
+        env:
+          SSH_KEY: ${{ secrets.SSH_KEY }}
+          SSH_HOST: ${{ secrets.SSH_HOST }}
+          SSH_USER: ${{ secrets.SSH_USER }}
+        run: |
+          mkdir -p ~/.ssh
+          echo "$SSH_KEY" > ~/.ssh/deploy_key
+          chmod 600 ~/.ssh/deploy_key
+          ssh-keyscan -H "$SSH_HOST" >> ~/.ssh/known_hosts
+
+      - name: Sync source to server
+        env:
+          SSH_HOST: ${{ secrets.SSH_HOST }}
+          SSH_USER: ${{ secrets.SSH_USER }}
+        run: |
+          tar -czf - \
+            --exclude='.git' \
+            --exclude='.github' \
+            --exclude='.commandcode' \
+            --exclude='.env' \
+            --exclude='data' \
+            --exclude='Caddyfile' \
+            . | ssh -i ~/.ssh/deploy_key "$SSH_USER@$SSH_HOST" "tar -xzf - -C /home/ubuntu/gokit"
+
+      - name: Build and restart containers
+        env:
+          SSH_HOST: ${{ secrets.SSH_HOST }}
+          SSH_USER: ${{ secrets.SSH_USER }}
+        run: |
+          ssh -i ~/.ssh/deploy_key "$SSH_USER@$SSH_HOST" "cd /home/ubuntu/gokit && docker compose up -d --build api worker"
+
+      - name: Check container status
+        env:
+          SSH_HOST: ${{ secrets.SSH_HOST }}
+          SSH_USER: ${{ secrets.SSH_USER }}
+        run: |
+          ssh -i ~/.ssh/deploy_key "$SSH_USER@$SSH_HOST" "cd /home/ubuntu/gokit && docker compose ps"
