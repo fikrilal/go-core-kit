@@ -83,6 +83,15 @@ func TestCloneGeneratesAProject(t *testing.T) {
 	if strings.Contains(readString(t, filepath.Join(target, "docs", "README.md")), "Execution plans") {
 		t.Error("the docs index still points at stripped plans")
 	}
+	cloneSource := readString(t, filepath.Join(target, "tools", "gokit", "clone.go"))
+	if !strings.Contains(cloneSource, `"_WIP"`) {
+		t.Error("clone.go lost its _WIP entries to overzealous doc unlinking")
+	}
+	vet := exec.CommandContext(t.Context(), "go", "vet", "./...")
+	vet.Dir = target
+	if output, err := vet.CombinedOutput(); err != nil {
+		t.Fatalf("cloned project failed go vet: %v\noutput: %s", err, output)
+	}
 	_ = root
 }
 

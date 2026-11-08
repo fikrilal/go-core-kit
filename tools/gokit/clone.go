@@ -201,12 +201,14 @@ func rewriteClone(target, module, name string, plan []string) error {
 		if relative == filepath.Join("docs", "README.md") {
 			content = stripExecPlanIndex(content)
 		}
-		content = unlinkStrippedDocs(content)
-		if strings.HasPrefix(relative, "docs"+string(filepath.Separator)) {
-			content = unlinkExecPlans(content)
+		if filepath.Ext(relative) == ".md" {
+			content = unlinkStrippedDocs(content)
+			if strings.HasPrefix(relative, "docs"+string(filepath.Separator)) {
+				content = unlinkExecPlans(content)
+			}
 		}
 
-		if err := os.WriteFile(path, []byte(content), 0o600); err != nil {
+		if err := os.WriteFile(path, []byte(content), 0o600); err != nil { //nolint:gosec // G304,G703: path comes from the clone walk or the plan.
 			return fmt.Errorf("clone: write %s: %w", relative, err)
 		}
 	}
